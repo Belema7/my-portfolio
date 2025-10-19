@@ -1,12 +1,11 @@
-import React from 'react';
+import React from "react";
 
 function NavbarLogo() {
   return (
     <div>
-      {/* This heading is for md and larger screens */}
-      <h1 className='text-white text-2xl hidden md:block'>Belema Girma</h1>
-      {/* This heading is for small screens only */}
-      <h1 id='logo' className='text-white font-extrabold text-4xl block md:hidden'>Belema</h1>
+      <h1 className="text-white font-bold text-3xl tracking-wide">
+        <span className="text-[#00A3C9]">Belema</span> Girma
+      </h1>
     </div>
   );
 }

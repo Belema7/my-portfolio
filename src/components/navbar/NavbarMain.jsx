@@ -1,43 +1,44 @@
-import React, { useState } from 'react'
-import NavbarLogo from './NavbarLogo'
-import NavbarLinks from './NavbarLinks'
-import NavbarBtn from './NavbarBtn'
+import React, { useState } from "react";
+import NavbarLogo from "./NavbarLogo";
+import NavbarLinks from "./NavbarLinks";
+import NavbarBtn from "./NavbarBtn";
 import { GiHamburgerMenu } from "react-icons/gi";
+import { IoClose } from "react-icons/io5";
 
 function NavbarMain() {
-  // We want the menu to be closed by default, so we set the initial state to false.
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const toggleMenu = () => {
-    setMenuOpen(!menuOpen)
-  }
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <nav className='fixed left-[50%] -translate-x-[50%] z-20 w-full mt-2'>
-      <div className='max-w-[1300px] mx-auto px-4 flex justify-between items-center'>
-        
-        {/* Main Navigation Container */}
-        <div className='flex justify-between w-full bg-black items-center p-6 rounded-r-full rounded-l-full border-[0.5px] border-[#fb9718]'>
-          <NavbarLogo/>
-          
-          {/* Main links container: Hidden by default and only shown on large screens. */}
-          {/* On small screens, it will be conditionally shown based on the menuOpen state. */}
-          <div className={`${menuOpen ? 'block' : 'hidden'} lg:block`}>
-            <NavbarLinks/>
-          </div>
-            <NavbarBtn/>
+    <nav className="fixed w-full top-0 left-0 z-50 bg-black/90 backdrop-blur-md border-b border-gray-800">
+      <div className="max-w-[1200px] mx-auto flex justify-between items-center px-6 py-4">
+        <NavbarLogo />
 
-          {/* Hamburger menu button container: Hidden on large screens. */}
-           <div className='flex lg:hidden sm:block p-6 bg-black items-center justify-center rounded-full border-[0.5px] border-[#fb9718] '>
+        {/* Desktop Links */}
+        <div className="hidden lg:flex">
+          <NavbarLinks />
+        </div>
 
-          <button onClick={toggleMenu}>
-              <GiHamburgerMenu/>
-          </button>
-        </div>
-        </div>
+        <NavbarBtn />
+
+        {/* Mobile Menu Button */}
+        <button
+          className="text-white text-2xl lg:hidden"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          {menuOpen ? <IoClose /> : <GiHamburgerMenu />}
+        </button>
+      </div>
+
+      {/* Mobile Dropdown Menu */}
+      <div
+        className={`lg:hidden transition-all duration-300 ease-in-out ${
+          menuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0 overflow-hidden"
+        }`}
+      >
+        <NavbarLinks mobile />
       </div>
     </nav>
-  )
+  );
 }
 
 export default NavbarMain;
