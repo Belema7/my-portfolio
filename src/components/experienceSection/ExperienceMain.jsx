@@ -19,7 +19,7 @@ function ExperienceMain() {
         </div>
 
         {/* Divider Line (neon cyan glow) */}
-        <div className="w-full h-[1px] my-16 bg-cyan-400/40 rounded-full shadow-[0_0_12px_#00ffff50]"></div>
+        <div className="w-full h-1px my-16 bg-cyan-400/40 rounded-full shadow-[0_0_12px_#00ffff50]"></div>
 
         {/* Experience Timeline / Boxes */}
         <AllExperience />

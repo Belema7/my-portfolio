@@ -17,7 +17,7 @@ function ExperienceTopLeft() {
       </div>
 
       {/* Description */}
-      <p className='text-gray-700 text-lg'>
+      <p className='text-lg'>
         With three years of experience working as a front-end developer, I’ve built
         and contributed to multiple responsive and user-focused projects.
       </p>

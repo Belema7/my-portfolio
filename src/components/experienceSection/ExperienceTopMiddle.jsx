@@ -8,7 +8,7 @@ function ExperienceTopMiddle() {
 
       {/* Image */}
       <img
-        src="/Images/Experience.jpg"
+        src="../../public/Images/Exprience.jpg"
         alt="Experience Showcase"
         className='w-[350px] h-auto rounded-2xl object-cover border-2 border-[#15d1e9] hover:scale-105 transition-transform duration-700 ease-in-out'
       />
