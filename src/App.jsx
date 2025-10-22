@@ -6,6 +6,7 @@ import NavbarMain from "./components/navbar/NavbarMain"
 import SkillsMain from "./components/skillsSection/SkillsMain"
 import ExperienceMain from "./components/experienceSection/ExperienceMain"
 import ProjectsMain from "./components/projectsSection/ProjectsMain"
+import ContactMeMain from "./components/contactMeSection/ContactMeMain"
 
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
     <SkillsMain/>
     <ExperienceMain/>
     <ProjectsMain/>
+    <ContactMeMain/>
   </main>
   )
 

@@ -3,7 +3,7 @@ import { BiSolidRightTopArrowCircle } from "react-icons/bi";
 
 function SingleProject({ name, year, align, image, link }) {
   const isLeft = align === "left";
-
+ 
   return (
     <article
       className={`flex flex-col-reverse md:flex-row items-center gap-8 w-full ${
@@ -21,7 +21,7 @@ function SingleProject({ name, year, align, image, link }) {
           target="_blank"
           rel="noopener noreferrer"
           className={`flex items-center gap-2 text-cyan-500 hover:text-cyan-300 transition duration-300 ${
-            isLeft ? "justify-end" : "justify-start"
+            isLeft ? "justify-start md:justify-end" : "justify-start"
           }`}
         >
           View <BiSolidRightTopArrowCircle size={20} />
