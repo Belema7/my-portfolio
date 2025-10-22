@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import emailjs from "@emailjs/browser";
+import React, { useRef, useState } from 'react';
+import emailjs from '@emailjs/browser';
 
 function ContactForm() {
   const form = useRef();
@@ -7,60 +7,59 @@ function ContactForm() {
 
   const sendEmail = (e) => {
     e.preventDefault();
-
     emailjs
-      .sendForm("service_fncblpr", "template_qh0me0g", form.current, {
-        publicKey: "Ql1h9M4K2yXTsWGbU",
+      .sendForm('service_fncblpr', 'template_qh0me0g', form.current, {
+        publicKey: 'Ql1h9M4K2yXTsWGbU',
       })
       .then(
         () => {
+          console.log('SUCCESS!');
           setIsSent(true);
           form.current.reset();
           setTimeout(() => setIsSent(false), 3000);
         },
-        (error) => console.error("FAILED...", error.text)
+        (error) => {
+          console.log('FAILED...', error.text);
+        }
       );
   };
 
   return (
-    <div>
-      <form
-        ref={form}
-        onSubmit={sendEmail}
-        className="flex flex-col gap-4 text-white"
-      >
+    <div className="bg-[#0d0d0d] p-6 md:p-8 rounded-2xl shadow-lg border border-[#15d1e9]/20 mt-8">
+      <form className="flex flex-col gap-4" ref={form} onSubmit={sendEmail}>
         <input
           name="from_name"
           type="text"
           placeholder="Your name..."
           required
-          className="h-12 rounded-lg bg-[#645558] px-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="h-12 rounded-lg bg-[#1a1a1a] text-white px-3 focus:outline-none focus:ring-2 focus:ring-[#15d1e9] transition-all"
         />
         <input
           name="from_email"
           type="email"
-          placeholder="example@email.com"
+          placeholder="example@gmail.com"
           required
-          className="h-12 rounded-lg bg-[#645558] px-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="h-12 rounded-lg bg-[#1a1a1a] text-white px-3 focus:outline-none focus:ring-2 focus:ring-[#15d1e9] transition-all"
         />
         <textarea
           name="message"
-          rows="6"
+          rows="9"
           placeholder="Leave me a message..."
           required
-          className="rounded-lg bg-[#645558] p-3 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="rounded-lg bg-[#1a1a1a] text-white p-3 focus:outline-none focus:ring-2 focus:ring-[#15d1e9] transition-all"
         />
+
         <button
           type="submit"
-          className="w-full rounded-lg border border-cyan-500 text-white h-12 font-semibold text-lg hover:bg-cyan-600 bg-cyan-500 transition-all duration-300"
+          className="w-full rounded-lg border border-[#15d1e9] text-white h-12 font-semibold text-lg bg-[#15d1e9]/10 hover:bg-[#15d1e9]/30 transition-all duration-500"
         >
           Send Message
         </button>
       </form>
 
       {isSent && (
-        <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-lg text-center animate-fade-in">
-          ✅ Message sent successfully!
+        <div className="mt-4 p-3 bg-[#15d1e9]/20 text-[#15d1e9] rounded-lg text-center">
+          ✅ Message successfully sent!
         </div>
       )}
     </div>

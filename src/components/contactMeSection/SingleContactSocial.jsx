@@ -6,7 +6,8 @@ function SingleContactSocial({ Icon, link }) {
       href={link}
       target="_blank"
       rel="noopener noreferrer"
-      className="h-12 w-12 border border-[#fb9718] text-[#fb9718] rounded-full flex items-center justify-center text-2xl hover:bg-[#fb9718] hover:text-white transition duration-300"
+      className="text-2xl h-12 w-12 flex items-center justify-center rounded-full border border-[#15d1e9] text-[#15d1e9]
+      hover:bg-[#15d1e9] hover:text-black transition-all duration-300 shadow-md hover:shadow-[#15d1e9]/50"
     >
       <Icon />
     </a>

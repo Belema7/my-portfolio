@@ -4,7 +4,7 @@ import { FaLinkedin, FaGithub, FaInstagram, FaTelegram } from "react-icons/fa";
 
 function ContactSocial() {
   return (
-    <div className="flex gap-5">
+    <div className="flex gap-5 mt-4">
       <SingleContactSocial
         link="https://www.linkedin.com/in/belemagirma/"
         Icon={FaLinkedin}

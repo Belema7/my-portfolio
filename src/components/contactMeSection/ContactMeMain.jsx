@@ -6,13 +6,13 @@ function ContactMeMain() {
   return (
     <section
       id="contact"
-      className="max-w-[1200px] mx-auto mt-24 px-6 flex flex-col gap-12 items-center justify-center"
+      className="max-w-[1200px] mx-auto mt-[100px] px-6 py-16 text-white"
     >
-      <h2 className="text-5xl md:text-6xl text-cyan-600 font-bold text-center">
+      <h2 className="text-5xl md:text-6xl font-bold text-[#15d1e9] mb-12 text-center">
         Contact Me
       </h2>
 
-      <div className="flex flex-col lg:flex-row justify-between items-center gap-16 bg-[#53423e] p-8 rounded-2xl shadow-lg w-full">
+      <div className="flex flex-col lg:flex-row gap-12 bg-[#0d0d0d] border border-[#15d1e9]/20 p-10 rounded-3xl shadow-lg shadow-[#15d1e9]/10">
         <ContactMeLeft />
         <ContactMeRight />
       </div>
