@@ -5,6 +5,7 @@ import SubHeroSection from "./components/heroSection/SubHeroSection"
 import NavbarMain from "./components/navbar/NavbarMain"
 import SkillsMain from "./components/skillsSection/SkillsMain"
 import ExperienceMain from "./components/experienceSection/ExperienceMain"
+import ProjectsMain from "./components/projectsSection/ProjectsMain"
 
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
     <AboutMeMain/>
     <SkillsMain/>
     <ExperienceMain/>
+    <ProjectsMain/>
   </main>
   )
 
