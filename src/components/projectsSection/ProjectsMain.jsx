@@ -14,23 +14,23 @@ const projects = [
     name: "Portfolio Website",
     year: "Aug 2025",
     align: "right",
-    image: "../../public/images/project1.png",
-    link: "#",
+    image: "../../public/images/project2.png",
+    link: "https://recipe-finder-app-belema.vercel.app/",
   },
-  {
-    name: "Task Manager App",
-    year: "July 2025",
-    align: "left",
-    image: "../../public/images/project1.png",
-    link: "#",
-  },
-  {
-    name: "E-commerce Clone",
-    year: "June 2025",
-    align: "right",
-    image: "../../public/images/project1.png",
-    link: "#",
-  },
+  // {
+  //   name: "Task Manager App",
+  //   year: "July 2025",
+  //   align: "left",
+  //   image: "../../public/images/project1.png",
+  //   link: "#",
+  // },
+  // {
+  //   name: "E-commerce Clone",
+  //   year: "June 2025",
+  //   align: "right",
+  //   image: "../../public/images/project1.png",
+  //   link: "#",
+  // },
 ];
 
 function ProjectsMain() {
