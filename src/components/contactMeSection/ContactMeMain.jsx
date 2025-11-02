@@ -1,5 +1,4 @@
 import React from "react";
-import ContactMeLeft from "./ContactMeLeft";
 import ContactMeRight from "./ContactMeRight";
 
 function ContactMeMain() {
@@ -12,8 +11,8 @@ function ContactMeMain() {
         Contact Me
       </h2>
 
-      <div className="flex flex-col lg:flex-row gap-12 bg-[#0d0d0d] border border-[#15d1e9]/20 p-10 rounded-3xl shadow-lg shadow-[#15d1e9]/10">
-        <ContactMeLeft />
+      <div className="relative flex flex-col lg:flex-row gap-12 bg-[#0d0d0d] border border-[#15d1e9]/20 p-10 rounded-3xl shadow-lg shadow-[#15d1e9]/10 overflow-hidden">
+        <div className="absolute inset-0 rounded-3xl bg-[#15d1e9]/5 blur-2xl -z-10"></div>
         <ContactMeRight />
       </div>
     </section>

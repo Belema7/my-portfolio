@@ -6,10 +6,22 @@ import { FaLocationDot } from "react-icons/fa6";
 
 function ContactInfo() {
   return (
-    <div className="flex flex-col gap-4 text-gray-300">
-      <SingleInfo text="BelemaGirma8@gmail.com" Icon={TfiEmail} />
-      <SingleInfo text="+251 933 391 417" Icon={FaPhone} />
-      <SingleInfo text="Addis Ababa, Ethiopia" Icon={FaLocationDot} />
+    <div className="flex flex-col gap-5 text-gray-300">
+      <SingleInfo
+        text="belemagirma8@gmail.com"
+        Icon={TfiEmail}
+        href="mailto:belemagirma8@gmail.com"
+      />
+      <SingleInfo
+        text="+251 933 391 417"
+        Icon={FaPhone}
+        href="tel:+251933391417"
+      />
+      <SingleInfo
+        text="Addis Ababa, Ethiopia"
+        Icon={FaLocationDot}
+        href="https://maps.google.com/?q=Addis+Ababa,+Ethiopia"
+      />
     </div>
   );
 }
