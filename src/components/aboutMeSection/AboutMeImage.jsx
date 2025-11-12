@@ -13,10 +13,10 @@ function AboutMeImage() {
       >
         <img
           className="h-full w-full object-cover"
-          src="/Images/aboutMe.png"
+          src="/Images/aboutM.JPG"
           alt="About Me"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent"></div>
       </div>
     </div>
   );
