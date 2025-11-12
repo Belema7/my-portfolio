@@ -11,26 +11,26 @@ const projects = [
     link: "https://expense-tracker-six-sepia.vercel.app/",
   },
   {
-    name: "Portfolio Website",
+    name: "Recipe-finder",
     year: "Aug 2025",
     align: "right",
     image: "../../public/images/project2.png",
     link: "https://recipe-finder-app-belema.vercel.app/",
   },
-  // {
-  //   name: "Task Manager App",
-  //   year: "July 2025",
-  //   align: "left",
-  //   image: "../../public/images/project1.png",
-  //   link: "#",
-  // },
-  // {
-  //   name: "E-commerce Clone",
-  //   year: "June 2025",
-  //   align: "right",
-  //   image: "../../public/images/project1.png",
-  //   link: "#",
-  // },
+  {
+    name: "Shoppinf app",
+    year: "July 2025",
+    align: "left",
+    image: "../../public/images/project3.png",
+    link: "https://shop-n-enjoy.vercel.app/",
+  },
+  {
+    name: "Portfolio",
+    year: "June 2025",
+    align: "right",
+    image: "../../public/images/project4.png",
+    link: "https://belemagirma.vercel.app/",
+  },
 ];
 
 function ProjectsMain() {
