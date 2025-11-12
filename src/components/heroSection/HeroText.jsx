@@ -97,7 +97,7 @@ function HeroText({ isVisible }) {
           onClick={handleContactMe}
           onMouseEnter={() => setContactHovered(true)}
           onMouseLeave={() => setContactHovered(false)}
-          className="relative px-8 py-3 rounded-full border-2 border-[#00e5ff] text-[#00e5ff] font-semibold transition-all duration-500 overflow-hidden group hover:scale-105 hover:bg-[#00e5ff]/10 hover:shadow-[0_0_20px_#00e5ff]"
+          className="relative px-3 py-3 rounded-full border-2 border-[#00e5ff] text-[#00e5ff] font-semibold transition-all duration-500 overflow-hidden group hover:scale-105 hover:bg-[#00e5ff]/10 hover:shadow-[0_0_20px_#00e5ff]"
         >
           {/* Animated Background */}
           <div className={`absolute inset-0 bg-gradient-to-r from-[#00e5ff] to-[#00b8cc] transition-all duration-500 ${
