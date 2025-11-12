@@ -6,7 +6,7 @@ import { FaLocationDot } from "react-icons/fa6";
 
 function ContactInfo() {
   return (
-    <div className="flex flex-col gap-5 text-gray-300">
+    <div className="flex flex-col gap-10 pt-10 text-gray-300">
       <SingleInfo
         text="belemagirma8@gmail.com"
         Icon={TfiEmail}

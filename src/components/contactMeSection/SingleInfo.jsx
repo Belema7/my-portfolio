@@ -3,8 +3,8 @@ import React from "react";
 function SingleInfo({ text, Icon, href }) {
   const content = (
     <div className="flex items-center gap-3">
-      <Icon className="text-[#15d1e9] text-2xl flex-shrink-0" />
-      <p className="text-gray-300 break-all">{text}</p>
+      <Icon className="text-[#15d1e9] text-2xl shrink-0" />
+      <p className="text-gray-300 ">{text}</p>
     </div>
   );
 
