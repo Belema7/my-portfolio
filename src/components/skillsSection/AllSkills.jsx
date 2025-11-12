@@ -41,7 +41,7 @@ function AllSkills() {
 
   return (
     <div id="skills-section" className="w-full">
-      {/* Enhanced Desktop Layout */}
+      {/* ENHANCED DESKTOP LAYOUT - Premium Design */}
       <div className="hidden md:block">
         <div className="grid grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-6 mt-10">
           {skills.map((item, index) => (
@@ -147,82 +147,56 @@ function AllSkills() {
         </div>
       </div>
 
-      {/* Enhanced Mobile Layout */}
-      <div className="md:hidden mt-8">
-        <div className="grid grid-cols-1 gap-3">
+      {/* MOBILE LAYOUT - Original Circle Design (Improved) */}
+      <div className="md:hidden">
+        <div className="grid grid-cols-3 gap-8 mt-8">
           {skills.map((item, index) => (
             <div
               key={index}
               className={`
-                flex items-center justify-between p-4 rounded-xl
-                border-2 border-gray-800 bg-gradient-to-r from-gray-900 to-black
+                flex flex-col items-center justify-center gap-3 
                 transition-all duration-500 transform
-                ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}
-                active:scale-95 active:bg-gray-800
+                ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}
+                active:scale-95
               `}
               style={{
-                transitionDelay: `${isVisible ? index * 100 : 0}ms`,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                transitionDelay: `${isVisible ? index * 100 : 0}ms`
               }}
-              onTouchStart={() => setActiveSkill(index)}
-              onTouchEnd={() => setActiveSkill(null)}
             >
-              {/* Left side - Icon and Name */}
-              <div className="flex items-center gap-4 flex-1">
-                <div
-                  className="p-3 rounded-lg transition-all duration-300"
-                  style={{
-                    backgroundColor: activeSkill === index ? `${item.color}15` : 'rgba(255,255,255,0.05)',
-                    border: `2px solid ${activeSkill === index ? item.color : 'transparent'}`
+              {/* Circle Icon Container */}
+              <div 
+                className="
+                  p-5 rounded-full border-2 border-[#15d1e9]/50 
+                  bg-[#0a0a0a] shadow-[0_0_20px_#15d1e933] 
+                  hover:shadow-[0_0_30px_#15d1e9aa] 
+                  transition-all duration-500
+                  active:scale-105
+                "
+                onTouchStart={() => setActiveSkill(index)}
+                onTouchEnd={() => setActiveSkill(null)}
+              >
+                <item.icon 
+                  className="text-4xl transition-all duration-300"
+                  style={{ 
+                    color: activeSkill === index ? item.color : '#15d1e9',
+                    transform: activeSkill === index ? 'scale(1.1)' : 'scale(1)'
                   }}
-                >
-                  <item.icon 
-                    className="text-2xl transition-all duration-300"
-                    style={{ 
-                      color: activeSkill === index ? item.color : '#15d1e9'
-                    }}
-                  />
-                </div>
-                
-                <div className="flex-1">
-                  <h3 className="font-bold text-white text-base">{item.name}</h3>
-                  <div 
-                    className="h-1 rounded-full mt-1 transition-all duration-500 origin-left"
-                    style={{
-                      width: activeSkill === index ? '100%' : '0%',
-                      backgroundColor: item.color
-                    }}
-                  />
-                </div>
+                />
               </div>
-
-              {/* Right side - Tech Badge */}
-              <div
-                className="px-3 py-1 rounded-full text-xs font-semibold transition-all duration-300"
+              
+              {/* Skill Name */}
+              <p 
+                className="font-semibold text-gray-200 text-sm text-center transition-colors duration-300"
                 style={{
-                  backgroundColor: activeSkill === index ? `${item.color}20` : 'rgba(255,255,255,0.1)',
-                  color: activeSkill === index ? item.color : '#9CA3AF',
-                  border: `1px solid ${activeSkill === index ? item.color : 'transparent'}`
+                  color: activeSkill === index ? item.color : '#e5e7eb'
                 }}
               >
-                Tech
-              </div>
+                {item.name}
+              </p>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Custom Animation Styles */}
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        
-        .group:hover .skill-icon {
-          transform: scale(1.1) rotate(5deg);
-        }
-      `}</style>
     </div>
   );
 }
