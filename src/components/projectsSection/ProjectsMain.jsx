@@ -7,7 +7,7 @@ const projects = [
     name: "Expense Tracker",
     year: "Sept 2025",
     align: "left",
-     image: "../../public/images/project1.png", // ✅ Fixed path
+     image: "/Images/project1.png", // ✅ Fixed path
     link: "https://expense-tracker-six-sepia.vercel.app/",
     description: "A comprehensive expense tracking application with analytics and budgeting features",
     tech: ["React", "Node.js", "MongoDB", "Chart.js"]
@@ -16,7 +16,7 @@ const projects = [
     name: "Recipe-finder",
     year: "Aug 2025",
     align: "right",
-    image: "../../public/images/project2.png", // ✅ Fixed path
+    image:"/Images/project2.png",// ✅ Fixed path
     link: "https://recipe-finder-app-belema.vercel.app/",
     description: "Discover and save your favorite recipes with advanced filtering and search",
     tech: ["React", "API Integration", "Tailwind CSS", "Context API"]
@@ -25,7 +25,7 @@ const projects = [
     name: "Shopping app",
     year: "July 2025",
     align: "left",
-    image: "../../public/images/project3.png", // ✅ Fixed path
+    image: "/Images/project3.png", // ✅ Fixed path
     link: "https://shop-n-enjoy.vercel.app/",
     description: "E-commerce platform with cart functionality and secure payments",
     tech: ["React", "Redux", "Stripe", "Firebase"]
@@ -34,7 +34,7 @@ const projects = [
     name: "Portfolio",
     year: "June 2025",
     align: "right",
-    image: "../../public/images/project4.png", // ✅ Fixed path
+    image: "/Images/project4.png", // ✅ Fixed path
     link: "https://belemagirma.vercel.app/",
     description: "Modern responsive portfolio showcasing my work and skills",
     tech: ["React", "Tailwind CSS", "Framer Motion", "Vercel"]

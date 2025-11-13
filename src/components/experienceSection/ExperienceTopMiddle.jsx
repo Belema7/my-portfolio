@@ -14,7 +14,7 @@ function ExperienceTopMiddle({ isVisible }) {
 
       {/* Image */}
       <img
-        src="../../public/Images/Exprience.jpg"
+        src="/Images/Experience.png"
         alt="Experience Showcase"
         className={`w-[350px] h-auto rounded-2xl object-cover border-2 border-[#15d1e9] transition-all duration-700 ease-in-out ${
           hovered ? 'scale-105 brightness-110' : 'scale-100'
