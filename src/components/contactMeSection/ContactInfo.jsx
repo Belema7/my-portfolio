@@ -10,29 +10,29 @@ function ContactInfo({ isVisible }) {
       text: "belemagirma8@gmail.com",
       Icon: TfiEmail,
       href: "mailto:belemagirma8@gmail.com",
-      delay: 600
+      delay: 400
     },
     {
       text: "+251 933 391 417",
       Icon: FaPhone,
       href: "tel:+251933391417",
-      delay: 800
+      delay: 500
     },
     {
       text: "Addis Ababa, Ethiopia",
       Icon: FaLocationDot,
       href: "https://maps.google.com/?q=Addis+Ababa,+Ethiopia",
-      delay: 1000
+      delay: 600
     },
   ];
 
   return (
-    <div className="flex flex-col gap-8 pt-6 text-gray-300">
+    <div className="flex flex-col gap-6 pt-6 text-gray-300">
       {contactItems.map((item, index) => (
         <div
           key={index}
-          className={`transition-all duration-700 ${
-            isVisible ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
+          className={`transition-all duration-500 ${
+            isVisible ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'
           }`}
           style={{ transitionDelay: `${item.delay}ms` }}
         >

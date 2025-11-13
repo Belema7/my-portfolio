@@ -3,37 +3,55 @@ import SingleContactSocial from "./SingleContactSocial";
 import { FaLinkedin, FaGithub, FaInstagram, FaTelegram } from "react-icons/fa";
 
 function ContactSocial({ isVisible }) {
-  const socials = [
-    { Icon: FaLinkedin, link: "https://www.linkedin.com/in/belemagirma/", label: "LinkedIn" },
-    { Icon: FaGithub, link: "https://github.com/Belema7", label: "GitHub" },
-    { Icon: FaInstagram, link: "https://www.instagram.com/belema711/", label: "Instagram" },
-    { Icon: FaTelegram, link: "https://t.me/BelemaGr", label: "Telegram" },
+  const socialItems = [
+    {
+      link: "https://www.linkedin.com/in/belemagirma/",
+      Icon: FaLinkedin,
+      label: "LinkedIn",
+      delay: 700
+    },
+    {
+      link: "https://github.com/Belema7",
+      Icon: FaGithub,
+      label: "GitHub",
+      delay: 800
+    },
+    {
+      link: "https://www.instagram.com/belema711/",
+      Icon: FaInstagram,
+      label: "Instagram",
+      delay: 900
+    },
+    {
+      link: "https://t.me/BelemaGr",
+      Icon: FaTelegram,
+      label: "Telegram",
+      delay: 1000
+    },
   ];
 
   return (
-    <div
-      className={`text-center mt-16 transition-all duration-1000 delay-1000 ${
-        isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
-      }`}
-    >
-      <h3 className="text-3xl font-bold text-[#15d1e9] mb-8">
+    <div className={`text-center transition-all duration-500 ${
+      isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+    }`} style={{ transitionDelay: '600ms' }}>
+      <h3 className="text-xl font-bold text-[#15d1e9] mb-6">
         Let's Connect
       </h3>
-
-      <div className="flex justify-center gap-8 flex-wrap">
-        {socials.map((social, i) => (
+      
+      <div className="flex justify-center gap-4 flex-wrap">
+        {socialItems.map((item, index) => (
           <SingleContactSocial
-            key={i}
-            link={social.link}
-            Icon={social.Icon}
-            label={social.label}
-            delay={1200 + i * 150}
+            key={index}
+            link={item.link}
+            Icon={item.Icon}
+            label={item.label}
+            delay={item.delay}
           />
         ))}
       </div>
 
-      <p className="mt-8 text-gray-400 text-lg">
-        I'm always open to new opportunities and collaborations
+      <p className="text-gray-400 mt-6 text-sm">
+        Feel free to reach out through any platform
       </p>
     </div>
   );
