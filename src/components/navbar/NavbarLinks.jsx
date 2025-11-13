@@ -2,79 +2,79 @@ import React, { useState } from "react";
 import { Link } from "react-scroll";
 
 const links = [
-  { link: "About", section: "about" },
-  { link: "Skills", section: "skills" },
-  { link: "Experience", section: "experience" },
-  { link: "Projects", section: "projects" },
-  { link: "Contact", section: "contact" },
+  { name: "About", id: "about" },
+  { name: "Skills", id: "skills" },
+  { name: "Experience", id: "experience" },
+  { name: "Projects", id: "projects" },
+  { name: "Contact", id: "contact" },
 ];
 
-function NavbarLinks({ mobile = false, scrolled }) {
-  const [activeLink, setActiveLink] = useState("about");
-  const [hoveredLink, setHoveredLink] = useState(null);
+function NavbarLinks({ mobile = false, scrolled, onLinkClick }) {
+  const [active, setActive] = useState("about");
+  const [hovered, setHovered] = useState(null);
+
+  const handleClick = (id) => {
+    setActive(id);
+    onLinkClick?.(id);
+  };
+
+  const baseClasses = "relative cursor-pointer transition-all duration-500 font-medium";
+  const activeClasses = "text-cyan-400 font-bold drop-shadow-[0_0_15px_rgba(0,229,255,0.6)]";
+  const hoverClasses = "hover:text-cyan-400 hover:scale-110";
 
   return (
-    <ul
-      className={`flex ${
-        mobile
-          ? "flex-col items-center gap-8 py-8"
-          : "flex-row items-center gap-10"
-      } font-medium`}
-    >
-      {links.map((item, index) => (
-        <li 
-          key={index} 
-          className="relative group"
-          onMouseEnter={() => setHoveredLink(index)}
-          onMouseLeave={() => setHoveredLink(null)}
+    <ul className={`flex ${mobile ? "flex-col gap-10 text-3xl" : "flex-row gap-10 text-lg"}`}>
+      {links.map((link, i) => (
+        <li
+          key={i}
+          className="relative"
+          onMouseEnter={() => !mobile && setHovered(i)}
+          onMouseLeave={() => !mobile && setHovered(null)}
         >
-          <Link
-            to={item.section}
-            smooth={true}
-            spy={true}
-            duration={500}
-            offset={-100}
-            onSetActive={() => setActiveLink(item.section)}
-            className={`cursor-pointer transition-all duration-500 relative ${
-              mobile 
-                ? 'text-2xl py-3' 
-                : 'text-lg'
-            } ${
-              activeLink === item.section
-                ? 'text-[#00e5ff] font-bold drop-shadow-[0_0_10px_#00e5ff]'
-                : scrolled
-                  ? 'text-gray-300 hover:text-[#00e5ff]'
-                  : 'text-white hover:text-[#00e5ff]'
-            } hover:scale-110`}
-          >
-            {item.link}
+          {mobile ? (
+            <button
+              onClick={() => handleClick(link.id)}
+              className={`${baseClasses} ${active === link.id ? activeClasses : "text-white"} ${hoverClasses} py-3 w-full text-left`}
+            >
+              {link.name}
+              <span
+                className={`absolute left-0 bottom-0 h-1 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all duration-500 ${
+                  active === link.id ? "w-full" : "w-0"
+                }`}
+              />
+            </button>
+          ) : (
+            <Link
+              to={link.id}
+              smooth={true}
+              duration={600}
+              offset={-90}
+              spy={true}
+              onSetActive={setActive}
+              className={`${baseClasses} ${
+                active === link.id
+                  ? activeClasses
+                  : scrolled
+                  ? "text-gray-300"
+                  : "text-white"
+              } ${hoverClasses} px-2 py-1`}
+            >
+              {link.name}
 
-            {/* Animated Underline */}
-            <div 
-              className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#00e5ff] to-[#00b8cc] transition-all duration-500 ${
-                activeLink === item.section || hoveredLink === index
-                  ? 'w-full opacity-100' 
-                  : 'w-0 opacity-0'
-              } ${
-                mobile ? '-bottom-2' : '-bottom-1'
-              }`}
-            ></div>
+              {/* Underline */}
+              <span
+                className={`absolute -bottom-1 left-0 h-1 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all duration-500 ${
+                  active === link.id || hovered === i ? "w-full" : "w-0"
+                }`}
+              />
 
-            {/* Hover Dot */}
-            <div 
-              className={`absolute -top-1 -right-1 w-1.5 h-1.5 bg-[#00e5ff] rounded-full transition-all duration-300 ${
-                hoveredLink === index ? 'opacity-100 scale-100' : 'opacity-0 scale-0'
-              }`}
-            ></div>
-          </Link>
-
-          {/* Hover Glow Effect (Desktop only) */}
-          {!mobile && (
-            <div 
-              className={`absolute inset-0 rounded-lg bg-[#00e5ff] transition-all duration-500 ${
-                hoveredLink === index ? 'opacity-10 blur-md scale-110' : 'opacity-0 scale-100'
-              }`}
-            ></div>
+              {/* Glow Dot */}
+              <span
+                className={`absolute -top-2 -right-2 w-2 h-2 bg-cyan-400 rounded-full transition-all duration-300 shadow-lg shadow-cyan-400/50 ${
+                  hovered === i ? "opacity-100 scale-100" : "opacity-0 scale-0"
+                }`}
+              />
+            </Link>
           )}
         </li>
       ))}
