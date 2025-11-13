@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 
+// eslint-disable-next-line no-unused-vars
 function SingleContactSocial({ Icon, link, label, delay = 0 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -20,7 +21,7 @@ function SingleContactSocial({ Icon, link, label, delay = 0 }) {
       onMouseLeave={() => setHovered(false)}
     >
       {/* Animated Background */}
-      <div className={`absolute inset-0 bg-gradient-to-br from-[#15d1e9] to-[#00e5ff] transition-all duration-500 ${
+      <div className={`absolute inset-0 bg-linear-to-br from-[#15d1e9] to-[#00e5ff] transition-all duration-500 ${
         hovered ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
       }`}></div>
 
