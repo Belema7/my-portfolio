@@ -1,18 +1,18 @@
 export const personalInfo = {
     name: "Belema Girma",
     title: "Frontend Developer",
-    valueStatement: "Building production-focused React interfaces with clean component structure and real API integration.",
+    valueStatement: "Crafting high-performance Next.js interfaces with clean, modular architecture and seamless API integrations.",
 
     about: {
-        summary: `I'm a frontend developer passionate about building intuitive, performant, and accessible web applications. With a strong foundation in modern JavaScript and React, I focus on creating clean, maintainable code that delivers exceptional user experiences.`,
-        philosophy: `I believe great frontend development is about more than just making things look good—it's about solving real problems through thoughtful design, semantic markup, and attention to detail. I'm always learning, always iterating, and always striving to write code that my future self will thank me for.`
+        summary: `Frontend developer focused on building high-performance web apps. My go-to stack is Next.js and TypeScript, where I turn complex data into seamless, type-safe user experiences.`,
+        philosophy: `I believe a great website should do more than just look good—it should work for everyone. For me, that means writing clean code today so that my 'future self' can easily build on it tomorrow.`
     },
 
     contact: {
         email: "belemagirma31@gmail.com",
         github: "https://github.com/belema7",
         linkedin: "https://linkedin.com/in/belemagirma",
-        twitter: "https://x.com/belema7",
-        telegram: "https://t.me/belema7"
+        twitter: "https://x.com/BelemaGr",
+        telegram: "https://t.me/Belema_Builds_Stuff"
     }
 };

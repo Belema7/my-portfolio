@@ -1,7 +1,7 @@
 import { Button } from '../components/Button'
 import { HeroNavbar } from '../components/HeroNavbar'
 import { personalInfo } from '../data/personal'
-import profile from '../assets/home.png'
+import profile from '../assets/profile.png'
 import gridBg from '../assets/grid-bg.png'
 
 export function Hero() {
@@ -32,7 +32,7 @@ export function Hero() {
             {/* Hero Card */}
             <div className="relative rounded-2xl border border-white/10 bg-white/5 px-8 py-12 shadow-2xl shadow-black/40 backdrop-blur-2xl">
 
-              {/* ✅ Mobile Profile Image on Border */}
+             
               <img
                 src={profile}
                 alt={`${name} profile`}
@@ -79,7 +79,7 @@ export function Hero() {
                   </div>
                 </div>
 
-                {/* ✅ Desktop Profile Image Right Side */}
+                {/* Profile Image */}
                 <div className="hidden flex-shrink-0 sm:block">
                   <img
                     src={profile}
@@ -92,7 +92,6 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Scroll Indicator */}
         <div className="pb-2">
           <div className="mx-auto w-fit animate-bounce">
             <a
