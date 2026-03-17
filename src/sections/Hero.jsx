@@ -1,7 +1,7 @@
 import { Button } from '../components/Button'
 import { HeroNavbar } from '../components/HeroNavbar'
 import { personalInfo } from '../data/personal'
-import avatar from '../assets/avatar.png'
+import avatar from '../assets/avatar.jpg'
 import gridBg from '../assets/grid-bg.png'
 
 export function Hero() {
