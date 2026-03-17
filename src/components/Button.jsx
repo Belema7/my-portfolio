@@ -1,7 +1,4 @@
-/**
- * Reusable Button component
- * Supports primary/secondary variants and link/button modes
- */
+
 
 export function Button({
     children,

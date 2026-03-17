@@ -1,7 +1,7 @@
 import { Button } from '../components/Button'
 import { HeroNavbar } from '../components/HeroNavbar'
 import { personalInfo } from '../data/personal'
-import profile from '../assets/profile.png'
+import avatar from '../assets/avatar.png'
 import gridBg from '../assets/grid-bg.png'
 
 export function Hero() {
@@ -34,8 +34,8 @@ export function Hero() {
 
              
               <img
-                src={profile}
-                alt={`${name} profile`}
+                src={avatar}
+                alt={`${name} avatar`}
                 className="absolute -top-16 left-1/2 h-28 w-28 -translate-x-1/2 rounded-full border border-white/20 object-cover shadow-xl sm:hidden"
               />
 
@@ -82,8 +82,8 @@ export function Hero() {
                 {/* Profile Image */}
                 <div className="hidden flex-shrink-0 sm:block">
                   <img
-                    src={profile}
-                    alt={`${name} profile`}
+                    src={avatar}
+                    alt={`${name} avatar`}
                     className="h-52 w-52 rounded-full border border-white/20 object-cover shadow-2xl"
                   />
                 </div>
