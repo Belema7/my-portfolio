@@ -28,7 +28,7 @@ export function HeroNavbar() {
   ].filter((l) => Boolean(l.href))
 
   return (
-    <div className="w-full flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:mb-20">
+    <div className="w-full flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-15">
       {/* Left: availability badge */}
       <div className="flex items-center justify-start">
         <a
