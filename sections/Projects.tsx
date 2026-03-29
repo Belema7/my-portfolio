@@ -31,7 +31,7 @@ export function Projects() {
                             Featured Projects
                         </h2>
                         <p className="text-gray-300 max-w-2xl mx-auto">
-                            A selection of projects I've built. Each one taught me something new.
+                            A selection of projects I&apos;ve built. Each one taught me something new.
                         </p>
                     </div>
 

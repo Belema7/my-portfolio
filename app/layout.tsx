@@ -20,13 +20,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans min-h-screen flex flex-col antialiased`}>
+      <body
+        className={`${inter.variable} font-sans min-h-screen flex flex-col antialiased transition-colors duration-300`}
+      >
         <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
           {children}
         </ThemeProvider>
       </body>

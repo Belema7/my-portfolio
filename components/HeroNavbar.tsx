@@ -1,12 +1,8 @@
 "use client"
 
-import { Moon, Send, Sun, X } from 'lucide-react'
+import { Send, X } from "lucide-react"
 import { personalInfo } from '@/data/personal'
-import { useTheme } from 'next-themes'
-import { Button } from '@/components/ui/button'
-import { useEffect, useState } from 'react'
-
-const iconClassName = 'h-5 w-5'
+import { ModeToggle } from "./ThemeToggle"
 
 const GithubIcon = ({ className }: { className?: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -21,18 +17,8 @@ const LinkedinIcon = ({ className }: { className?: string }) => (
 )
 
 export function HeroNavbar() {
-  const { theme, setTheme, resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
   const { contact } = personalInfo
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) return null
-
-  const isDark = resolvedTheme === 'dark'
-  const toggleTheme = () => setTheme(isDark ? 'light' : 'dark')
+  const iconClassName = "h-5 w-5"
 
   const links = [
     { label: 'GitHub', href: contact?.github, Icon: GithubIcon },
@@ -44,30 +30,18 @@ export function HeroNavbar() {
   return (
     <div className="w-full flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Left: availability badge */}
-      <div className="flex items-center justify-between sm:justify-start">
-        <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/15 px-3 py-1 text-xs font-medium text-green-300">
+      <div className="flex items-center justify-start">
+        <a
+          href={`mailto:${contact.email}`}
+          className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/15 px-3 py-1 text-xs font-medium text-green-300"
+        >
           Open for Work
-        </span>
+        </a>
       </div>
 
       {/* Right: theme toggle + socials */}
       <div className="flex items-center justify-between gap-3 sm:justify-end">
-        <Button
-          variant="outline"
-          onClick={toggleTheme}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/90 shadow-sm backdrop-blur-xl transition hover:bg-white/5 h-10"
-          aria-label="Toggle theme"
-        >
-          {isDark ? (
-            <Sun className={iconClassName} />
-          ) : (
-            <Moon className={iconClassName} />
-          )}
-          <span className="hidden sm:inline">
-            {isDark ? 'Light Mode' : 'Dark Mode'}
-          </span>
-        </Button>
-
+      <ModeToggle/>
         <nav
           aria-label="Social links"
           className="flex items-center gap-2"
