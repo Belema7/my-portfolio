@@ -12,16 +12,7 @@ export function Hero() {
             aria-label="Introduction"
             className="relative isolate min-h-screen"
         >
-            <div
-                className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-                style={{
-                    backgroundImage: `url('/grid-bg.png')`,
-                }}
-            />
-            {/* Dark overlay */}
-            <div className="absolute inset-0 z-1 bg-black/70" />
-
-            <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6 text-white">
+            <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6">
                 {/* Navbar */}
                 <HeroNavbar />
 
@@ -29,7 +20,7 @@ export function Hero() {
                 <div className="flex flex-1 items-center justify-center py-10">
                     <div className="w-full max-w-4xl">
                         {/* Hero Card */}
-                        <div className="relative rounded-2xl border border-white/10 bg-white/5 px-8 py-12 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+                        <div className="relative rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] px-8 py-12 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:shadow-black/40">
 
 
                             <Image
@@ -37,26 +28,26 @@ export function Hero() {
                                 alt={`${name} avatar`}
                                 width={112}
                                 height={112}
-                                className="absolute -top-16 left-1/2 h-28 w-28 -translate-x-1/2 rounded-full border border-white/20 object-cover shadow-xl sm:hidden"
+                                className="absolute -top-16 left-1/2 h-28 w-28 -translate-x-1/2 rounded-full border border-[var(--surface-border)] object-cover shadow-xl sm:hidden"
                             />
 
                             <div className="flex flex-col gap-10 sm:flex-row sm:items-center sm:justify-between">
 
                                 {/* Left Side Text */}
                                 <div className="pt-14 text-center sm:pt-0 sm:text-left">
-                                    <p className="text-sm font-medium text-white/70">
+                                    <p className="text-sm font-medium text-[var(--color-text-secondary)]">
                                         Hello, I’m
                                     </p>
 
-                                    <h1 className="mt-3 text-4xl font-bold tracking-tight text-white sm:text-5xl">
+                                    <h1 className="mt-3 text-4xl font-bold tracking-tight text-[var(--color-primary)] sm:text-5xl">
                                         {name}
                                     </h1>
 
-                                    <p className="mt-3 text-lg font-semibold text-cyan-300 sm:text-xl">
+                                    <p className="mt-3 text-lg font-semibold text-[var(--color-accent)] sm:text-xl">
                                         {title}
                                     </p>
 
-                                    <p className="mt-5 max-w-xl text-base leading-relaxed text-gray-300 sm:text-lg">
+                                    <p className="mt-5 max-w-xl text-base leading-relaxed text-[var(--color-text-secondary)] sm:text-lg">
                                         {valueStatement}
                                     </p>
 
@@ -72,7 +63,7 @@ export function Hero() {
                                         <Button
                                             asChild
                                             variant="outline"
-                                            className="bg-transparent border-white/20 text-white hover:bg-white/10 rounded-lg px-6 py-6 text-base font-medium"
+                                            className="bg-transparent border-[var(--surface-border)] text-[var(--color-text-primary)] hover:bg-black/5 dark:hover:bg-white/10 rounded-lg px-6 py-6 text-base font-medium"
                                         >
                                             <a href="#projects">Projects</a>
                                         </Button>
@@ -86,7 +77,7 @@ export function Hero() {
                                         alt={`${name} avatar`}
                                         width={208}
                                         height={208}
-                                        className="h-52 w-52 rounded-full border border-white/20 object-cover shadow-2xl"
+                                        className="h-52 w-52 rounded-full border border-[var(--surface-border)] object-cover shadow-2xl"
                                     />
                                 </div>
                             </div>
@@ -98,7 +89,7 @@ export function Hero() {
                     <div className="mx-auto w-fit animate-bounce">
                         <a
                             href="#skills"
-                            className="text-white/60 hover:text-cyan-300"
+                            className="text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]"
                         >
                             ↓
                         </a>

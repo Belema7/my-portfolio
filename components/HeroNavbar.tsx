@@ -33,7 +33,7 @@ export function HeroNavbar() {
       <div className="flex items-center justify-start">
         <a
           href={`mailto:${contact.email}`}
-          className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/15 px-3 py-1 text-xs font-medium text-green-300"
+          className="inline-flex items-center rounded-full border border-green-600/20 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-700 dark:border-green-500/20 dark:bg-green-500/15 dark:text-green-300"
         >
           Open for Work
         </a>
@@ -54,7 +54,7 @@ export function HeroNavbar() {
               rel="noreferrer"
               aria-label={label}
               title={label}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/80 shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/5 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--color-text-secondary)] shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-black/5 hover:text-[var(--color-text-primary)] hover:border-black/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 dark:hover:bg-white/5 dark:hover:border-white/20"
             >
               <Icon className={iconClassName} />
             </a>

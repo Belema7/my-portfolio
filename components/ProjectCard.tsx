@@ -26,9 +26,10 @@ export function ProjectCard({ project }: { project: Project }) {
       overflow-hidden
       transition-all duration-300
       backdrop-blur-xl
-      hover:shadow-lg hover:border-white/20
+      hover:shadow-lg hover:border-black/15
       hover:-translate-y-1
       dark:border-white/10
+      dark:hover:border-white/20
     ">
             {/* Project Image/Placeholder */}
             <div className="
@@ -85,8 +86,8 @@ export function ProjectCard({ project }: { project: Project }) {
                             className="
                 px-2 py-0.5
                 text-xs font-medium
-                bg-black/10 text-[var(--color-text-secondary)]
-                border border-[var(--color-border)]
+                bg-black/5 text-[var(--color-text-secondary)]
+                border border-[var(--surface-border)]
                 rounded-md
                 dark:bg-black/30 dark:text-white/75 dark:border-white/10
               "

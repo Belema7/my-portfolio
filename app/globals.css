@@ -88,12 +88,15 @@
   --color-accent-hover: #06b6d4;
   --color-text-primary: #171717;
   --color-text-secondary: #525252;
-  --color-border: #e5e5e5;
+  --color-border: rgba(0, 0, 0, 0.1);
   --max-width: 1200px;
 
-  --surface: rgba(255, 255, 255, 0.75);
+  --surface: rgba(255, 255, 255, 0.6);
   --surface-border: rgba(0, 0, 0, 0.08);
   --surface-muted: rgba(23, 23, 23, 0.65);
+
+  --app-bg-image: url("/whitebg.jpg");
+  --app-bg-overlay: rgba(255, 255, 255, 0.4);
 }
 
 .dark {
@@ -126,6 +129,9 @@
   --surface: rgba(0, 0, 0, 0.35);
   --surface-border: rgba(255, 255, 255, 0.12);
   --surface-muted: rgba(229, 229, 229, 0.78);
+
+  --app-bg-image: url("/gridbg.png");
+  --app-bg-overlay: rgba(0, 0, 0, 0.7);
 }
 
 @layer base {
@@ -146,6 +152,29 @@
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
+    isolation: isolate;
+  }
+
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image: var(--app-bg-image);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+
+  body::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--app-bg-overlay);
   }
 
   h1,

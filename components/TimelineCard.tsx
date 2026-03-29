@@ -9,8 +9,8 @@ interface TimelineCardProps {
 
 export function TimelineCard({ icon: Icon, year, title, description }: TimelineCardProps) {
   return (
-    <div className="group rounded-2xl border border-[var(--color-border)] bg-[var(--surface)] p-6 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:border-white/20 hover:shadow-lg dark:border-white/10">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-cyan-300 shadow-sm dark:bg-black/30">
+    <div className="group rounded-2xl border border-[var(--color-border)] bg-[var(--surface)] p-6 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:border-black/15 hover:shadow-lg dark:border-white/10 dark:hover:border-white/20">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--surface-border)] bg-black/5 text-[var(--color-accent)] shadow-sm dark:bg-black/30">
         {Icon ? <Icon className="h-6 w-6" /> : null}
       </div>
 
@@ -18,7 +18,7 @@ export function TimelineCard({ icon: Icon, year, title, description }: TimelineC
         {year}
       </p>
 
-      <h3 className="mt-2 text-lg font-semibold text-white">
+      <h3 className="mt-2 text-lg font-semibold text-[var(--color-primary)]">
         {title}
       </h3>
 
