@@ -9,7 +9,7 @@ interface Project {
     name: string;
     description: string;
     techStack: string[];
-    image?: string;
+    image?: string | null;
     github?: string;
     live?: string;
 }
