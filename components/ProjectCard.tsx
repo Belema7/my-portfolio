@@ -20,12 +20,11 @@ export function ProjectCard({ project }: { project: Project }) {
     return (
         <article className="
       group
-      bg-transparent
+      bg-white dark:bg-transparent
       rounded-2xl
       border border-[var(--color-border)]
       overflow-hidden
       transition-all duration-300
-      backdrop-blur-xl
       hover:shadow-lg hover:border-black/15
       hover:-translate-y-1
       dark:border-white/10
