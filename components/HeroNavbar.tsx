@@ -54,7 +54,7 @@ export function HeroNavbar() {
               rel="noreferrer"
               aria-label={label}
               title={label}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--color-text-secondary)] shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-black/5 hover:text-[var(--color-text-primary)] hover:border-black/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 dark:hover:bg-white/5 dark:hover:border-white/20"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] bg-transparent text-[var(--color-text-secondary)] shadow-sm backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-black/5 hover:text-[var(--color-text-primary)] hover:border-black/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 dark:hover:bg-white/5 dark:hover:border-white/20"
             >
               <Icon className={iconClassName} />
             </a>

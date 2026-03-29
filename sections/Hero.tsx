@@ -18,9 +18,9 @@ export function Hero() {
 
                 {/* Main Hero Content */}
                 <div className="flex flex-1 items-center justify-center py-10">
-                    <div className="w-full max-w-4xl">
-                        {/* Hero Card */}
-                        <div className="relative rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] px-8 py-12 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:shadow-black/40">
+	                    <div className="w-full max-w-4xl">
+	                        {/* Hero Card */}
+	                        <div className="relative rounded-2xl border border-[var(--surface-border)] bg-transparent px-8 py-12 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:shadow-black/40">
 
 
                             <Image

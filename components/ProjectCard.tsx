@@ -20,7 +20,7 @@ export function ProjectCard({ project }: { project: Project }) {
     return (
         <article className="
       group
-      bg-[var(--surface)]
+      bg-transparent
       rounded-2xl
       border border-[var(--color-border)]
       overflow-hidden

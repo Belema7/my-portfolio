@@ -60,7 +60,7 @@ export function Contact() {
 	                            {/* Email */}
 	                            <a
 	                                href={`mailto:${contact.email}`}
-	                                className="flex items-center gap-4 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
+	                                className="flex items-center gap-4 p-4 rounded-2xl bg-transparent border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
 	                            >
 	                                <div className="w-12 h-12 rounded-2xl bg-black/10 dark:bg-black/30 flex items-center justify-center transition-colors">
 	                                    <svg className="w-5 h-5 text-[var(--color-text-secondary)] group-hover:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,7 +78,7 @@ export function Contact() {
 	                                href={contact.github}
 	                                target="_blank"
 	                                rel="noopener noreferrer"
-	                                className="flex items-center gap-4 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
+	                                className="flex items-center gap-4 p-4 rounded-2xl bg-transparent border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
 	                            >
 	                                <div className="w-12 h-12 rounded-2xl bg-black/10 dark:bg-black/30 flex items-center justify-center transition-colors">
 	                                    <svg className="w-5 h-5 text-[var(--color-text-secondary)] group-hover:text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
@@ -96,7 +96,7 @@ export function Contact() {
 	                                href={contact.linkedin}
 	                                target="_blank"
 	                                rel="noopener noreferrer"
-	                                className="flex items-center gap-4 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
+	                                className="flex items-center gap-4 p-4 rounded-2xl bg-transparent border border-[var(--color-border)] shadow-sm backdrop-blur-xl transition-all group hover:-translate-y-0.5 hover:border-black/15 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
 	                            >
 	                                <div className="w-12 h-12 rounded-2xl bg-black/10 dark:bg-black/30 flex items-center justify-center transition-colors">
 	                                    <svg className="w-5 h-5 text-[var(--color-text-secondary)] group-hover:text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
@@ -117,7 +117,7 @@ export function Contact() {
 	                            Send a Message
 	                        </h3>
 
-	                        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-[var(--color-border)] bg-[var(--surface)] p-6 shadow-sm backdrop-blur-xl dark:border-white/10">
+	                        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-[var(--color-border)] bg-transparent p-6 shadow-sm backdrop-blur-xl dark:border-white/10">
 	                            <div>
 	                                <Label
 	                                    htmlFor="message"

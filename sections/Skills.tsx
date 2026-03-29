@@ -28,14 +28,14 @@ export function Skills() {
 
                 {/* Skills Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {skillCategories.map((category) => (
-                        <div
-                            key={category.name}
-                            className="group p-6 rounded-2xl bg-[var(--surface)] border border-[var(--surface-border)] shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-lg"
-                        >
-                            <h3 className="text-lg font-semibold text-[var(--color-primary)] mb-4">
-                                {category.name}
-                            </h3>
+                        {skillCategories.map((category) => (
+                            <div
+                                key={category.name}
+                                className="group p-6 rounded-2xl bg-transparent border border-[var(--surface-border)] shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-lg"
+                            >
+                                <h3 className="text-lg font-semibold text-[var(--color-primary)] mb-4">
+                                    {category.name}
+                                </h3>
                             <div className="flex flex-wrap gap-2">
                                 {category.skills.map((skill) => (
                                     <SkillTag key={skill} skill={skill} />
