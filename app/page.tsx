@@ -24,9 +24,10 @@ export default function Home() {
         aria-hidden="true"
         className="fixed inset-0 -z-50 pointer-events-none hidden dark:block bg-center bg-repeat bg-[url('/gridbg.png')] bg-size-[clamp(900px,110vw,1400px)]"
       />
+      {/* Dark Mode Overlay */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 -z-40 pointer-events-none dark:bg-black/70"
+        className="fixed inset-0 -z-40 pointer-events-none hidden dark:block bg-black/70"
       />
 
       <main className="flex-1">
