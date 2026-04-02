@@ -12,16 +12,12 @@ export default function Home() {
         aria-hidden="true"
         className="fixed inset-0 -z-50 pointer-events-none block dark:hidden"
         style={{
-          backgroundColor: "#f8fafc",
+          backgroundColor: "#ffffff",
           backgroundImage: `
-            linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-            linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
+            linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+            linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)
           `,
           backgroundSize: "20px 30px",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%)",
-          maskImage:
-            "radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%)",
         }}
       />
       <div
@@ -30,7 +26,7 @@ export default function Home() {
       />
       <div
         aria-hidden="true"
-        className="fixed inset-0 -z-40 pointer-events-none bg-white/40 dark:bg-black/70"
+        className="fixed inset-0 -z-40 pointer-events-none dark:bg-black/70"
       />
 
       <main className="flex-1">
@@ -44,5 +40,11 @@ export default function Home() {
     </div>
   );
 }
+
+
+
+
+
+
 
 

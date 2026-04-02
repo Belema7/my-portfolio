@@ -36,7 +36,7 @@ export function Hero() {
                             <div className="flex flex-col gap-10 sm:flex-row sm:items-center sm:justify-between">
 
                                 {/* Left Side Text */}
-                                <div className="pt-14 text-center sm:pt-0 sm:text-left">
+                                <div className=" pt-14 text-center sm:pt-0 sm:text-left">
                                     <p className="text-sm font-medium text-(--color-text-secondary)">
                                         Hello, I’m
                                     </p>
