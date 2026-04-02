@@ -23,18 +23,20 @@ export function Hero() {
                         <div className="relative rounded-2xl border border-(--surface-border) bg-white dark:bg-black/40 px-8 py-12 shadow-2xl shadow-black/20 dark:shadow-black/40 dark:backdrop-blur-3xl">
 
 
-                            <Image
-                                src="/avatar.jpg"
-                                alt={`${name} avatar`}
-                                width={96}
-                                height={96}
-                                className="absolute -top-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full border border-(--surface-border) object-cover shadow-xl sm:hidden"
-                            />
+                            <div className="absolute -top-16 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full border border-(--surface-border) bg-white/50 dark:bg-black/40 backdrop-blur-sm flex items-center justify-center shadow-xl sm:hidden">
+                                <Image
+                                    src="/avatar.jpg"
+                                    alt={`${name} avatar`}
+                                    width={112}
+                                    height={112}
+                                    className="h-28 w-28 rounded-full object-cover"
+                                />
+                            </div>
 
                             <div className="flex flex-col gap-10 sm:flex-row sm:items-center sm:justify-between">
 
                                 {/* Left Side Text */}
-                                <div className="pt-12 text-center sm:pt-0 sm:text-left">
+                                <div className="pt-14 text-center sm:pt-0 sm:text-left">
                                     <p className="text-sm font-medium text-(--color-text-secondary)">
                                         Hello, I’m
                                     </p>
@@ -72,13 +74,15 @@ export function Hero() {
 
                                 {/* Profile Image */}
                                 <div className="hidden shrink-0 sm:block">
-                                    <Image
-                                        src="/avatar.jpg"
-                                        alt={`${name} avatar`}
-                                        width={176}
-                                        height={176}
-                                        className="h-44 w-44 rounded-full border border-[var(--surface-border)] object-cover shadow-2xl"
-                                    />
+                                    <div className="h-56 w-56 rounded-full border border-[var(--surface-border)] bg-white/50 dark:bg-black/40 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+                                        <Image
+                                            src="/avatar.jpg"
+                                            alt={`${name} avatar`}
+                                            width={208}
+                                            height={208}
+                                            className="h-52 w-52 rounded-full object-cover"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
