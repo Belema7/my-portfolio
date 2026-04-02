@@ -9,9 +9,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Belema Portfolio",
+  title: "Belema Girma",
   description:
-    "Belema Girma is a Frontend Software Engineer specializing in React and Next.js, building fast, accessible, responsive web experiences with modern web technologies.",
+    "Belema Girma is a Frontend Software Engineer specializing in TypeScript, React and Next.js, building fast, accessible, responsive web experiences with modern web technologies.",
 };
 
 export default function RootLayout({
