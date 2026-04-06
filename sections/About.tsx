@@ -4,7 +4,7 @@
 
 import { personalInfo } from '@/data/personal';
 import { GraduationCap, Code2, LayoutGrid, Briefcase } from 'lucide-react';
-import { TimelineCard } from '@/components/TimelineCard';
+
 
 export function About() {
     const { about } = personalInfo;
@@ -39,33 +39,53 @@ export function About() {
                     </p>
                 </div>
 
-                {/* Timeline Cards */}
-                <div className="mt-12 pt-10 border-t border-[var(--color-border)]">
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <TimelineCard
-                            icon={GraduationCap}
-                            year="2023"
-                            title="Started University"
-                            description="Began my university journey and built a foundation for consistent learning."
-                        />
-                        <TimelineCard
-                            icon={Code2}
-                            year="2024"
-                            title="Started Coding"
-                            description="Dove into modern JavaScript and React—shipping small projects while learning fast."
-                        />
-                        <TimelineCard
-                            icon={LayoutGrid}
-                            year="2025"
-                            title="Built Portfolio Projects"
-                            description="Focused on real UI/UX, reusable components, and production-style project structure."
-                        />
-                        <TimelineCard
-                            icon={Briefcase}
-                            year="Present"
-                            title="Open for Internship"
-                            description="Actively looking for an internship to grow with a team and contribute to real products."
-                        />
+                {/* Timeline Vertical Layout */}
+                <div className="mt-16 pt-10 border-t border-[var(--color-border)]">
+                    <div className="relative border-l border-[var(--color-border)] dark:border-white/10 ml-3 md:ml-4 space-y-10 md:space-y-12 pb-4">
+                        {[
+                            {
+                                icon: GraduationCap,
+                                year: "2024",
+                                title: "Academic Foundation",
+                                description: "Began university studies while developing a disciplined approach to problem-solving, analytical thinking, and continuous learning."
+                            },
+                            {
+                                icon: Code2,
+                                year: "2025",
+                                title: "Frontend Development Journey",
+                                description: "Started building modern web interfaces with JavaScript, TypeScript, React, and core frontend engineering principles."
+                            },
+                            {
+                                icon: LayoutGrid,
+                                year: "2026",
+                                title: "Production-Ready Project Work",
+                                description: "Built real-world projects focused on scalable component systems, responsive design, accessibility, and clean architecture."
+                            },
+                            {
+                                icon: Briefcase,
+                                year: "Present",
+                                title: "Career Growth & Opportunities",
+                                description: "Actively pursuing internships and junior frontend engineering roles to contribute to real products and grow within collaborative teams."
+                            }
+                        ].map((item, index) => (
+                            <div key={index} className="relative pl-8 md:pl-10 group">
+                                {/* Timeline Dot / Icon wrapper */}
+                                <div className="absolute -left-[20px] top-1 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] dark:border-white/10 bg-white dark:bg-[#0a0a0a] text-[var(--color-accent)] shadow-sm transition-all duration-300 group-hover:scale-110 dark:group-hover:border-white/20">
+                                    <item.icon className="h-4 w-4 md:h-5 md:w-5" />
+                                </div>
+                                <div className="flex flex-col gap-2 rounded-2xl transition-colors duration-300 p-3 -ml-3 md:p-4 md:-ml-4 hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                                    <span className="text-xs md:text-sm font-semibold tracking-wide text-[var(--color-text-secondary)]">
+                                        {item.year}
+                                    </span>
+                                    <h3 className="text-lg md:text-xl font-bold text-[var(--color-primary)]">
+                                        {item.title}
+                                    </h3>
+                                    <p className="text-sm md:text-base leading-relaxed text-[var(--color-text-secondary)]">
+                                        {item.description}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
