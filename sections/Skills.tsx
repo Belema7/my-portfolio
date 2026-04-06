@@ -27,11 +27,11 @@ export function Skills() {
                 </div>
 
                 {/* Skills Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto gap-6 lg:gap-8 auto-rows-fr items-stretch">
                     {skillCategories.map((category) => (
                         <div
                             key={category.name}
-                            className="group p-6 rounded-2xl bg-white dark:bg-transparent border border-[var(--surface-border)] shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                            className="group p-6 rounded-2xl bg-white dark:bg-transparent border border-[var(--surface-border)] h-full shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl hover:border-gray-300 dark:hover:border-white/20 dark:hover:shadow-white/5"
                         >
                             <h3 className="text-lg font-semibold text-[var(--color-primary)] mb-4">
                                 {category.name}
