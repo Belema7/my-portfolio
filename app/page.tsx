@@ -22,7 +22,14 @@ export default function Home() {
       />
       <div
         aria-hidden="true"
-        className="fixed inset-0 -z-50 pointer-events-none hidden dark:block bg-center bg-repeat bg-[url('/gridbg.png')] bg-size-[clamp(900px,110vw,1400px)] after:absolute after:inset-0 after:pointer-events-none after:bg-black/70 after:content-['']"
+        className="fixed inset-0 -z-50 pointer-events-none hidden dark:block bg-black after:absolute after:inset-0 after:pointer-events-none after:bg-black/60 after:content-['']"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, #262626 1px, transparent 1px),
+            linear-gradient(to bottom, #262626 1px, transparent 1px)
+          `,
+          backgroundSize: "20px 20px",
+        }}
       />
 
       <main className="flex-1">
