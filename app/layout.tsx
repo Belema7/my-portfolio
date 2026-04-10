@@ -25,11 +25,11 @@ export default function RootLayout({
         className={`${inter.variable} font-sans min-h-screen flex flex-col antialiased transition-colors duration-300`}
       >
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
           {children}
         </ThemeProvider>
       </body>
