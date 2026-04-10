@@ -19,7 +19,7 @@ export const personalInfo = {
         github: "https://github.com/belema7",
         linkedin: "https://linkedin.com/in/belemagirma",
         twitter: "https://x.com/BelemaGr",
-        telegram: "https://t.me/Belema_Builds_Stuff"
+        telegram: "https://t.me/BelemaBuilds"
     }
 };
 
