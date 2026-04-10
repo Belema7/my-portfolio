@@ -40,11 +40,13 @@ export function Contact() {
 				message: 'Thank you! Your message has been sent successfully.'
 			});
 			setFormData({ name: '', email: '', message: '' });
+			setTimeout(() => setStatus({ type: null, message: '' }), 5000);
 		} catch (error) {
 			setStatus({
 				type: 'error',
 				message: 'Failed to send message. Please try again later or contact me directly via email.'
 			});
+			setTimeout(() => setStatus({ type: null, message: '' }), 5000);
 		} finally {
 			setIsSubmitting(false);
 		}
