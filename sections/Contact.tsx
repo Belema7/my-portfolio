@@ -15,20 +15,39 @@ export function Contact() {
 		message: ''
 	});
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({
+		type: null,
+		message: ''
+	});
 
 	const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const { name, value } = e.target;
 		setFormData(prev => ({ ...prev, [name]: value }));
+		// Clear status when user starts typing again
+		if (status.type) setStatus({ type: null, message: '' });
 	};
 
 	const handleSubmit = async (e: FormEvent) => {
 		e.preventDefault();
 		setIsSubmitting(true);
-		// Simulate form submission
-		await new Promise(resolve => setTimeout(resolve, 1000));
-		alert('Message sent! (This is a demo)');
-		setFormData({ name: '', email: '', message: '' });
-		setIsSubmitting(false);
+		setStatus({ type: null, message: '' });
+
+		try {
+			const { sendEmail } = await import('@/lib/email-service');
+			await sendEmail(formData);
+			setStatus({
+				type: 'success',
+				message: 'Thank you! Your message has been sent successfully.'
+			});
+			setFormData({ name: '', email: '', message: '' });
+		} catch (error) {
+			setStatus({
+				type: 'error',
+				message: 'Failed to send message. Please try again later or contact me directly via email.'
+			});
+		} finally {
+			setIsSubmitting(false);
+		}
 	};
 
 	return (
@@ -174,6 +193,15 @@ export function Contact() {
 									placeholder="Tell me about your project..."
 								/>
 							</div>
+
+							{status.type && (
+								<div className={`p-4 rounded-xl text-sm ${status.type === 'success'
+									? 'bg-green-500/10 text-green-600 border border-green-500/20'
+									: 'bg-red-500/10 text-red-600 border border-red-500/20'
+									}`}>
+									{status.message}
+								</div>
+							)}
 
 							<Button
 								type="submit"
