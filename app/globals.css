@@ -52,6 +52,11 @@
   --color-brand-secondary: var(--color-secondary);
   --color-brand-accent: var(--color-accent);
   --color-brand-accent-hover: var(--color-accent-hover);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-surface: var(--surface);
+  --color-surface-border: var(--surface-border);
+  --color-surface-muted: var(--surface-muted);
 }
 
 :root {
@@ -84,11 +89,11 @@
   /* Original Design Tokens */
   --color-primary: #0a0a0a;
   --color-secondary: #fafafa;
-  --color-accent: #22d3ee;
-  --color-accent-hover: #06b6d4;
+  --color-accent: #d2691e;
+  --color-accent-hover: #b35919;
   --color-text-primary: #171717;
   --color-text-secondary: #525252;
-  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border: rgba(0, 0, 0, 0.08);
   --max-width: 1200px;
 
   --surface: rgba(255, 255, 255, 0.14);
@@ -113,7 +118,7 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
 

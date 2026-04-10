@@ -17,7 +17,7 @@ export function ModeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] bg-transparent text-[var(--color-text-primary)] shadow-sm backdrop-blur-xl transition hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 dark:hover:bg-white/5"
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--surface-border)] bg-transparent text-[var(--color-text-primary)] shadow-sm backdrop-blur-xl transition hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/70 dark:hover:bg-white/5"
         aria-label="Select theme"
       >
         <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />

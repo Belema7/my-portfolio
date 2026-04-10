@@ -29,6 +29,7 @@ export function Hero() {
                                     alt={`${name} avatar`}
                                     width={112}
                                     height={112}
+                                    loading="eager"
                                     className="h-28 w-28 rounded-full object-cover"
                                 />
                             </div>
@@ -57,7 +58,7 @@ export function Hero() {
                                     <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                                         <Button
                                             asChild
-                                            className="bg-cyan-400 text-black hover:bg-cyan-300 rounded-lg px-6 py-6 text-base font-medium"
+                                            className="bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] rounded-lg px-6 py-6 text-base font-medium transition-colors"
                                         >
                                             <a href="#contact">Contact</a>
                                         </Button>
@@ -80,6 +81,7 @@ export function Hero() {
                                             alt={`${name} avatar`}
                                             width={208}
                                             height={208}
+                                            loading="eager"
                                             className="h-52 w-52 rounded-full object-cover"
                                         />
                                     </div>
