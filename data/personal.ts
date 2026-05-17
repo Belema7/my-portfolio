@@ -4,7 +4,7 @@ export const personal = {
   location: "Ethiopia",
   email: "belemagirma31@gmail.com",
   resumeUrl: "/resume.pdf",
-  avatarUrl: "/avatar.jpg",
+  avatarUrl: "/avatar.JPG",
   availabilityBadge: "Available for junior frontend roles",
   heroHeadline:
     "I build clean, scalable interfaces for modern web products.",

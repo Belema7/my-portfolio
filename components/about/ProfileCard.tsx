@@ -7,12 +7,12 @@ export function ProfileCard() {
 
   return (
     <div className="rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
-      <div className="relative mx-auto mb-5 aspect-square w-full max-w-[220px] overflow-hidden rounded-xl border border-[var(--surface-border)] bg-black/5 dark:bg-white/5">
+      <div className="relative mx-auto mb-5 aspect-[3/4] w-full max-w-[220px] overflow-hidden rounded-xl border border-[var(--surface-border)] bg-black/5 dark:bg-white/5">
         <Image
           src={avatarUrl}
           alt={`${name} profile`}
           fill
-          className="object-cover"
+          className="object-cover object-top"
           sizes="220px"
           priority
         />
