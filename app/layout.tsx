@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SiteShell } from "@/components/layout/SiteShell";
 
-const inter = Inter({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-heading",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -20,17 +23,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${GeistSans.variable} ${spaceGrotesk.variable}`}
+    >
       <body
-        className={`${inter.variable} font-sans min-h-screen flex flex-col antialiased transition-colors duration-300`}
+        className={`${GeistSans.className} min-h-screen flex flex-col antialiased transition-colors duration-300`}
       >
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
-          enableSystem={false}
+          enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <SiteShell>{children}</SiteShell>
         </ThemeProvider>
       </body>
     </html>
