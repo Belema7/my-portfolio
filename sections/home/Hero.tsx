@@ -1,69 +1,117 @@
-import Image from "next/image";
+import Link from "next/link";
 import { personal } from "@/data/personal";
 import { Container } from "@/components/ui/Container";
 import { Badge } from "@/components/ui/Badge";
 import { AppButton } from "@/components/ui/AppButton";
 
 export function Hero() {
-  const { name, role, heroIntro, statusBadges } = personal;
+  const {
+    role,
+    availabilityBadge,
+    heroHeadline,
+    heroSupporting,
+    heroMetadataBadges,
+    heroPulse,
+    social,
+    email,
+    location,
+  } = personal;
+
+  const quickLinks = [
+    { label: "GitHub", href: social.github },
+    { label: "LinkedIn", href: social.linkedin },
+    { label: "Email", href: `mailto:${email}` },
+    { label: location, href: null },
+  ];
 
   return (
     <section
       aria-label="Introduction"
-      className="relative -mt-16 flex min-h-screen flex-col justify-center pt-16"
+      className="relative -mt-16 flex min-h-screen flex-col justify-center overflow-hidden pt-16"
     >
-      <Container>
-        <div className="grid items-center gap-10 py-12 lg:grid-cols-[1fr_auto] lg:gap-12 lg:py-16">
-          <div className="order-2 lg:order-1">
-            <p className="text-sm font-medium text-[var(--color-text-secondary)]">
-              Hello, I&apos;m
-            </p>
-            <h1 className="mt-2 font-heading text-4xl font-bold tracking-tight text-[var(--color-primary)] md:text-5xl lg:text-6xl">
-              {name}
-            </h1>
-            <p className="mt-3 text-xl font-semibold text-[var(--color-accent)] md:text-2xl">
-              {role}
-            </p>
-            <p className="mt-6 max-w-2xl text-lg font-medium leading-snug text-[var(--color-primary)]">
-              {heroIntro.headline}
-            </p>
-            {heroIntro.paragraphs.map((p) => (
-              <p
-                key={p.slice(0, 24)}
-                className="mt-3 max-w-2xl text-base leading-relaxed text-[var(--color-text-secondary)]"
-              >
-                {p}
-              </p>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(210,105,30,0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(210,105,30,0.08),transparent)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-0 top-1/4 h-72 w-72 rounded-full bg-[var(--color-accent)]/5 blur-3xl"
+      />
+
+      <Container className="relative z-10 px-4">
+        <div className="mx-auto max-w-4xl py-16 md:py-20">
+          <span className="inline-flex items-center rounded-full border border-[var(--color-accent)]/25 bg-[var(--color-accent)]/5 px-3 py-1 text-xs font-medium text-[var(--color-accent)]">
+            {availabilityBadge}
+          </span>
+
+          <p className="mt-6 text-sm font-medium tracking-wide text-[var(--color-text-secondary)]">
+            {role}
+          </p>
+
+          <h1 className="mt-3 font-heading text-5xl font-bold tracking-tight leading-tight text-[var(--color-primary)] md:text-6xl lg:text-7xl">
+            {heroHeadline}
+          </h1>
+
+          <p className="mt-6 max-w-2xl text-base leading-relaxed text-[var(--color-text-secondary)] md:text-lg">
+            {heroSupporting}
+          </p>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <AppButton href="/projects">View Projects</AppButton>
+            <AppButton href="/blog" variant="outline">
+              Read My Blog
+            </AppButton>
+            <AppButton href="/contact" variant="outline">
+              Contact Me
+            </AppButton>
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-2">
+            {heroMetadataBadges.map((badge) => (
+              <Badge key={badge} variant="outline" className="text-xs">
+                {badge}
+              </Badge>
             ))}
-            <div className="mt-6 flex flex-wrap gap-2">
-              {statusBadges.map((badge) => (
-                <Badge key={badge} variant="accent">
-                  {badge}
-                </Badge>
-              ))}
-            </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <AppButton href="/projects">View Projects</AppButton>
-              <AppButton href="/blog" variant="outline">
-                Read My Blog
-              </AppButton>
-              <AppButton href="/contact" variant="outline">
-                Contact Me
-              </AppButton>
+          </div>
+
+          <div className="mt-10 rounded-xl border border-[var(--color-border)] bg-white/60 p-4 font-mono text-xs backdrop-blur-sm dark:bg-black/30 md:p-5 md:text-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-1">
+              <span className="text-[var(--color-text-secondary)]">
+                <span className="text-[var(--color-accent)]">building</span>{" "}
+                {heroPulse.building}
+              </span>
+              <span className="text-[var(--color-text-secondary)]">
+                <span className="text-[var(--color-accent)]">learning</span>{" "}
+                {heroPulse.learning}
+              </span>
+              <span className="text-[var(--color-text-secondary)]">
+                <span className="text-[var(--color-accent)]">goal</span>{" "}
+                {heroPulse.goal}
+              </span>
             </div>
           </div>
 
-          <div className="order-1 flex justify-center lg:order-2 lg:justify-end">
-            <div className="relative h-32 w-32 overflow-hidden rounded-full border border-[var(--surface-border)] shadow-xl sm:h-40 sm:w-40 lg:h-56 lg:w-56">
-              <Image
-                src="/avatar.jpg"
-                alt={`${name} profile`}
-                fill
-                className="object-cover"
-                priority
-                sizes="(max-width: 1024px) 160px, 224px"
-              />
-            </div>
+          <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--color-border)] pt-8 text-sm">
+            {quickLinks.map((link) =>
+              link.href ? (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  target={link.label !== "Email" ? "_blank" : undefined}
+                  rel="noopener noreferrer"
+                  className="font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-accent)]"
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <span
+                  key={link.label}
+                  className="text-[var(--color-text-secondary)]"
+                >
+                  {link.label}
+                </span>
+              )
+            )}
           </div>
         </div>
       </Container>

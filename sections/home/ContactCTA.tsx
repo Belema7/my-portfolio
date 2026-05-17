@@ -7,8 +7,8 @@ export function ContactCTA() {
     <section className="section">
       <Container>
         <div className="rounded-2xl border border-[var(--color-border)] bg-white p-8 text-center shadow-sm md:p-12 dark:border-white/10 dark:bg-transparent">
-          <h2 className="text-2xl font-bold text-[var(--color-primary)] md:text-3xl">
-            Let&apos;s work together
+          <h2 className="font-heading text-2xl font-bold text-[var(--color-primary)] md:text-3xl">
+            {personal.contactCtaTitle}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-[var(--color-text-secondary)]">
             {personal.contactCta}

@@ -9,32 +9,34 @@ export function Skills() {
       <Container>
         <SectionHeader
           title="Skills"
-          subtitle="Grouped by ability — the tools I use and what I'm growing into."
+          subtitle="Grouped by ability — supporting the work shown above."
           action={{ label: "Full skills & story", href: "/about" }}
         />
-        <div className="mb-10 grid gap-6 sm:grid-cols-2">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {skillCategories.map((cat) => (
             <div
               key={cat.name}
-              className="rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-transparent"
+              className="rounded-xl border border-[var(--color-border)] bg-white p-5 shadow-sm dark:border-white/10 dark:bg-transparent"
             >
-              <h3 className="mb-4 font-heading font-semibold text-[var(--color-primary)]">
+              <h3 className="mb-3 font-heading text-sm font-semibold text-[var(--color-primary)]">
                 {cat.name}
               </h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {cat.skills.map((skill) => (
-                  <Badge key={skill}>{skill}</Badge>
+                  <Badge key={skill} className="text-[11px]">
+                    {skill}
+                  </Badge>
                 ))}
               </div>
             </div>
           ))}
         </div>
-        <div className="grid gap-6 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[var(--color-border)] bg-white p-6 dark:border-white/10 dark:bg-transparent">
-            <h3 className="mb-3 font-heading text-sm font-semibold text-[var(--color-accent)]">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-[var(--color-border)] bg-white p-5 dark:border-white/10 dark:bg-transparent">
+            <h3 className="mb-2 font-heading text-sm font-semibold text-[var(--color-accent)]">
               Currently Improving
             </h3>
-            <ul className="space-y-2">
+            <ul className="space-y-1.5">
               {skillLevels.improving.map((s) => (
                 <li
                   key={s}
@@ -45,11 +47,11 @@ export function Skills() {
               ))}
             </ul>
           </div>
-          <div className="rounded-2xl border border-[var(--color-border)] bg-white p-6 dark:border-white/10 dark:bg-transparent">
-            <h3 className="mb-3 font-heading text-sm font-semibold text-[var(--color-accent)]">
+          <div className="rounded-xl border border-[var(--color-border)] bg-white p-5 dark:border-white/10 dark:bg-transparent">
+            <h3 className="mb-2 font-heading text-sm font-semibold text-[var(--color-accent)]">
               Exploring
             </h3>
-            <ul className="space-y-2">
+            <ul className="space-y-1.5">
               {skillLevels.exploring.map((s) => (
                 <li
                   key={s}

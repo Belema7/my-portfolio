@@ -4,25 +4,29 @@ export const personal = {
   location: "Ethiopia",
   email: "belemagirma31@gmail.com",
   resumeUrl: "/resume.pdf",
-  status: "Available for internships and frontend opportunities",
-  heroIntro: {
-    headline:
-      "Frontend Developer building clean, scalable web interfaces.",
-    paragraphs: [
-      "I build modern web applications with React, Next.js, TypeScript, and Tailwind CSS.",
-      "I care about performance, accessibility, clean architecture, and user-focused design.",
-    ],
-  },
-  statusBadges: [
-    "Available for internships",
+  avatarUrl: "/avatar.jpg",
+  availabilityBadge:
+    "Available for internships and junior frontend roles",
+  heroHeadline:
+    "I build clean, scalable interfaces for modern web products.",
+  heroSupporting:
+    "I'm Belema Girma, a frontend developer focused on React, Next.js, TypeScript, and Tailwind CSS. I care about performance, accessibility, clean architecture, and user-focused design.",
+  heroMetadataBadges: [
     "Based in Ethiopia",
+    "React / Next.js / TypeScript",
     "Frontend / Full-stack projects",
+    "Open for collaboration",
   ],
   social: {
     github: "https://github.com/belema7",
     linkedin: "https://linkedin.com/in/belemagirma",
     twitter: "https://x.com/BelemaGr",
     telegram: "https://t.me/BelemaBuilds",
+  },
+  heroPulse: {
+    building: "Portfolio v2",
+    learning: "Advanced Next.js",
+    goal: "Frontend internship",
   },
   currently: {
     building: "Portfolio v2",
@@ -39,6 +43,14 @@ export const personal = {
     "Testing basics",
     "Building real-world full-stack applications",
   ],
+  aboutFocus: [
+    "Advanced Next.js patterns",
+    "Frontend architecture",
+    "Performance optimization",
+    "Real-world full-stack projects",
+    "Writing about what I learn",
+  ],
+  contactCtaTitle: "Let's work together",
   contactCta:
     "Have a project, internship opportunity, or collaboration idea? I'm open to frontend internships, junior frontend roles, freelance projects, and technical collaboration.",
   story: {
