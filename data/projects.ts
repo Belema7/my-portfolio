@@ -54,7 +54,7 @@ export const projects: Project[] = [
     title: "DevMeet",
     slug: "devmeet",
     description:
-      "A full-stack platform that helps developers connect through tech meetups and events with creation, search, and authentication.",
+      "A full-stack platform that helps developers discover and create meetups, workshops, and tech events.",
     overview:
       "DevMeet is a full-stack developer event platform that helps developers find and create local and online tech events. Users can browse, search, and create developer-focused events.",
     problem:
@@ -100,11 +100,11 @@ export const projects: Project[] = [
     title: "RealMont",
     slug: "realmont",
     description:
-      "A full-stack real estate platform connecting buyers, sellers, and agents with property listings and management.",
+      "A real estate platform for browsing properties with clean listing cards, filtering, and responsive layouts.",
     overview:
-      "RealMont is a full-stack real estate platform that connects buyers, sellers, and agents. It features property listings, search, and a clean interface for browsing and managing properties.",
+      "RealMont is a real estate platform for browsing properties with clean listing cards, filtering, and responsive layouts across devices.",
     problem:
-      "Property browsing and management often lack a unified, responsive experience for all parties in a transaction.",
+      "Property platforms need clear presentation, trust-focused UI, and fast browsing across devices.",
     solution:
       "I built a platform with structured property listings, role-based flows, and a responsive UI for seamless property discovery.",
     image: "/projects/realmont.png",
@@ -145,11 +145,11 @@ export const projects: Project[] = [
     title: "BlogIt",
     slug: "blogit",
     description:
-      "A full-stack blogging platform for creating, editing, and sharing articles with dynamic content management.",
+      "A blogging platform for writing, editing, and sharing articles with a clean content-focused interface.",
     overview:
-      "BlogIt is a full-stack blogging platform that allows users to create, edit, and share articles. It features dynamic content management and a clean reading and writing experience.",
+      "BlogIt is a blogging platform for writing, editing, and sharing articles with a clean content-focused interface and straightforward publishing flows.",
     problem:
-      "Writers need a straightforward platform to publish and manage articles without unnecessary complexity.",
+      "Writers need a simple publishing experience that keeps the focus on content, readability, and organization.",
     solution:
       "I built a MERN-stack blog with article CRUD, author flows, and a responsive interface for reading and writing.",
     image: "/projects/blogit.png",

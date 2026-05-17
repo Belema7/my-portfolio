@@ -36,22 +36,19 @@ export default async function ProjectDetailPage({ params }: Props) {
       <Container className="max-w-4xl">
         <Link
           href="/projects"
-          className="mb-8 inline-block text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
+          className="mb-8 inline-block text-sm font-medium text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)] hover:underline"
         >
           ← Back to Projects
         </Link>
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Badge variant="accent">{project.type}</Badge>
-          {project.techStack.map((t) => (
-            <Badge key={t}>{t}</Badge>
-          ))}
+        <div className="mb-3">
+          <Badge variant="outline">{project.type}</Badge>
         </div>
 
-        <h1 className="text-3xl font-bold text-[var(--color-primary)] md:text-4xl">
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--color-primary)] md:text-4xl">
           {project.title}
         </h1>
-        <p className="mt-4 text-lg text-[var(--color-text-secondary)]">
+        <p className="mt-4 max-w-3xl text-lg leading-relaxed text-[var(--color-text-secondary)]">
           {project.description}
         </p>
 
@@ -63,12 +60,12 @@ export default async function ProjectDetailPage({ params }: Props) {
           )}
           {project.githubUrl && (
             <AppButton href={project.githubUrl} variant="outline" external>
-              View Code
+              View on GitHub
             </AppButton>
           )}
         </div>
 
-        <div className="relative mt-10 aspect-video overflow-hidden rounded-2xl border border-[var(--color-border)]">
+        <div className="relative mt-10 aspect-[16/10] overflow-hidden rounded-2xl border border-[var(--color-border)]">
           <Image
             src={project.image}
             alt={project.title}
@@ -79,16 +76,19 @@ export default async function ProjectDetailPage({ params }: Props) {
           />
         </div>
 
-        <SectionBlock title="Overview" content={project.overview} />
-        <SectionBlock title="Problem" content={project.problem} />
-        <SectionBlock title="Solution" content={project.solution} />
+        <CaseStudySection title="Overview">{project.overview}</CaseStudySection>
+        <CaseStudySection title="Problem">{project.problem}</CaseStudySection>
+        <CaseStudySection title="Solution">{project.solution}</CaseStudySection>
 
-        <ListBlock title="Main Features" items={project.features} />
+        <CaseStudyList title="Main Features" items={project.features} />
+        <CaseStudyTechStack techStack={project.techStack} />
+
         {project.architectureNotes && (
-          <SectionBlock title="Architecture" content={project.architectureNotes} />
+          <CaseStudySection title="Architecture">{project.architectureNotes}</CaseStudySection>
         )}
-        <ListBlock title="Challenges" items={project.challenges} />
-        <ListBlock title="What I Learned" items={project.lessons} />
+
+        <CaseStudyList title="Challenges" items={project.challenges} />
+        <CaseStudyList title="What I Learned" items={project.lessons} />
 
         {project.screenshots.length > 1 && (
           <div className="mt-12">
@@ -99,7 +99,7 @@ export default async function ProjectDetailPage({ params }: Props) {
               {project.screenshots.map((src, i) => (
                 <div
                   key={src + i}
-                  className="relative aspect-video overflow-hidden rounded-xl border border-[var(--color-border)]"
+                  className="relative aspect-[16/10] overflow-hidden rounded-xl border border-[var(--color-border)]"
                 >
                   <Image
                     src={src}
@@ -118,36 +118,55 @@ export default async function ProjectDetailPage({ params }: Props) {
   );
 }
 
-function SectionBlock({ title, content }: { title: string; content: string }) {
+function CaseStudySection({
+  title,
+  children,
+}: {
+  title: string;
+  children: string;
+}) {
   return (
-    <div className="mt-12">
-      <h2 className="mb-4 text-xl font-semibold text-[var(--color-primary)]">
+    <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
+      <h2 className="text-lg font-semibold tracking-tight text-[var(--color-primary)]">
         {title}
       </h2>
-      <p className="leading-relaxed text-[var(--color-text-secondary)]">
-        {content}
-      </p>
-    </div>
+      <p className="mt-3 leading-relaxed text-[var(--color-text-secondary)]">{children}</p>
+    </section>
   );
 }
 
-function ListBlock({ title, items }: { title: string; items: string[] }) {
+function CaseStudyList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="mt-12">
-      <h2 className="mb-4 text-xl font-semibold text-[var(--color-primary)]">
+    <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
+      <h2 className="text-lg font-semibold tracking-tight text-[var(--color-primary)]">
         {title}
       </h2>
-      <ul className="space-y-2">
+      <ul className="mt-4 space-y-3">
         {items.map((item) => (
           <li
             key={item}
-            className="flex items-start gap-2 text-[var(--color-text-secondary)]"
+            className="flex items-start gap-3 text-[var(--color-text-secondary)]"
           >
             <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" />
-            {item}
+            <span className="leading-relaxed">{item}</span>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
+  );
+}
+
+function CaseStudyTechStack({ techStack }: { techStack: string[] }) {
+  return (
+    <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
+      <h2 className="text-lg font-semibold tracking-tight text-[var(--color-primary)]">
+        Tech Stack
+      </h2>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {techStack.map((tech) => (
+          <Badge key={tech}>{tech}</Badge>
+        ))}
+      </div>
+    </section>
   );
 }

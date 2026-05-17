@@ -1,7 +1,5 @@
 import Image from "next/image";
 import { personal } from "@/data/personal";
-import { Badge } from "@/components/ui/Badge";
-
 export function ProfileCard() {
   const { name, role, location, avatarUrl, availabilityBadge } = personal;
 
@@ -28,9 +26,7 @@ export function ProfileCard() {
           Based in {location}
         </p>
         <div className="mt-4 flex justify-center">
-          <Badge variant="accent" className="text-xs">
-            {availabilityBadge}
-          </Badge>
+          <span className="accent-badge">{availabilityBadge}</span>
         </div>
       </div>
     </div>

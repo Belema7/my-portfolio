@@ -237,3 +237,13 @@
   animation: fadeIn 0.8s ease-out 0.4s forwards;
   opacity: 0;
 }
+
+/* Orange accent badge — availability, status labels */
+.accent-badge {
+  @apply inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-400;
+}
+
+/* Home section index markers */
+.section-marker {
+  @apply flex h-11 w-11 items-center justify-center rounded-full border border-orange-200 bg-orange-50 font-mono text-xs font-semibold text-orange-600 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-400;
+}

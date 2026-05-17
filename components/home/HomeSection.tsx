@@ -33,16 +33,14 @@ export function HomeSection({
           markerAlign === "flush" ? "top-0" : "top-24 md:top-28"
         )}
       >
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-green-300/50 bg-green-50/90 font-mono text-xs font-semibold text-green-600/75 dark:border-green-400/20 dark:bg-green-950/30 dark:text-green-200/70">
-          {label}
-        </div>
+        <div className="section-marker">{label}</div>
       </div>
 
       {showConnector && !isLast && (
         <div
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-0 hidden w-px bg-green-300/40 md:block dark:bg-green-400/15",
+            "pointer-events-none absolute bottom-0 hidden w-px bg-orange-200/60 md:block dark:bg-orange-500/20",
             LINE_LEFT,
             "top-[calc(6rem+2.75rem)] md:top-[calc(7rem+2.75rem)]"
           )}

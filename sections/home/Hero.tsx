@@ -30,9 +30,7 @@ export function Hero() {
     >
       <Container className="relative z-10">
         <div>
-          <span className="inline-flex items-center rounded-full border border-green-600/25 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-700 dark:border-green-500/25 dark:bg-green-500/15 dark:text-green-400">
-            {availabilityBadge}
-          </span>
+          <span className="accent-badge">{availabilityBadge}</span>
 
           <p className="mt-5 text-sm font-medium tracking-wide text-[var(--color-text-secondary)] md:mt-6">
             {role}
