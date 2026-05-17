@@ -95,9 +95,6 @@ export function Hero() {
                 </Link>
               ))}
             </div>
-            <p className="mt-4 hidden text-center text-[var(--color-text-secondary)] md:mt-5 md:block">
-              {location}
-            </p>
           </div>
         </div>
       </Container>
