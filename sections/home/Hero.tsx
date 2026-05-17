@@ -26,7 +26,7 @@ export function Hero() {
   return (
     <section
       aria-label="Introduction"
-      className="relative -mt-16 flex min-h-screen flex-col justify-center border-t border-[var(--color-border)] pt-16 pb-20 md:min-h-0 md:justify-start md:py-24"
+      className="relative -mt-16 flex min-h-screen flex-col justify-center border-t border-[var(--color-border)] pt-16 pb-20 md:min-h-0 md:justify-start md:py-30"
     >
       <Container className="relative z-10">
         <div>
