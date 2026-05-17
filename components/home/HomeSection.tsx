@@ -1,10 +1,16 @@
 import { cn } from "@/lib/utils";
 
+/** Aligns with Container (max-w-6xl + md:px-8); ~50px gap between marker and text. */
+const MARKER_LEFT =
+  "left-[max(1.5rem,calc((100%-min(100%,72rem))/2+2rem-2.75rem-50px))]";
+const LINE_LEFT =
+  "left-[max(calc(1.5rem+1.375rem),calc((100%-min(100%,72rem))/2+2rem-1.375rem-50px))]";
+
 type HomeSectionProps = {
   index: number;
   isLast?: boolean;
   showConnector?: boolean;
-  markerAlign?: "start" | "hero" | "flush";
+  markerAlign?: "start" | "flush";
   children: React.ReactNode;
 };
 
@@ -23,12 +29,8 @@ export function HomeSection({
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute z-10 hidden md:block",
-          "left-4 lg:left-6",
-          markerAlign === "hero"
-            ? "md:top-48"
-            : markerAlign === "flush"
-              ? "top-0"
-              : "top-24 md:top-28"
+          MARKER_LEFT,
+          markerAlign === "flush" ? "top-0" : "top-24 md:top-28"
         )}
       >
         <div className="flex h-11 w-11 items-center justify-center rounded-full border border-green-300/50 bg-green-50/90 font-mono text-xs font-semibold text-green-600/75 dark:border-green-400/20 dark:bg-green-950/30 dark:text-green-200/70">
@@ -41,10 +43,8 @@ export function HomeSection({
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute bottom-0 hidden w-px bg-green-300/40 md:block dark:bg-green-400/15",
-            "left-[calc(1rem+1.375rem)] lg:left-[calc(1.5rem+1.375rem)]",
-            markerAlign === "hero"
-              ? "md:top-[calc(12rem+2.75rem)]"
-              : "top-[calc(6rem+2.75rem)] md:top-[calc(7rem+2.75rem)]"
+            LINE_LEFT,
+            "top-[calc(6rem+2.75rem)] md:top-[calc(7rem+2.75rem)]"
           )}
         />
       )}

@@ -9,8 +9,8 @@ import { HomeSection } from "@/components/home/HomeSection";
 
 export default function HomePage() {
   return (
-    <div className="relative md:pl-14 lg:pl-16">
-      <HomeSection index={1} markerAlign="hero">
+    <div className="relative">
+      <HomeSection index={1}>
         <Hero />
       </HomeSection>
       <HomeSection index={2}>

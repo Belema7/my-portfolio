@@ -26,10 +26,10 @@ export function Hero() {
   return (
     <section
       aria-label="Introduction"
-      className="relative -mt-16 flex min-h-screen flex-col justify-center pt-16 md:justify-start md:pt-32"
+      className="relative -mt-16 flex min-h-screen flex-col justify-center border-t border-[var(--color-border)] pt-16 pb-20 md:min-h-0 md:justify-start md:py-24"
     >
-      <Container className="relative z-10 px-4">
-        <div className="mx-auto max-w-4xl py-12 md:py-20">
+      <Container className="relative z-10">
+        <div>
           <span className="inline-flex items-center rounded-full border border-green-600/25 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-700 dark:border-green-500/25 dark:bg-green-500/15 dark:text-green-400">
             {availabilityBadge}
           </span>

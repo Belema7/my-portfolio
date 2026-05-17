@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function LibraryPage() {
   return (
-    <div className="section md:pl-14 lg:pl-16">
+    <div className="section">
       <Container>
         <SectionHeader
           title="Library"
