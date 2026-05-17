@@ -17,46 +17,36 @@ export function Hero() {
     location,
   } = personal;
 
-  const quickLinks = [
+  const socialLinks = [
     { label: "GitHub", href: social.github },
     { label: "LinkedIn", href: social.linkedin },
     { label: "Email", href: `mailto:${email}` },
-    { label: location, href: null },
   ];
 
   return (
     <section
       aria-label="Introduction"
-      className="relative -mt-16 flex min-h-screen flex-col justify-center overflow-hidden pt-16"
+      className="relative -mt-16 flex min-h-screen flex-col justify-center pt-16"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(210,105,30,0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(210,105,30,0.08),transparent)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute right-0 top-1/4 h-72 w-72 rounded-full bg-[var(--color-accent)]/5 blur-3xl"
-      />
-
       <Container className="relative z-10 px-4">
-        <div className="mx-auto max-w-4xl py-16 md:py-20">
-          <span className="inline-flex items-center rounded-full border border-[var(--color-accent)]/25 bg-[var(--color-accent)]/5 px-3 py-1 text-xs font-medium text-[var(--color-accent)]">
+        <div className="mx-auto max-w-4xl py-12 md:py-20">
+          <span className="inline-flex items-center rounded-full border border-green-600/25 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-700 dark:border-green-500/25 dark:bg-green-500/15 dark:text-green-400">
             {availabilityBadge}
           </span>
 
-          <p className="mt-6 text-sm font-medium tracking-wide text-[var(--color-text-secondary)]">
+          <p className="mt-5 text-sm font-medium tracking-wide text-[var(--color-text-secondary)] md:mt-6">
             {role}
           </p>
 
-          <h1 className="mt-3 font-heading text-5xl font-bold tracking-tight leading-tight text-[var(--color-primary)] md:text-6xl lg:text-7xl">
+          <h1 className="mt-3 font-hero text-3xl font-bold tracking-tight leading-tight text-[var(--color-primary)] sm:text-4xl md:text-6xl lg:text-7xl">
             {heroHeadline}
           </h1>
 
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-[var(--color-text-secondary)] md:text-lg">
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--color-text-secondary)] md:mt-6 md:text-lg">
             {heroSupporting}
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap">
             <AppButton href="/projects">View Projects</AppButton>
             <AppButton href="/blog" variant="outline">
               Read My Blog
@@ -66,7 +56,7 @@ export function Hero() {
             </AppButton>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-2">
+          <div className="mt-8 hidden flex-wrap gap-2 md:flex">
             {heroMetadataBadges.map((badge) => (
               <Badge key={badge} variant="outline" className="text-xs">
                 {badge}
@@ -74,7 +64,7 @@ export function Hero() {
             ))}
           </div>
 
-          <div className="mt-10 rounded-xl border border-[var(--color-border)] bg-white/60 p-4 font-mono text-xs backdrop-blur-sm dark:bg-black/30 md:p-5 md:text-sm">
+          <div className="mt-10 hidden rounded-xl border border-[var(--color-border)] bg-white p-4 font-mono text-sm dark:border-white/10 dark:bg-white/[0.03] md:block md:p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-1">
               <span className="text-[var(--color-text-secondary)]">
                 <span className="text-[var(--color-accent)]">building</span>{" "}
@@ -91,9 +81,9 @@ export function Hero() {
             </div>
           </div>
 
-          <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--color-border)] pt-8 text-sm">
-            {quickLinks.map((link) =>
-              link.href ? (
+          <div className="mt-8 border-t border-[var(--color-border)] pt-6 text-sm md:mt-10 md:pt-8">
+            <div className="flex w-full items-center justify-around gap-6 px-2 sm:gap-8 sm:px-4">
+              {socialLinks.map((link) => (
                 <Link
                   key={link.label}
                   href={link.href}
@@ -103,15 +93,11 @@ export function Hero() {
                 >
                   {link.label}
                 </Link>
-              ) : (
-                <span
-                  key={link.label}
-                  className="text-[var(--color-text-secondary)]"
-                >
-                  {link.label}
-                </span>
-              )
-            )}
+              ))}
+            </div>
+            <p className="mt-4 hidden text-center text-[var(--color-text-secondary)] md:mt-5 md:block">
+              {location}
+            </p>
           </div>
         </div>
       </Container>

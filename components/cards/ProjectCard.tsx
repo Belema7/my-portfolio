@@ -39,14 +39,14 @@ export function ProjectCard({ project }: { project: Project }) {
             <Badge>+{techStack.length - 4}</Badge>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-3">
+        <div className="flex items-center justify-around gap-4 border-t border-[var(--color-border)] pt-4">
           <Link
             href={`/projects/${slug}`}
             className="text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
           >
             Case Study
           </Link>
-          {liveUrl && (
+          {liveUrl ? (
             <a
               href={liveUrl}
               target="_blank"
@@ -55,8 +55,8 @@ export function ProjectCard({ project }: { project: Project }) {
             >
               Live Demo
             </a>
-          )}
-          {githubUrl && (
+          ) : null}
+          {githubUrl ? (
             <a
               href={githubUrl}
               target="_blank"
@@ -65,7 +65,7 @@ export function ProjectCard({ project }: { project: Project }) {
             >
               Code
             </a>
-          )}
+          ) : null}
         </div>
       </div>
     </article>

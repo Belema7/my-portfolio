@@ -5,8 +5,7 @@ export const personal = {
   email: "belemagirma31@gmail.com",
   resumeUrl: "/resume.pdf",
   avatarUrl: "/avatar.jpg",
-  availabilityBadge:
-    "Available for internships and junior frontend roles",
+  availabilityBadge: "Available for junior frontend roles",
   heroHeadline:
     "I build clean, scalable interfaces for modern web products.",
   heroSupporting:
