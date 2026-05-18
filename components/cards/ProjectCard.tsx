@@ -12,7 +12,7 @@ export function ProjectCard({ project }: { project: Project }) {
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-black/15 hover:shadow-lg dark:border-white/10 dark:bg-transparent dark:hover:border-white/20">
-      <div className="relative aspect-[16/10] overflow-hidden border-b border-[var(--color-border)] bg-gradient-to-br from-black/5 to-black/10 dark:from-white/5 dark:to-white/10">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-t-2xl border-b border-[var(--color-border)] bg-gradient-to-br from-black/5 to-black/10 dark:from-white/5 dark:to-white/10">
         {image ? (
           <Image
             src={image}
@@ -30,7 +30,7 @@ export function ProjectCard({ project }: { project: Project }) {
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-xl font-semibold tracking-tight text-[var(--color-primary)]">
+        <h3 className="text-xl font-semibold tracking-tight text-[var(--color-primary)] transition-colors group-hover:text-[var(--color-accent)]">
           {title}
         </h3>
 

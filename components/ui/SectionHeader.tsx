@@ -37,7 +37,7 @@ export function SectionHeader({
       {action && (
         <Link
           href={action.href}
-          className="shrink-0 text-sm font-medium text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)]"
+          className="shrink-0 text-sm font-medium text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)] hover:underline"
         >
           {action.label} →
         </Link>

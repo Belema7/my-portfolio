@@ -40,7 +40,7 @@ export function HomeSection({
         <div
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-0 hidden w-px bg-orange-200/60 md:block dark:bg-orange-500/20",
+            "section-connector pointer-events-none absolute bottom-0 hidden w-px md:block",
             LINE_LEFT,
             "top-[calc(6rem+2.75rem)] md:top-[calc(7rem+2.75rem)]"
           )}
