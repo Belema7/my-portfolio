@@ -46,7 +46,7 @@ export function Hero() {
 
           <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap">
             <AppButton href="/projects">View Projects</AppButton>
-            <AppButton href="/blog" variant="outline">
+            <AppButton href="/library" variant="outline">
               Read My Blog
             </AppButton>
             <AppButton href="/contact" variant="outline">

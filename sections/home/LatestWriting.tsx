@@ -12,7 +12,7 @@ export function LatestWriting() {
         <SectionHeader
           title="Latest Writing"
           subtitle="Notes on frontend engineering, learning, and building in public."
-          action={{ label: "Read the blog", href: "/blog" }}
+          action={{ label: "Read the blog", href: "/library" }}
         />
         <div className="grid gap-6 md:grid-cols-3">
           {posts.map((post) => (

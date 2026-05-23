@@ -37,7 +37,7 @@ export default async function BlogPostPage({ params }: Props) {
     <article className="section">
       <Container className="max-w-3xl">
         <Link
-          href="/blog"
+          href="/library?view=blog"
           className="mb-8 inline-block text-sm font-medium text-[var(--color-accent)]"
         >
           ← Back to Blog
