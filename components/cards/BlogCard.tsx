@@ -10,24 +10,31 @@ export function BlogCard({ post }: { post: Post }) {
   });
 
   return (
-    <article className="group rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-black/15 hover:shadow-lg dark:border-white/10 dark:bg-transparent dark:hover:border-white/20">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <article className="group border border-[var(--color-border)] p-6 transition-all duration-300 hover:border-[var(--color-border-strong)] hover:shadow-md">
+      {/* Meta row */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge variant="accent">{post.category}</Badge>
-        <span className="text-xs text-[var(--color-text-secondary)]">{date}</span>
-        <span className="text-xs text-[var(--color-text-secondary)]">·</span>
-        <span className="text-xs text-[var(--color-text-secondary)]">{post.readingTime}</span>
+        <span className="label-numbered">{date}</span>
+        <span className="label-numbered">·</span>
+        <span className="label-numbered">{post.readingTime}</span>
       </div>
-      <h3 className="mb-2 text-lg font-semibold text-[var(--color-primary)] group-hover:text-[var(--color-accent)]">
+
+      {/* Title */}
+      <h3 className="mb-3 font-heading text-base font-bold leading-snug text-[var(--color-primary)] transition-opacity group-hover:opacity-70">
         <Link href={`/blog/${post.slug}`}>{post.title}</Link>
       </h3>
-      <p className="mb-4 line-clamp-3 text-sm text-[var(--color-text-secondary)]">
+
+      {/* Excerpt */}
+      <p className="mb-5 line-clamp-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">
         {post.description}
       </p>
+
+      {/* CTA */}
       <Link
         href={`/blog/${post.slug}`}
-        className="text-sm font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
+        className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary)]"
       >
-        Read article →
+        Read Article ↗
       </Link>
     </article>
   );

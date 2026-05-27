@@ -4,27 +4,28 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 
 export function CurrentlyLearning() {
   return (
-    <section className="section">
+    <section className="section border-t border-[var(--color-border)]">
       <Container>
         <SectionHeader
           title="What I'm Learning"
           subtitle="Current focus areas as I grow as a frontend engineer."
+          numbered="05"
         />
-        <div className="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm dark:border-white/10 dark:bg-transparent">
-          <p className="mb-4 text-sm font-medium text-[var(--color-accent)]">
-            Currently learning
-          </p>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {personal.learningFocus.map((item) => (
-              <li
-                key={item}
-                className="flex items-start gap-2 text-[var(--color-text-secondary)]"
-              >
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" />
-                {item}
-              </li>
-            ))}
-          </ul>
+
+        {/* Row-based list */}
+        <div>
+          {personal.learningFocus.map((item, i) => (
+            <div key={item} className="row-item gap-6">
+              {/* Index */}
+              <span className="label-numbered w-8 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              {/* Dash accent */}
+              <span className="block h-px w-6 shrink-0 bg-[var(--color-text-muted)]" />
+              {/* Item */}
+              <span className="text-sm text-[var(--color-text-secondary)]">{item}</span>
+            </div>
+          ))}
         </div>
       </Container>
     </section>

@@ -13,8 +13,9 @@ export function SelectedProjects() {
           title="Selected Projects"
           subtitle="Real work first — projects that show how I solve problems with modern frontend and full-stack tools."
           action={{ label: "View all projects", href: "/projects" }}
+          numbered="01"
         />
-        <div className="grid gap-8 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           {featured.map((project) => (
             <ProjectCard key={project.slug} project={project} />
           ))}

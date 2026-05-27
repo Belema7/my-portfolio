@@ -2,87 +2,114 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { Menu, X, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Menu, X } from "lucide-react";
 import { personal } from "@/data/personal";
 import { ModeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: "/projects", label: "Projects" },
-  { href: "/library", label: "Library" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
+  { href: "/projects", label: "Projects", index: "001" },
+  { href: "/library",  label: "Library",  index: "002" },
+  { href: "/about",    label: "About",    index: "003" },
+  { href: "/contact",  label: "Contact",  index: "004" },
 ];
 
-const GithubIcon = ({ className }: { className?: string }) => (
-  <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-    <path
-      fillRule="evenodd"
-      d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
+/** Geometric logo mark — two horizontal stacked bars like ▣ */
+function LogoMark() {
+  return (
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 28 28"
+      fill="currentColor"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <rect x="0" y="0" width="12" height="12" />
+      <rect x="16" y="0" width="12" height="12" />
+      <rect x="0" y="16" width="28" height="12" />
+    </svg>
+  );
+}
 
 export function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { social } = personal;
+  const [scrolled, setScrolled] = useState(false);
 
-  const socialLinks = [
-    { href: social.github, label: "GitHub", Icon: GithubIcon },
-    { href: social.linkedin, label: "LinkedIn", Icon: null },
-    { href: social.telegram, label: "Telegram", Icon: Send },
-  ].filter((l) => Boolean(l.href));
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[var(--color-border)] bg-white/80 backdrop-blur-md dark:bg-black/80">
-      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6 md:px-8">
+    <header className="fixed top-0 left-0 right-0 z-50">
+      <nav className="mx-auto flex h-16 max-w-none items-center justify-between px-6 md:px-8">
+
+        {/* ── Logo ──────────────────────────────────────────── */}
         <Link
           href="/"
-          className="text-lg font-bold tracking-tight text-[var(--color-primary)]"
+          className="flex items-center gap-2.5 text-[var(--color-primary)] transition-opacity hover:opacity-70"
+          aria-label="Belema Girma — Home"
         >
-          Belema
+          <LogoMark />
+          <span
+            className="font-heading text-xs font-bold uppercase leading-[1.15] tracking-[0.12em]"
+            aria-hidden="true"
+          >
+            BELEMA<br />GIRMA
+          </span>
         </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname === link.href
-                  ? "text-[var(--color-accent)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-primary)]"
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
+        {/* ── Centered Numbered Nav (desktop) ───────────────── */}
+        <div
+          className={cn(
+            "absolute left-1/2 hidden -translate-x-1/2 items-center border border-[var(--color-border-strong)] md:flex",
+            scrolled
+              ? "bg-[var(--color-bg)]/80 backdrop-blur-md shadow-sm"
+              : "bg-[var(--color-bg)]/60 backdrop-blur-sm"
+          )}
+          style={{ transition: "background 0.3s ease, box-shadow 0.3s ease" }}
+        >
+          {navLinks.map((link, i) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "flex items-center gap-1.5 px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
+                  i < navLinks.length - 1 && "border-r border-[var(--color-border-strong)]",
+                  isActive
+                    ? "bg-[var(--color-primary)] text-[var(--color-secondary)]"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
+                )}
+              >
+                <span className="opacity-50">{link.index}/</span>
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
-          {socialLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={link.label}
-              className="rounded-lg p-2 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-accent)]"
-            >
-              {link.Icon ? (
-                <link.Icon className="h-4 w-4" />
-              ) : (
-                <span className="text-xs font-medium">{link.label[0]}</span>
-              )}
-            </a>
-          ))}
+        {/* ── Right Side Controls ────────────────────────────── */}
+        <div className="hidden items-center gap-3 md:flex">
+          <a
+            href={`mailto:${personal.email}`}
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary)]"
+          >
+            Email Us
+          </a>
+          <div className="h-4 w-px bg-[var(--color-border-strong)]" />
           <ModeToggle />
         </div>
 
+        {/* ── Mobile Controls ───────────────────────────────── */}
         <div className="flex items-center gap-2 md:hidden">
           <ModeToggle />
           <button
@@ -90,39 +117,46 @@ export function Navbar() {
             onClick={() => setOpen(!open)}
             aria-expanded={open}
             aria-label={open ? "Close menu" : "Open menu"}
-            className="rounded-lg p-2 text-[var(--color-text-primary)]"
+            className="p-2 text-[var(--color-text-primary)]"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </nav>
 
+      {/* ── Mobile Menu ───────────────────────────────────────── */}
       {open && (
-        <div className="border-t border-[var(--color-border)] bg-white px-6 py-4 dark:bg-black md:hidden">
-          <div className="flex flex-col gap-1">
-            {navLinks.map((link) => (
+        <div
+          className="border-t border-[var(--color-border)] bg-[var(--color-bg)] px-6 py-2 md:hidden"
+          style={{ backdropFilter: "blur(12px)" }}
+        >
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href;
+            return (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "rounded-lg px-3 py-3 text-sm font-medium",
-                  pathname === link.href
-                    ? "text-[var(--color-accent)]"
+                  "flex items-center gap-2 border-b border-[var(--color-border)] py-3.5 font-mono text-xs uppercase tracking-[0.1em]",
+                  isActive
+                    ? "text-[var(--color-primary)] font-bold"
                     : "text-[var(--color-text-secondary)]"
                 )}
               >
+                <span className="opacity-40">{link.index}/</span>
                 {link.label}
               </Link>
-            ))}
-          </div>
+            );
+          })}
+          <a
+            href={`mailto:${personal.email}`}
+            className="block py-3.5 font-mono text-xs uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
+          >
+            Email Us
+          </a>
         </div>
       )}
     </header>
   );
 }
-
-
-
-
-

@@ -17,22 +17,32 @@ export function PersonalSnapshot() {
   ][];
 
   return (
-    <section className="section">
+    <section className="section border-t border-[var(--color-border)]">
       <Container>
         <SectionHeader
           title="Personal Snapshot"
           subtitle="A quick look at what I'm focused on right now."
+          numbered="04"
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {entries.map(([key, value]) => (
-            <div
-              key={key}
-              className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm dark:border-white/10 dark:bg-transparent"
-            >
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-accent)]">
+
+        {/* Synapser-style numbered row list */}
+        <div>
+          {entries.map(([key, value], i) => (
+            <div key={key} className="row-item gap-6">
+              {/* Index */}
+              <span className="label-numbered w-8 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+
+              {/* Label */}
+              <span className="w-24 shrink-0 font-heading text-xs font-bold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
                 {snapshotLabels[key]}
-              </p>
-              <p className="mt-2 font-medium text-[var(--color-primary)]">{value}</p>
+              </span>
+
+              {/* Value */}
+              <span className="text-sm font-medium text-[var(--color-primary)]">
+                {value}
+              </span>
             </div>
           ))}
         </div>
