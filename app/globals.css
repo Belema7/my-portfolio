@@ -331,12 +331,18 @@
 /* ── Display Section Title ──────────────────────────────────── */
 .section-title-xl {
   font-family: "Bebas Neue", var(--font-urbanist), ui-sans-serif, sans-serif;
-  font-size: clamp(3rem, 8vw, 7rem);
+  font-size: clamp(2.5rem, 7vw, 7rem);
   font-weight: 400;
   letter-spacing: 0.03em;
   line-height: 0.95;
   color: var(--color-primary);
   text-transform: uppercase;
+}
+
+@media (min-width: 768px) {
+  .section-title-xl {
+    white-space: nowrap;
+  }
 }
 
 /* ── Row Separator ──────────────────────────────────────────── */
