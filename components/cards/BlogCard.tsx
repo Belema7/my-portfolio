@@ -10,7 +10,7 @@ export function BlogCard({ post }: { post: Post }) {
   });
 
   return (
-    <article className="group border border-[var(--color-border)] p-6 transition-all duration-300 hover:border-[var(--color-border-strong)] hover:shadow-md">
+    <article className="group h-full p-6 transition-all duration-300 hover:bg-[var(--color-primary)]/[0.03]">
       {/* Meta row */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge variant="accent">{post.category}</Badge>

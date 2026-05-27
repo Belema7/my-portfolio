@@ -23,17 +23,17 @@ export function ProjectsGrid() {
         title="Projects"
         subtitle="Real applications built with modern frontend and full-stack tools."
       />
-      <div className="mb-8 flex flex-wrap gap-2">
+      <div className="mb-10 flex flex-wrap gap-2">
         {types.map((type) => (
           <button
             key={type}
             type="button"
             onClick={() => setActiveType(type)}
             className={cn(
-              "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
+              "border px-4 py-2 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
               activeType === type
-                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-black/15 dark:hover:border-white/20"
+                ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-secondary)]"
+                : "border-[var(--color-border-strong)] bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
             )}
           >
             {type}

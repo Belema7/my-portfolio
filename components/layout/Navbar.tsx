@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/projects", label: "Projects", index: "001" },
-  { href: "/library",  label: "Library",  index: "002" },
+  { href: "/library",  label: "Writing",  index: "002" },
   { href: "/about",    label: "About",    index: "003" },
   { href: "/contact",  label: "Contact",  index: "004" },
 ];
@@ -153,7 +153,7 @@ export function Navbar() {
             href={`mailto:${personal.email}`}
             className="block py-3.5 font-mono text-xs uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
           >
-            Email Us
+            Email Me
           </a>
         </div>
       )}

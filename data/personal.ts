@@ -5,11 +5,11 @@ export const personal = {
   email: "belemagirma31@gmail.com",
   resumeUrl: "/resume.pdf",
   avatarUrl: "/avatar.JPG",
-  availabilityBadge: "Available for junior frontend roles",
+  availabilityBadge: "Available for frontend roles",
   heroHeadline:
     "I build clean, scalable interfaces for modern web products.",
   heroSupporting:
-    "I'm Belema Girma, a frontend developer focused on React, Next.js, TypeScript, and Tailwind CSS. I care about performance, accessibility, clean architecture, and user-focused design.",
+    "I'm Frontend developer focused on React, Next.js, TypeScript, and Tailwind CSS. I care about performance, accessibility, clean architecture, and user-focused design.",
   heroMetadataBadges: [
     "Based in Ethiopia",
     "React / Next.js / TypeScript",

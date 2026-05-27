@@ -15,12 +15,9 @@ export function LatestWriting() {
           action={{ label: "Read the blog", href: "/library" }}
           numbered="03"
         />
-        <div className="grid gap-0 border border-[var(--color-border)] md:grid-cols-3">
-          {posts.map((post, i) => (
-            <div
-              key={post.slug}
-              className={i < posts.length - 1 ? "border-b md:border-b-0 md:border-r border-[var(--color-border)]" : ""}
-            >
+        <div className="grid gap-px border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">
+          {posts.map((post) => (
+            <div key={post.slug} className="bg-[var(--color-bg)]">
               <BlogCard post={post} />
             </div>
           ))}
