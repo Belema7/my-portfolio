@@ -68,8 +68,6 @@ export function Hero() {
       {/* ── Background ─────────────────────────────────────────── */}
       <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
         <div className="hero-grid absolute inset-0" />
-        {/* Soft bottom fade into page */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--color-bg)] to-transparent" />
       </div>
 
       {/* ── Main content ───────────────────────────────────────── */}
