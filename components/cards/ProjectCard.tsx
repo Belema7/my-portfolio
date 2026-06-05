@@ -13,7 +13,7 @@ export function ProjectCard({ project }: { project: Project }) {
   return (
     <article className="group flex h-full flex-col overflow-hidden border border-[var(--color-border)] transition-all duration-300 hover:border-[var(--color-border-strong)] hover:shadow-lg">
       {/* ── Image ──────────────────────────────────────────── */}
-      <div className="relative aspect-[16/10] overflow-hidden border-b border-[var(--color-border)] bg-[var(--color-primary)]/5">
+      <div className="relative aspect-[16/7] overflow-hidden border-b border-[var(--color-border)] bg-[var(--color-primary)]/5">
         {image ? (
           <Image
             src={image}
@@ -32,26 +32,26 @@ export function ProjectCard({ project }: { project: Project }) {
       </div>
 
       {/* ── Info ───────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col p-3.5">
         <h3
-          className="text-[1.6rem] leading-none text-[var(--color-primary)] transition-opacity group-hover:opacity-70"
+          className="text-[1.1rem] leading-none text-[var(--color-primary)] transition-opacity group-hover:opacity-70"
           style={{ fontFamily: '"Bebas Neue", sans-serif', letterSpacing: "0.03em" }}
         >
           {title}
         </h3>
 
-        <p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
           {description}
         </p>
 
         {/* Problem block */}
-        <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-          <p className="label-numbered mb-1.5">// Problem</p>
-          <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{problem}</p>
+        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+          <p className="label-numbered mb-1">// Problem</p>
+          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">{problem}</p>
         </div>
 
         {/* Tech stack */}
-        <div className="mt-4 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap gap-1">
           {visibleTech.map((tech) => (
             <Badge key={tech}>{tech}</Badge>
           ))}
@@ -61,7 +61,7 @@ export function ProjectCard({ project }: { project: Project }) {
         </div>
 
         {/* Actions */}
-        <div className="mt-auto flex items-center gap-0 border-t border-[var(--color-border)] pt-4">
+        <div className="mt-auto flex items-center gap-0 border-t border-[var(--color-border)] pt-3">
           <Link
             href={`/projects/${slug}`}
             className="btn-sharp text-[10px] py-2 px-4"

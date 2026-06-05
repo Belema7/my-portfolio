@@ -15,7 +15,7 @@ export function SelectedProjects() {
           action={{ label: "View all projects", href: "/projects" }}
           numbered="01"
         />
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map((project) => (
             <ProjectCard key={project.slug} project={project} />
           ))}
