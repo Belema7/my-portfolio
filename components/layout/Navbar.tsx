@@ -49,12 +49,12 @@ export function Navbar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
-      <nav className="mx-auto flex h-16 max-w-none items-center justify-between px-10 md:px-32">
+      <nav className="mx-auto flex h-16 w-full max-w-[82rem] items-center justify-between px-6 md:px-12">
 
         {/* ── Logo ──────────────────────────────────────────── */}
         <Link
           href="/"
-          className="flex items-center gap-2.5 text-[var(--color-primary)] transition-opacity hover:opacity-70"
+          className="flex items-center gap-2.5 text-[var(--color-primary)] transition-opacity hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
           aria-label="Belema Girma — Home"
         >
           <LogoMark />
@@ -83,14 +83,14 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-1.5 px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
+                  "flex items-center gap-1.5 px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]",
                   i < navLinks.length - 1 && "border-r border-[var(--color-border-strong)]",
                   isActive
                     ? "bg-[var(--color-primary)] text-[var(--color-secondary)]"
                     : "text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
                 )}
               >
-                <span className="opacity-50">{link.index}/</span>
+                <span style={{ color: isActive ? undefined : "var(--color-text-muted-readable)" }}>{link.index}/</span>
                 {link.label}
               </Link>
             );
@@ -101,7 +101,7 @@ export function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <a
             href={`mailto:${personal.email}`}
-            className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary)]"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
           >
             Email Us
           </a>
@@ -117,7 +117,7 @@ export function Navbar() {
             onClick={() => setOpen(!open)}
             aria-expanded={open}
             aria-label={open ? "Close menu" : "Open menu"}
-            className="p-2 text-[var(--color-text-primary)]"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center p-2 text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-primary)]"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -138,13 +138,13 @@ export function Navbar() {
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "flex items-center gap-2 border-b border-[var(--color-border)] py-3.5 font-mono text-xs uppercase tracking-[0.1em]",
+                  "flex min-h-[44px] items-center gap-2 border-b border-[var(--color-border)] py-3.5 font-mono text-xs uppercase tracking-[0.1em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]",
                   isActive
                     ? "text-[var(--color-primary)] font-bold"
                     : "text-[var(--color-text-secondary)]"
                 )}
               >
-                <span className="opacity-40">{link.index}/</span>
+                <span style={{ color: isActive ? undefined : "var(--color-text-muted-readable)" }}>{link.index}/</span>
                 {link.label}
               </Link>
             );

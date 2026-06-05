@@ -98,6 +98,10 @@
   --color-text-primary: #1f1e18;
   --color-text-secondary: #5a5848;
   --color-text-muted:   #8a8778;
+  /* Intentionally secondary name colour — readable but clearly lighter than primary */
+  --color-girma:        #3a3830;
+  /* Muted labels with improved contrast vs. bare #8a8778 on beige */
+  --color-text-muted-readable: #58564a;
   --color-border:       rgba(31, 30, 24, 0.12);
   --color-border-strong: rgba(31, 30, 24, 0.22);
   --max-width:          82rem;
@@ -143,6 +147,10 @@
   --color-text-primary:  #d6d0bc;
   --color-text-secondary: #8a8778;
   --color-text-muted:    #6a6860;
+  /* Intentionally secondary name — clearly lighter than primary, not disabled */
+  --color-girma:         #a09a8c;
+  /* Muted labels with improved dark-mode readability */
+  --color-text-muted-readable: #7a7870;
   --color-border:        rgba(214, 208, 188, 0.10);
   --color-border-strong: rgba(214, 208, 188, 0.20);
 
@@ -395,4 +403,79 @@
   font-size: 0.65rem;
   font-weight: 600;
   color: var(--color-text-secondary);
+}
+
+/* ── Hero Section ────────────────────────────────────────────── */
+.hero-grid {
+  background-image:
+    linear-gradient(to right, var(--color-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  /* Fade grid outward — more visible in open areas, recedes behind text */
+  mask-image: radial-gradient(ellipse 90% 75% at 50% 30%, black 10%, rgba(0,0,0,0.5) 50%, transparent 85%);
+}
+
+@keyframes heroFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.hero-animate {
+  opacity: 0;
+  animation: heroFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Respect reduced-motion: show instantly, no transforms */
+@media (prefers-reduced-motion: reduce) {
+  .hero-animate {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .scroll-wheel {
+    animation: none !important;
+    opacity: 0.5;
+  }
+}
+
+/* ── Identity Card corner accents ───────────────────────────── */
+.identity-card {
+  position: relative;
+}
+
+.corner-accent {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--color-primary);
+  border-style: solid;
+}
+.corner-tl { top: -1px; left: -1px;  border-width: 2px 0 0 2px; }
+.corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+.corner-bl { bottom: -1px; left: -1px;  border-width: 0 0 2px 2px; }
+.corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+/* ── Scroll mouse indicator ─────────────────────────────────── */
+.scroll-mouse {
+  width: 18px;
+  height: 28px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 9px;
+  display: flex;
+  justify-content: center;
+  padding-top: 5px;
+}
+
+.scroll-wheel {
+  width: 3px;
+  height: 6px;
+  background: var(--color-text-muted);
+  border-radius: 2px;
+  animation: scrollWheel 1.8s ease-in-out infinite;
+}
+
+@keyframes scrollWheel {
+  0%   { opacity: 1; transform: translateY(0);   }
+  80%  { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 0; transform: translateY(8px); }
 }
