@@ -479,3 +479,10 @@
   80%  { opacity: 0; transform: translateY(8px); }
   100% { opacity: 0; transform: translateY(8px); }
 }
+
+/* ── Project card placeholder (no image fallback) ────────────── */
+.project-card-placeholder {
+  background-image: radial-gradient(circle, var(--color-border-strong) 1px, transparent 1px);
+  background-size: 18px 18px;
+  background-color: var(--color-bg);
+}
