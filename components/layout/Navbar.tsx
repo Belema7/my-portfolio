@@ -49,7 +49,7 @@ export function Navbar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
-      <nav className="mx-auto flex h-16 max-w-none items-center justify-between px-10 md:px-16">
+      <nav className="mx-auto flex h-16 max-w-none items-center justify-between px-10 md:px-32">
 
         {/* ── Logo ──────────────────────────────────────────── */}
         <Link
