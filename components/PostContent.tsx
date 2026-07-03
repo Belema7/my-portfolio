@@ -1,6 +1,47 @@
 function renderBlock(block: string, index: number) {
   const trimmed = block.trim();
 
+  // Code blocks
+  if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
+    const lines = trimmed.split("\n");
+    const content = lines.slice(1, -1).join("\n");
+    return (
+      <pre
+        key={index}
+        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-secondary)] p-4 font-mono text-sm overflow-x-auto my-6 dark:border-white/10 dark:bg-white/[0.03] text-[var(--color-text-primary)]"
+      >
+        <code>{content}</code>
+      </pre>
+    );
+  }
+
+  // Blockquotes
+  if (trimmed.startsWith(">")) {
+    const quoteText = trimmed
+      .split("\n")
+      .map((line) => (line.startsWith("> ") ? line.slice(2) : line.startsWith(">") ? line.slice(1) : line))
+      .join("\n");
+    return (
+      <blockquote
+        key={index}
+        className="border-l-4 border-[var(--color-accent)] pl-4 italic text-[var(--color-text-secondary)] my-6"
+      >
+        {quoteText}
+      </blockquote>
+    );
+  }
+
+  if (trimmed.startsWith("# ")) {
+    return (
+      <h2
+        key={index}
+        className="mt-10 text-xl font-semibold text-[var(--color-primary)] first:mt-0"
+      >
+        {trimmed.slice(2)}
+      </h2>
+    );
+  }
+
   if (trimmed.startsWith("## ")) {
     return (
       <h2
