@@ -29,7 +29,7 @@ export function getAllPostSlugs(): string[] {
 }
 
 export function getFeaturedPost(): Post | undefined {
-  return posts.find((p) => p.featured) ?? posts[0];
+  return [...posts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 }
 
 export function getProjectTypes(): string[] {
