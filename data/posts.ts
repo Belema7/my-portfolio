@@ -2,6 +2,1639 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 2 — Learning Backend from First Principles (Part 1)",
+    slug: "backend-first-principles-day-2-part-1",
+    description:
+      "HTTP isn't the internet. It's only one protocol among many. Today I learned about the ecosystem of protocols, the OSI Model, and TCP vs UDP.",
+    category: "Learning Journey",
+    date: "2026-07-04",
+    readingTime: "12 min read",
+    content: `# The Foundation: How Clients and Servers Talk
+
+> *"HTTP is just the beginning. Behind every website you visit is an entire ecosystem of protocols working together to make the internet feel instant."*
+
+---
+
+## Introduction
+
+Yesterday, I learned how a request travels from my browser all the way to the backend.
+
+The journey looked like this:
+
+\`\`\`text
+Browser
+   ↓
+DNS
+   ↓
+Internet
+   ↓
+Cloud Server
+   ↓
+Firewall
+   ↓
+Nginx
+   ↓
+Backend Application
+   ↓
+Database
+\`\`\`
+
+At that point, I thought:
+
+> "Nice... I finally understand how the internet works."
+
+Well...
+
+Today's lesson humbled me.
+
+I realized something important:
+
+> **HTTP isn't the internet.**
+
+It's only **one protocol** among many.
+
+In fact, if the internet were a city, HTTP would simply be one type of road.
+
+Different kinds of communication require different roads.
+
+Just like you wouldn't use a bicycle to carry a shipping container, you wouldn't use HTTP for every networking problem.
+
+That is exactly what today's lesson is about.
+
+Let's dive in.
+
+---
+
+## Topic 1.1 — Beyond HTTP: The Ecosystem of Protocols
+
+### Wait... Isn't HTTP everything?
+
+For the longest time, I thought this:
+
+\`\`\`text
+Frontend
+      ↓
+HTTP
+      ↓
+Backend
+\`\`\`
+
+End of story.
+
+But that's far from reality.
+
+HTTP is only **one communication protocol**.
+
+The internet is actually filled with many different protocols, each designed for a specific purpose.
+
+Think of protocols like different languages.
+
+Imagine this:
+
+* Two pilots communicate using aviation terminology.
+* Doctors communicate using medical terminology.
+* Programmers communicate using technical jargon.
+
+Everyone is speaking...
+
+But they're speaking **different languages** because they solve different problems.
+
+Networking works exactly the same way.
+
+---
+
+## What is a Protocol?
+
+A protocol is simply...
+
+> **A set of rules that tells two computers how to communicate with each other.**
+
+That's it.
+
+Every protocol answers questions like:
+
+* How do we start talking?
+* What format should messages use?
+* How do we know the message arrived?
+* What happens if something goes wrong?
+* How do we end the conversation?
+
+Without these rules...
+
+Every computer would speak differently.
+
+The internet would be chaos.
+
+---
+
+### Real-Life Analogy
+
+Imagine football.
+
+Football has rules.
+
+* The field has dimensions.
+* Eleven players per team.
+* No touching the ball with your hands (unless you're the goalkeeper).
+
+Because everyone follows the same rules...
+
+Teams from different countries can play together.
+
+Protocols work the same way.
+
+If every computer follows the same communication rules...
+
+They can all communicate successfully.
+
+---
+
+## Meet HTTP
+
+The most famous protocol is HTTP.
+
+HTTP stands for:
+
+> **HyperText Transfer Protocol**
+
+Despite the fancy name...
+
+Its job is actually very simple.
+
+It helps a **client** and a **server** exchange information.
+
+Example:
+
+\`\`\`text
+Browser
+
+↓
+
+GET /products
+
+↓
+
+Server
+
+↓
+
+Returns products
+\`\`\`
+
+Every time you:
+
+* open YouTube
+* browse Amazon
+* log into Facebook
+* read a blog
+
+HTTP is usually involved.
+
+But...
+
+HTTP isn't always the best tool.
+
+---
+
+## One Tool Can't Solve Every Problem
+
+Imagine opening a toolbox.
+
+Inside you have:
+
+* Hammer
+* Screwdriver
+* Wrench
+* Saw
+
+Could you build an entire house using only a hammer?
+
+Probably not.
+
+The hammer isn't bad.
+
+It's just designed for one particular job.
+
+HTTP is the hammer.
+
+There are many other networking tools.
+
+---
+
+## WebSockets — Real-Time Conversations
+
+Imagine chatting with your friend on WhatsApp.
+
+You send:
+
+> Hello
+
+Immediately...
+
+They reply.
+
+No refreshing.
+
+No clicking.
+
+Everything happens instantly.
+
+If HTTP handled this...
+
+It would look something like:
+
+\`\`\`text
+Client
+
+↓
+
+"Any new messages?"
+
+↓
+
+"No."
+
+↓
+
+"Any new messages?"
+
+↓
+
+"No."
+
+↓
+
+"Any new messages?"
+
+↓
+
+"No."
+
+↓
+
+"Any new messages?"
+
+↓
+
+"Yes."
+\`\`\`
+
+Imagine asking that question every second.
+
+That's inefficient.
+
+Instead...
+
+WebSockets establish **one long-lived connection**.
+
+\`\`\`text
+Client
+═══════════════════════
+Server
+\`\`\`
+
+The connection stays open.
+
+Whenever something changes...
+
+The server immediately pushes the update.
+
+No repeated requests.
+
+This makes WebSockets perfect for:
+
+* Chat applications
+* Multiplayer games
+* Stock market dashboards
+* Live sports scores
+* Real-time notifications
+
+---
+
+### Why not just use HTTP?
+
+Because HTTP is **request-response**.
+
+The client always has to ask first.
+
+WebSockets remove that limitation.
+
+The server can speak whenever it wants.
+
+That's a huge difference.
+
+---
+
+## WebRTC — Talking Directly
+
+Suppose you're having a Google Meet call.
+
+Would it make sense if every video frame traveled:
+
+\`\`\`text
+You
+
+↓
+
+Server
+
+↓
+
+Friend
+\`\`\`
+
+The delay would become noticeable.
+
+Instead...
+
+WebRTC tries to let devices communicate directly whenever possible.
+
+\`\`\`text
+You
+
+⬅──────────────➡
+
+Friend
+\`\`\`
+
+This dramatically reduces latency.
+
+That's why WebRTC powers:
+
+* Google Meet
+* Zoom
+* Discord Calls
+* Video Chats
+
+The priority here isn't just reliability.
+
+It's **speed**.
+
+Even a tiny delay feels awkward during a conversation.
+
+---
+
+## FTP — Moving Files
+
+FTP stands for:
+
+**File Transfer Protocol**
+
+Long before services like Google Drive and Dropbox became common...
+
+FTP was the standard way to move files between computers.
+
+Imagine uploading:
+
+* website files
+* images
+* backups
+* documents
+
+FTP was built specifically for that purpose.
+
+Today it's less common because secure alternatives like SFTP and cloud storage have largely replaced it.
+
+But understanding FTP helps explain why protocols evolve over time.
+
+---
+
+## SMTP — Sending Emails
+
+Ever wondered what happens after clicking:
+
+\`\`\`text
+Send Email
+\`\`\`
+
+It isn't HTTP delivering your email.
+
+It's usually SMTP.
+
+SMTP stands for:
+
+**Simple Mail Transfer Protocol**
+
+Think of it as the internet's postal service.
+
+\`\`\`text
+You
+
+↓
+
+SMTP Server
+
+↓
+
+Recipient's Mail Server
+
+↓
+
+Recipient
+\`\`\`
+
+HTTP loads your Gmail interface.
+
+SMTP actually delivers the email.
+
+That was another surprise for me.
+
+---
+
+## MQTT — Tiny Messages for Tiny Devices
+
+Now imagine a temperature sensor.
+
+It isn't loading webpages.
+
+It isn't streaming video.
+
+It simply wants to say:
+
+\`\`\`text
+Temperature = 27°C
+\`\`\`
+
+Every few seconds.
+
+That's it.
+
+Using HTTP would be unnecessary overhead.
+
+MQTT was designed for exactly these tiny messages.
+
+It powers:
+
+* Smart homes
+* Temperature sensors
+* Connected vehicles
+* Industrial IoT
+* Smart lights
+
+It's lightweight, efficient, and perfect for devices with limited power and bandwidth.
+
+---
+
+## The Big Realization
+
+The biggest lesson I learned today wasn't about HTTP.
+
+It was this:
+
+> **Every protocol exists because someone had a different problem to solve.**
+
+HTTP solves webpage communication.
+
+WebSockets solve real-time communication.
+
+WebRTC solve low-latency audio and video.
+
+SMTP solves email delivery.
+
+FTP solves file transfer.
+
+MQTT solves IoT communication.
+
+No single protocol is "better" than the others.
+
+They're simply optimized for different jobs.
+
+---
+
+## Protocol vs API
+
+This was another concept that confused me at first.
+
+They sound similar...
+
+But they're completely different.
+
+A **protocol** defines **how** communication happens.
+
+An **API** defines **what** functionality is available.
+
+Think of it like ordering food.
+
+* The protocol is the language you and the waiter use to communicate.
+* The API is the menu showing what you can order.
+
+Without a protocol...
+
+You couldn't communicate.
+
+Without an API...
+
+You wouldn't know what services are available.
+
+Both are important, but they solve different problems.
+
+---
+
+## Checkpoint Questions
+
+### Why can't I use HTTP for a live multiplayer game?
+
+Because HTTP follows a request–response model. Every update requires the client to send a new request, which introduces unnecessary latency and overhead. In a multiplayer game, players expect movements and actions to appear almost instantly. Protocols like **WebSockets** maintain a persistent connection, allowing the server to push updates to players in real time, making them far more suitable for interactive applications.
+
+---
+
+### What is the difference between a protocol and an API?
+
+A **protocol** defines the rules for communication between systems—how messages are sent, received, and interpreted.
+
+An **API** defines the operations or services an application exposes. It tells clients *what* they can do, while the protocol determines *how* those requests and responses are exchanged.
+
+---
+
+> **Coming next:** Now that we've explored the different ways computers communicate, the next question is: **where do backend engineers fit into the networking stack?** To answer that, we need to understand one of the most important models in networking—the **OSI Model**.
+
+
+## Topic 1.2 — The OSI Model: Where Backend Engineers Live
+
+After learning about different protocols, another question popped into my head.
+
+> "Okay... but **where** do all these protocols actually fit?"
+
+Is HTTP the internet?
+
+Is TCP the internet?
+
+Where does IP belong?
+
+Where does my NestJS application fit into all of this?
+
+That's when I met something every backend engineer has probably heard about:
+
+> **The OSI Model.**
+
+At first...
+
+I honestly thought it was just another boring networking diagram I'd memorize for exams and forget a week later.
+
+Turns out...
+
+It's actually one of the best mental models for understanding how computers communicate.
+
+---
+
+## What is the OSI Model?
+
+OSI stands for:
+
+> **Open Systems Interconnection Model**
+
+Sounds scary...
+
+But don't worry.
+
+The OSI Model isn't something running on your computer.
+
+It's simply **a conceptual model**.
+
+Think of it like a blueprint.
+
+Architects have blueprints before building a house.
+
+Network engineers have the OSI Model before building networks.
+
+It divides communication into **7 layers**.
+
+Each layer has one responsibility.
+
+Instead of one giant system doing everything...
+
+Each layer focuses on one job.
+
+---
+
+## Think of it as Delivering a Package
+
+Imagine you want to send a birthday gift to your friend.
+
+Many things happen before it reaches them.
+
+* Wrap the gift.
+* Add the address.
+* Transport it.
+* Deliver it.
+
+Each person involved has a different responsibility.
+
+The OSI Model works exactly like that.
+
+Each layer only worries about **its own job**.
+
+It doesn't care what the other layers are doing internally.
+
+---
+
+## The Seven Layers
+
+From bottom to top:
+
+\`\`\`text
+Layer 7 — Application
+Layer 6 — Presentation
+Layer 5 — Session
+Layer 4 — Transport
+Layer 3 — Network
+Layer 2 — Data Link
+Layer 1 — Physical
+\`\`\`
+
+The speaker immediately points out something interesting.
+
+As backend engineers...
+
+We **don't** need to master every layer.
+
+---
+
+## The Speaker's Golden Rule
+
+One sentence from the video stood out to me.
+
+> **Backend engineers live at Layer 7.**
+
+Network engineers mostly worry about Layers 1–4.
+
+Backend engineers mostly worry about Layer 7.
+
+That doesn't mean we ignore networking.
+
+It means we understand enough networking to build applications...
+
+Without needing to become network specialists.
+
+I loved this explanation because it removed a lot of fear.
+
+I don't need to become a Cisco engineer just to build APIs.
+
+---
+
+## Layer 1 — Physical
+
+This is literally...
+
+The physical world.
+
+Think:
+
+* Ethernet cables
+* Fiber optic cables
+* Wi-Fi radio signals
+* Routers
+* Switches
+* Electrical signals
+
+Without Layer 1...
+
+Nothing moves.
+
+As a backend developer...
+
+You'll almost never touch this layer.
+
+And that's perfectly okay.
+
+---
+
+## Layer 2 — Data Link
+
+Now devices on the same local network need to communicate.
+
+Layer 2 handles things like:
+
+* MAC Addresses
+* Frames
+* Local network communication
+
+Again...
+
+Very important.
+
+But not something I'll be debugging while writing NestJS code.
+
+---
+
+## Layer 3 — Network
+
+This is where **IP Addresses** live.
+
+For example:
+
+\`\`\`text
+192.168.1.5
+
+104.xxx.xxx.xxx
+\`\`\`
+
+Layer 3 decides:
+
+> "How do I route this packet from one computer to another?"
+
+This is basically GPS for the internet.
+
+Packets travel through many routers before reaching their destination.
+
+---
+
+## Layer 4 — Transport
+
+Now we reach the first layer backend engineers should actually understand.
+
+This layer is responsible for transporting data between applications.
+
+The two biggest protocols here are:
+
+\`\`\`text
+TCP
+
+UDP
+\`\`\`
+
+We'll dive much deeper into these in the next section.
+
+For now...
+
+Think of Layer 4 as deciding **how** data should be delivered.
+
+Should it be:
+
+* Reliable?
+
+or
+
+* Fast?
+
+That's exactly the choice between TCP and UDP.
+
+---
+
+## Layer 5 — Session
+
+This layer manages conversations.
+
+Imagine two people having a phone call.
+
+Someone has to:
+
+* Start the call.
+* Keep the call alive.
+* End the call.
+
+That's basically what the Session Layer does.
+
+Modern frameworks often hide this complexity from us.
+
+So backend developers rarely interact with it directly.
+
+---
+
+## Layer 6 — Presentation
+
+Imagine two computers speaking different languages.
+
+One sends:
+
+\`\`\`text
+JSON
+\`\`\`
+
+Another expects:
+
+\`\`\`text
+XML
+\`\`\`
+
+Someone needs to translate.
+
+Presentation Layer handles:
+
+* Data formatting
+* Encryption
+* Compression
+* Encoding
+
+For example:
+
+HTTPS encryption happens around here.
+
+Again...
+
+Most frameworks take care of this automatically.
+
+---
+
+## Layer 7 — Application
+
+Finally...
+
+We reach **our home**.
+
+This is where protocols like:
+
+* HTTP
+* HTTPS
+* WebSocket
+* SMTP
+* FTP
+
+exist.
+
+This is also where applications like:
+
+* NestJS
+* Express
+* Django
+* Spring Boot
+
+operate.
+
+When I write:
+
+\`\`\`ts
+@Get("/users")
+\`\`\`
+
+I'm working at Layer 7.
+
+When I return JSON:
+
+\`\`\`json
+{
+  "name": "Belema"
+}
+\`\`\`
+
+I'm working at Layer 7.
+
+When I build REST APIs...
+
+Layer 7.
+
+Authentication...
+
+Layer 7.
+
+Authorization...
+
+Layer 7.
+
+CRUD APIs...
+
+Layer 7.
+
+Everything I write as a backend developer lives here.
+
+---
+
+## Backend Engineer vs Network Engineer
+
+The speaker explained this beautifully.
+
+Imagine a company.
+
+The backend team says:
+
+> "Users can't log in."
+
+The network team investigates.
+
+Maybe:
+
+* Router failed.
+* Firewall blocked traffic.
+* Cable disconnected.
+* DNS misconfigured.
+
+Backend engineers usually don't fix those problems.
+
+Instead...
+
+We focus on:
+
+* API logic
+* Authentication
+* Database queries
+* Business rules
+* HTTP requests
+* Responses
+
+Different teams.
+
+Different responsibilities.
+
+---
+
+### Why don't backend engineers care much about Layer 3?
+
+That doesn't mean Layer 3 isn't important.
+
+It absolutely is.
+
+But modern infrastructure hides most of its complexity.
+
+When I write:
+
+\`\`\`ts
+fetch("https://api.example.com/users")
+\`\`\`
+
+I don't manually calculate routing tables.
+
+I don't choose internet paths.
+
+I don't forward packets.
+
+The operating system.
+
+The routers.
+
+The network.
+
+They handle all of that automatically.
+
+My responsibility begins once the HTTP request reaches my application.
+
+---
+
+### What happens if I try fixing TCP problems in NestJS?
+
+This was another great point.
+
+Suppose users report:
+
+> "Requests randomly timeout."
+
+A beginner backend developer might think:
+
+> "I'll add another retry loop."
+
+Or:
+
+> "Maybe another if statement."
+
+But what if the real problem is:
+
+* Network congestion?
+* Firewall configuration?
+* Load balancer?
+* Broken routing?
+* Packet loss?
+
+No amount of NestJS code will fix that.
+
+That's a networking issue.
+
+The correct solution is to involve the network or infrastructure team.
+
+This perfectly demonstrates why understanding the OSI Model matters.
+
+It helps you know:
+
+> **Which problems belong to you... and which don't.**
+
+---
+
+## My Biggest Takeaway
+
+Before today...
+
+Networking felt like one giant mysterious blob.
+
+Now I see it differently.
+
+Each layer has a clear responsibility.
+
+Backend engineers don't need to master electrical signals, routers, or packet routing.
+
+We mainly live at **Layer 7**, building applications that communicate using protocols like HTTP.
+
+Understanding the lower layers is still valuable because it helps us diagnose issues and collaborate with infrastructure teams—but we don't need to become networking experts to build great backend systems.
+
+---
+
+## Checkpoint Questions
+
+### Why does a backend engineer usually not care about Layer 3 (IP addresses)?
+
+Because Layer 3 is primarily responsible for routing packets across networks, a task handled by the operating system, routers, and network infrastructure. Backend developers typically work at Layer 7, where they build application logic using protocols like HTTP. They rely on the underlying network to deliver requests without manually managing IP routing.
+
+---
+
+### What happens if a backend engineer tries to fix a TCP timeout in application code instead of involving the network team?
+
+They may spend hours changing application logic without solving the actual issue. If the timeout is caused by packet loss, firewall rules, routing problems, or network congestion, no amount of backend code can resolve it. The real fix belongs in the network or infrastructure layer, which is why understanding the OSI Model helps engineers identify where a problem truly exists.
+
+---
+
+> **Coming next:** We've now seen **where backend engineers live** in the networking stack. The next question is even more interesting: **How does data actually travel between computers?** That's where the famous battle begins... **TCP vs UDP**, followed by one of the biggest changes in modern web history—**HTTP/3 and QUIC**.
+
+
+
+## Topic 1.3 — TCP vs UDP (And HTTP/3's Rebellion)
+
+After understanding the OSI Model, we finally reached one of the topics I had heard about many times but never truly understood:
+
+> **TCP vs UDP**
+
+Before this lesson, I only knew one thing:
+
+> "TCP is reliable."
+
+> "UDP is faster."
+
+Everyone kept repeating those two sentences.
+
+But...
+
+**Why is TCP reliable?**
+
+Why is UDP faster?
+
+And why on earth did **HTTP/3**, the newest version of HTTP, abandon TCP after decades?
+
+Today's lesson answered all of those questions.
+
+---
+
+## Imagine Sending a Package
+
+Let's forget computers for a minute.
+
+Imagine you need to send your laptop to your friend.
+
+You have two delivery companies.
+
+### Company A
+
+* Picks up your package.
+* Calls your friend before delivery.
+* Requires a signature.
+* Confirms delivery.
+
+If something goes wrong...
+
+It sends another package.
+
+Slow?
+
+A little.
+
+Reliable?
+
+Very.
+
+---
+
+### Company B
+
+* Throws the package into a truck.
+* Drives away.
+
+Never checks if it arrived.
+
+Never asks for confirmation.
+
+Never retries.
+
+Faster?
+
+Absolutely.
+
+Reliable?
+
+Not really.
+
+---
+
+That's basically the difference between **TCP** and **UDP**.
+
+---
+
+## TCP — "Let's Make Sure Everything Arrives"
+
+TCP stands for:
+
+> **Transmission Control Protocol**
+
+The keyword is:
+
+> **Reliable.**
+
+TCP cares about one thing.
+
+Making sure every piece of data arrives correctly.
+
+Even if that means waiting.
+
+---
+
+### Before Anything Happens...
+
+TCP doesn't immediately send data.
+
+First...
+
+It introduces itself.
+
+Computers don't just start talking.
+
+They first establish a connection.
+
+This is called the:
+
+### Three-Way Handshake
+
+The speaker explained this as a conversation.
+
+Computer A:
+
+> "Hello, can we talk?"
+
+Computer B:
+
+> "Yes, I'm ready."
+
+Computer A:
+
+> "Great, let's begin."
+
+That's it.
+
+Three messages.
+
+\`\`\`text
+Client
+   │
+   ├──── SYN ────►
+   │
+   ◄── SYN-ACK ──┤
+   │
+   ├──── ACK ───►
+   │
+Connection Established
+\`\`\`
+
+Only after this handshake...
+
+Can actual data start moving.
+
+---
+
+### Why is this important?
+
+Imagine sending money through your banking app.
+
+Would you want data randomly disappearing?
+
+Absolutely not.
+
+You want guarantees.
+
+TCP guarantees:
+
+* Every packet arrives.
+* Packets arrive in order.
+* Missing packets are resent.
+
+That's why TCP powers things like:
+
+* Banking
+* File downloads
+* Web browsing
+* APIs
+* Email
+
+Reliability is more important than speed.
+
+---
+
+## The Downside of TCP
+
+The handshake takes time.
+
+Not much...
+
+But enough to matter.
+
+Every new connection requires:
+
+\`\`\`text
+Hello
+
+↓
+
+Hello back
+
+↓
+
+Okay let's talk
+
+↓
+
+Finally...
+\`\`\`
+
+Only then can your request begin.
+
+For millions of requests every second...
+
+Those milliseconds add up.
+
+---
+
+## UDP — "Just Send It!"
+
+UDP stands for:
+
+> **User Datagram Protocol**
+
+UDP has a completely different philosophy.
+
+It says:
+
+> "Why waste time talking?"
+
+Just send the data.
+
+No handshake.
+
+No confirmation.
+
+No retries.
+
+No guarantees.
+
+\`\`\`text
+Client
+
+↓
+
+Data
+
+↓
+
+Server
+\`\`\`
+
+Done.
+
+---
+
+## Isn't That Dangerous?
+
+It depends.
+
+Imagine watching a football match.
+
+Every second...
+
+Your phone receives new video frames.
+
+Suppose one frame gets lost.
+
+Do you want the video to stop?
+
+Probably not.
+
+You'd rather miss one frame than freeze for two seconds.
+
+That's exactly why UDP exists.
+
+Sometimes...
+
+Speed matters more than perfection.
+
+---
+
+UDP is perfect for:
+
+* Online Games
+* Video Calls
+* Voice Calls
+* Live Streaming
+
+If one packet disappears...
+
+The next one arrives almost immediately anyway.
+
+---
+
+### Wait...
+
+If HTTP uses TCP...
+
+Why not UDP?
+
+That confused me too.
+
+Websites cannot afford missing data.
+
+Imagine downloading:
+
+\`\`\`text
+report.pdf
+\`\`\`
+
+Halfway through...
+
+Packet #84 disappears.
+
+Without TCP...
+
+Your PDF becomes corrupted.
+
+Nobody wants that.
+
+That's why:
+
+HTTP/1.1
+
+↓
+
+TCP
+
+HTTP/2
+
+↓
+
+TCP
+
+Both depend on TCP's reliability.
+
+---
+
+## TCP's Biggest Weakness
+
+The speaker introduced a term I'd never heard before:
+
+> **Head-of-Line Blocking**
+
+Imagine reading a book.
+
+Page 18 goes missing.
+
+Would you jump to page 19?
+
+Probably not.
+
+You'd wait.
+
+TCP behaves the same way.
+
+If one packet disappears...
+
+Everything behind it waits.
+
+\`\`\`text
+Packet 1 (Arrived)
+
+Packet 2 (Arrived)
+
+Packet 3 (Lost)
+
+Packet 4 (Waiting)
+
+Packet 5 (Waiting)
+
+Packet 6 (Waiting)
+\`\`\`
+
+Even though packets 4, 5 and 6 already arrived...
+
+TCP refuses to process them.
+
+Everything stops.
+
+That's called:
+
+> **Head-of-Line Blocking**
+
+---
+
+## Enter HTTP/3
+
+Then came the plot twist.
+
+Instead of improving TCP...
+
+Google did something unexpected.
+
+They said:
+
+> "Let's stop using TCP."
+
+Wait...
+
+What?!
+
+HTTP...
+
+Without TCP?
+
+Exactly.
+
+---
+
+## HTTP/3 Uses UDP
+
+Instead of:
+
+\`\`\`text
+HTTP
+
+↓
+
+TCP
+\`\`\`
+
+HTTP/3 does:
+
+\`\`\`text
+HTTP
+
+↓
+
+QUIC
+
+↓
+
+UDP
+\`\`\`
+
+This completely surprised me.
+
+---
+
+## But UDP Isn't Reliable...
+
+Exactly.
+
+That's why Google created something called:
+
+## QUIC
+
+QUIC is a protocol built **on top of UDP**.
+
+Think of UDP as an empty road.
+
+Google built an intelligent delivery service on top of that road.
+
+QUIC adds things like:
+
+* Reliability
+* Encryption
+* Multiplexing
+* Faster connection setup
+
+But without TCP's limitations.
+
+It's like getting:
+
+The speed of UDP
+
+*
+
+Most of the reliability of TCP
+
+---
+
+### Why Not Just Improve TCP?
+
+That was another question I had.
+
+The speaker explained that TCP is deeply built into operating systems.
+
+Changing TCP means changing:
+
+Windows
+
+Linux
+
+macOS
+
+Android
+
+iOS
+
+...and millions of networking devices.
+
+That's almost impossible.
+
+UDP is much simpler.
+
+Google could innovate by building QUIC **above UDP** without waiting for every operating system in the world to change TCP itself.
+
+A brilliant engineering decision.
+
+---
+
+## TCP vs UDP
+
+Here's the mental model I now use.
+
+| TCP                       | UDP                                                          |
+| ------------------------- | ------------------------------------------------------------ |
+| Reliable                  | Fast                                                         |
+| Connection-oriented       | Connectionless                                               |
+| Ordered delivery          | No ordering guarantee                                        |
+| Retransmits lost packets  | Doesn't retransmit                                           |
+| Three-way handshake       | No handshake                                                 |
+| Used by HTTP/1.1 & HTTP/2 | Used by HTTP/3 (through QUIC), games, streaming, video calls |
+
+The lesson isn't:
+
+> TCP good.
+
+UDP bad.
+
+It's:
+
+> **Choose the right tool for the job.**
+
+---
+
+## My Biggest Realization
+
+When I first heard:
+
+> "HTTP/3 uses UDP."
+
+I thought:
+
+> "That makes no sense."
+
+Now it actually makes perfect sense.
+
+Google wasn't trying to make HTTP unreliable.
+
+They were trying to remove TCP's limitations while keeping reliability through QUIC.
+
+Instead of fixing TCP...
+
+They built something smarter above UDP.
+
+That idea completely changed how I think about networking.
+
+---
+
+## Checkpoint Questions
+
+### What is the Three-Way Handshake and why does it slow down HTTP/1.1?
+
+The Three-Way Handshake is TCP's way of establishing a reliable connection before any application data is exchanged. The client sends a **SYN**, the server replies with **SYN-ACK**, and the client finishes with an **ACK**. Although this process only takes a short time, it introduces extra round trips before the actual HTTP request can begin, increasing latency.
+
+---
+
+### If UDP drops packets, how does HTTP/3 guarantee my file arrives complete?
+
+HTTP/3 doesn't rely on raw UDP alone. It uses **QUIC**, which runs on top of UDP. QUIC implements reliability, retransmissions, packet ordering, congestion control, and encryption at the application layer, allowing HTTP/3 to deliver complete files while avoiding many of TCP's performance limitations.
+
+---
+
+### Why did Google build QUIC on top of UDP instead of fixing TCP?
+
+TCP is deeply embedded in operating systems and networking infrastructure across the world. Changing it would require updates to billions of devices and servers. UDP is much simpler and more flexible, allowing Google to innovate at the protocol level by building QUIC on top of it without replacing TCP itself.
+
+---
+
+## Part 1 Complete!
+
+Today's lesson completely changed my perspective on networking.
+
+A few days ago, I thought backend development was simply:
+
+\`\`\`text
+Browser
+
+↓
+
+HTTP
+
+↓
+
+Backend
+\`\`\`
+
+Now I realize there is an entire world underneath that simple diagram.
+
+I learned that:
+
+* HTTP is only one protocol among many.
+* Backend engineers mostly work at Layer 7 of the OSI Model.
+* TCP values reliability over speed.
+* UDP values speed over reliability.
+* HTTP/3 broke tradition by moving away from TCP and embracing UDP through QUIC.
+
+The deeper I go into backend development, the more I realize that understanding **why** technologies exist is just as important as learning **how** to use them.
+
+And honestly...
+
+That's what makes backend engineering so fascinating.`,
+  },
+  {
     title: "Day 1 — Learning Backend from First Principles",
     slug: "backend-first-principles-day-1",
     description:
