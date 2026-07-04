@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <style>
+    path, rect {
+      fill: #18181b;
+    }
+    @media (prefers-color-scheme: dark) {
+      path, rect {
+        fill: #fafafa;
+      }
+    }
+  </style>
+  <rect x="0" y="0" width="46" height="46" />
+  <path d="M 0,54 H 26 C 37.1,54 46,62.9 46,74 V 100 H 0 Z" />
+  <path d="M 54,0 H 80 C 91.1,0 100,8.9 100,20 V 26 C 100,37.1 91.1,46 80,46 H 54 Z" />
+  <path d="M 54,54 H 80 C 91.1,54 100,62.9 100,74 V 80 C 100,91.1 91.1,100 80,100 H 54 Z" />
+</svg>
