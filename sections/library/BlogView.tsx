@@ -29,32 +29,24 @@ export function BlogView() {
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
-  const rest = sorted.filter((p) => p.slug !== featured?.slug);
+  const rest = sorted;
 
   return (
     <Container>
-      {featured && active === "All" && (
+      {active === "All" && (
         <div className="mb-12 rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm dark:border-white/10 dark:bg-transparent">
           <Badge variant="accent" className="mb-3">
             Featured
           </Badge>
           <h2 className="text-2xl font-bold text-[var(--color-primary)] md:text-3xl">
-            <Link
-              href={`/blog/${featured.slug}`}
-              className="hover:text-[var(--color-accent)]"
-            >
-              {featured.title}
-            </Link>
+            New case studies &amp; articles coming soon
           </h2>
           <p className="mt-3 max-w-2xl text-[var(--color-text-secondary)]">
-            {featured.description}
+            I am currently drafting technical write-ups and case studies on building scalable backend architectures, NestJS design patterns, database query optimization, and product engineering.
           </p>
-          <Link
-            href={`/blog/${featured.slug}`}
-            className="mt-4 inline-block text-sm font-medium text-[var(--color-accent)]"
-          >
-            Read featured article →
-          </Link>
+          <span className="mt-4 inline-block text-xs font-mono text-[var(--color-text-muted-readable)] uppercase tracking-wider">
+            // Written soon
+          </span>
         </div>
       )}
 
