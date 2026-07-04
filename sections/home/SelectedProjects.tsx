@@ -36,7 +36,7 @@ export function SelectedProjects() {
         </div>
 
         {/* ── Card grid — 3 per row, 6 total ───────────────────── */}
-        <div id="projects" className="grid gap-8 sm:grid-cols-2">
+        <div id="projects" className="grid gap-4 md:gap-8 sm:grid-cols-2">
           {featured.map((project, i) => {
             const { title, slug, description, techStack, image, type, liveUrl, githubUrl } = project;
             const visibleTech = techStack.slice(0, 3);
@@ -60,8 +60,8 @@ export function SelectedProjects() {
                   </span>
                 </div>
 
-                {/* ── Image (clean, no overlays) ──────────────── */}
-                <div className="relative aspect-[16/8] overflow-hidden bg-[var(--color-primary)]/5">
+                {/* ── Image (clean, hidden on mobile for minimalism) ── */}
+                <div className="relative hidden md:block aspect-[16/8] overflow-hidden bg-[var(--color-primary)]/5">
                   {image ? (
                     <Image
                       src={image}
@@ -76,7 +76,7 @@ export function SelectedProjects() {
                 </div>
 
                 {/* ── Card body ───────────────────────────────── */}
-                <div className="flex flex-1 flex-col border-t border-[var(--color-border)] p-4">
+                <div className="flex flex-1 flex-col p-4 md:border-t border-[var(--color-border)] md:p-5">
 
                   {/* Title */}
                   <h3
