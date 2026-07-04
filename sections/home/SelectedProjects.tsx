@@ -23,7 +23,7 @@ export function SelectedProjects() {
               Projects
             </h2>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--color-text-secondary)]">
-              Real work first — interfaces and products built with modern frontend and full-stack tools.
+              Real work first — interfaces and products built with modern full-stack tools.
             </p>
           </div>
           <Link

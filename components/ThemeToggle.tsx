@@ -18,12 +18,11 @@ export function ModeToggle() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className="relative inline-flex h-8 w-8 items-center justify-center border border-[var(--color-border-strong)] bg-transparent text-[var(--color-text-primary)] transition hover:bg-[var(--color-primary)]/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-primary)]/40"
-        aria-label="Select theme"
+        aria-label="Toggle theme"
         style={{ borderRadius: 0 }}
       >
         <Sun className="h-[1rem] w-[1rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
         <Moon className="absolute h-[1rem] w-[1rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-        <span className="sr-only">Toggle theme</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"

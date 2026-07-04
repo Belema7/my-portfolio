@@ -21,7 +21,7 @@ export function ProjectsGrid() {
     <Container>
       <SectionHeader
         title="Projects"
-        subtitle="Real applications built with modern frontend and full-stack tools."
+        subtitle="Real applications built with modern full-stack tools."
       />
       <div className="mb-10 flex flex-wrap gap-2">
         {types.map((type) => (

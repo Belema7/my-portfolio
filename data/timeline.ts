@@ -10,9 +10,9 @@ export const timeline: TimelineItem[] = [
   },
   {
     year: "2025",
-    title: "Frontend Development Journey",
+    title: "Software Development Journey",
     description:
-      "Started building modern web interfaces with JavaScript, TypeScript, React, and core frontend engineering principles.",
+      "Started building modern web interfaces with JavaScript, TypeScript, React, and core software engineering principles.",
     icon: "Code2",
   },
   {
