@@ -1,20 +1,20 @@
 export const personal = {
   name: "Belema Girma",
-  role: "Frontend Developer",
+  role: "Full Stack Developer",
   location: "Ethiopia",
   email: "belemagirma31@gmail.com",
   resumeUrl: "/resume.pdf",
   avatarUrl: "/avatar.JPG",
-  availabilityBadge: "Available for frontend roles",
+  availabilityBadge: "Available for projects & collaborations",
   heroHeadline:
-    "I build clean, scalable interfaces for modern web products.",
+    "I build clean, scalable, and user-friendly web applications from frontend interfaces to backend APIs.",
   heroSupporting:
-    "I'm Frontend developer focused on React, Next.js, TypeScript, and Tailwind CSS. I care about performance, accessibility, clean architecture, and user-focused design.",
+    "I work across frontend, backend, and mobile development using modern tools like React, Next.js, Node.js, NestJS, PostgreSQL, and React Native. I focus on scaling digital products and delivering real-world value.",
   heroMetadataBadges: [
     "Based in Ethiopia",
-    "React / Next.js / TypeScript",
-    "Frontend / Full-stack projects",
-    "Open for collaboration",
+    "React / Next.js / Node.js",
+    "Full-stack web & mobile development",
+    "Open for freelance & collaborations",
   ],
   social: {
     github: "https://github.com/belema7",
@@ -24,47 +24,46 @@ export const personal = {
   },
   heroPulse: {
     building: "Portfolio v2",
-    learning: "Advanced Next.js",
-    goal: "Frontend internship",
+    learning: "NestJS & PostgreSQL",
+    goal: "Build scalable products",
   },
   currently: {
     building: "Portfolio v2",
-    learning: "Advanced Next.js patterns",
+    learning: "Advanced full-stack patterns",
     reading: "Atomic Habits",
     watching: "The Social Network",
-    goal: "Get a frontend internship",
+    goal: "Collaborate on modern web applications",
   },
   learningFocus: [
-    "Advanced Next.js patterns",
-    "Server and client data fetching",
-    "Frontend architecture",
-    "Performance optimization",
-    "Testing basics",
-    "Building real-world full-stack applications",
+    "Advanced NestJS and system design",
+    "Database design and PostgreSQL optimization",
+    "Mobile development with React Native",
+    "Performance optimization and responsive layouts",
+    "Clean full-stack architecture patterns",
   ],
   aboutFocus: [
-    "Advanced Next.js patterns",
-    "Frontend architecture",
-    "Performance optimization",
-    "Real-world full-stack projects",
-    "Writing about what I learn",
+    "Next.js & React ecosystem",
+    "Node.js & NestJS backend services",
+    "PostgreSQL & Prisma data modeling",
+    "React Native mobile apps",
+    "Collaborative product engineering",
   ],
-  contactCtaTitle: "Let's work together",
+  contactCtaTitle: "Let's build something useful together",
   contactCta:
-    "Have a project, internship opportunity, or collaboration idea? I'm open to frontend internships, junior frontend roles, freelance projects, and technical collaboration.",
+    "Have a project, collaboration idea, or digital product you want to build? I am open to freelance projects, collaboration opportunities, and building simple, maintainable solutions.",
   story: {
-    summary: `I'm Belema Girma, a frontend developer and computer science student focused on building modern web applications.
+    summary: `I am Belema Girma, a Full Stack Developer who builds clean, scalable, and practical digital products. I work across frontend, backend, and mobile development using tools like React, Next.js, Node.js, NestJS, PostgreSQL, and React Native.
 
-I enjoy turning ideas into clean, responsive, and usable interfaces. My current focus is React, Next.js, TypeScript, frontend architecture, and building real-world projects that solve practical problems.
+I enjoy turning ideas into useful products, improving user experience, and building systems that are simple, maintainable, and real-world ready.
 
-Outside coding, I write about my learning journey, books I'm reading, movies that inspire me, and the mindset behind becoming better as a developer.`,
+Outside coding, I write about my learning journey, software engineering principles, and the mindset behind becoming better as a developer.`,
   },
   goals: [
-    "Become a strong frontend engineer",
-    "Build production-ready applications",
-    "Improve system design and architecture thinking",
-    "Write consistently about what I learn",
-    "Get a frontend internship or junior role",
-    "Contribute to real products",
+    "Build production-ready, scalable systems",
+    "Collaborate on real-world digital products",
+    "Improve system design and backend architecture",
+    "Share knowledge and document full-stack learning",
+    "Contribute to open-source and developer ecosystems",
   ],
 };
+

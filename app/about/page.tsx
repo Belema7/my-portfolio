@@ -7,7 +7,7 @@ import { CurrentGoals } from "@/sections/about/CurrentGoals";
 export const metadata: Metadata = {
   title: "About | Belema Girma",
   description:
-    "My story, skills, timeline, and goals as a frontend developer and computer science student.",
+    "My story, skills, timeline, and goals as a Full Stack Developer.",
 };
 
 export default function AboutPage() {

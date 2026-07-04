@@ -11,9 +11,9 @@ export function LatestWriting() {
       <Container>
         <SectionHeader
           title="Latest Writing"
-          subtitle="Notes on frontend engineering, learning, and building in public."
+          subtitle="Notes on full stack engineering, system design, and building in public."
           action={{ label: "Read the blog", href: "/library" }}
-          numbered="03"
+          numbered="04"
         />
         <div className="grid gap-px border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">
           {posts.map((post) => (

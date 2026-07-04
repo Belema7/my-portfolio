@@ -21,14 +21,15 @@ function LogoMark() {
     <svg
       width="28"
       height="28"
-      viewBox="0 0 28 28"
+      viewBox="0 0 100 100"
       fill="currentColor"
       aria-hidden="true"
       className="shrink-0"
     >
-      <rect x="0" y="0" width="12" height="12" />
-      <rect x="16" y="0" width="12" height="12" />
-      <rect x="0" y="16" width="28" height="12" />
+      <rect x="0" y="0" width="46" height="46" />
+      <path d="M 0,54 H 26 C 37.1,54 46,62.9 46,74 V 100 H 0 Z" />
+      <path d="M 54,0 H 80 C 91.1,0 100,8.9 100,20 V 26 C 100,37.1 91.1,46 80,46 H 54 Z" />
+      <path d="M 54,54 H 80 C 91.1,54 100,62.9 100,74 V 80 C 100,91.1 91.1,100 80,100 H 54 Z" />
     </svg>
   );
 }
@@ -103,7 +104,7 @@ export function Navbar() {
             href={`mailto:${personal.email}`}
             className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
           >
-            Email Us
+            Email Me
           </a>
           <div className="h-4 w-px bg-[var(--color-border-strong)]" />
           <ModeToggle />

@@ -4,7 +4,7 @@ import { getFeaturedProjects } from "@/data/helpers";
 import { Container } from "@/components/ui/Container";
 
 export function SelectedProjects() {
-  const featured = getFeaturedProjects(6);
+  const featured = getFeaturedProjects(4);
 
   return (
     <section
@@ -36,7 +36,7 @@ export function SelectedProjects() {
         </div>
 
         {/* ── Card grid — 3 per row, 6 total ───────────────────── */}
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div id="projects" className="grid gap-8 sm:grid-cols-2">
           {featured.map((project, i) => {
             const { title, slug, description, techStack, image, type, liveUrl, githubUrl } = project;
             const visibleTech = techStack.slice(0, 3);

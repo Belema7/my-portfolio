@@ -8,7 +8,7 @@ export function CurrentlyLearning() {
       <Container>
         <SectionHeader
           title="What I'm Learning"
-          subtitle="Current focus areas as I grow as a frontend engineer."
+          subtitle="Current focus areas as I grow as a full stack developer."
           numbered="05"
         />
 

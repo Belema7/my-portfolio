@@ -24,9 +24,9 @@ export const timeline: TimelineItem[] = [
   },
   {
     year: "Present",
-    title: "Career Growth & Opportunities",
+    title: "Full Stack & Collaborative Projects",
     description:
-      "Actively pursuing internships and junior frontend engineering roles to contribute to real products and grow within collaborative teams.",
+      "Building production-ready web and mobile applications, working on freelance projects, and collaborating with developers and clients to deliver useful digital solutions.",
     icon: "Briefcase",
   },
 ];

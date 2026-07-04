@@ -1,4 +1,4 @@
-import { skillCategories, skillLevels } from "@/data/skills";
+import { skillCategories } from "@/data/skills";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
@@ -51,40 +51,6 @@ export function Skills() {
               </span>
             </div>
           ))}
-        </div>
-
-        {/* ── Currently improving / exploring ─────────────────── */}
-        <div className="grid gap-0 sm:grid-cols-2">
-          {/* Improving */}
-          <div className="border border-[var(--color-border)] p-6">
-            <p className="label-numbered mb-4">// Currently Improving</p>
-            <ul className="space-y-2.5">
-              {skillLevels.improving.map((s) => (
-                <li
-                  key={s}
-                  className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]"
-                >
-                  <span className="mt-2 block h-1 w-4 shrink-0 bg-[var(--color-text-muted)]" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-          {/* Exploring */}
-          <div className="border border-[var(--color-border)] border-l-0 p-6">
-            <p className="label-numbered mb-4">// Exploring</p>
-            <ul className="space-y-2.5">
-              {skillLevels.exploring.map((s) => (
-                <li
-                  key={s}
-                  className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]"
-                >
-                  <span className="mt-2 block h-1 w-4 shrink-0 bg-[var(--color-text-muted)]" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </Container>
     </section>

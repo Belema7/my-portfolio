@@ -1,26 +1,13 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Urbanist } from "next/font/google";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SiteShell } from "@/components/layout/SiteShell";
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  display: "swap",
-});
-
-const urbanist = Urbanist({
-  subsets: ["latin"],
-  variable: "--font-urbanist",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
-  title: "Belema Girma — Frontend Developer",
+  title: "Belema Girma — Full Stack Developer",
   description:
-    "Belema Girma is a Frontend Software Engineer specializing in TypeScript, React and Next.js, building fast, accessible, responsive web experiences with modern web technologies.",
+    "Belema Girma is a Full Stack Developer specializing in React, Next.js, Node.js, NestJS, and PostgreSQL, building clean, scalable, and responsive digital products.",
 };
 
 export default function RootLayout({
@@ -32,13 +19,13 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${GeistSans.variable} ${spaceGrotesk.variable} ${urbanist.variable}`}
+      className={`${GeistSans.variable}`}
     >
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Urbanist:wght@100..900&family=Bebas+Neue&display=swap"
           rel="stylesheet"
         />
       </head>

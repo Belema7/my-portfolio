@@ -1,40 +1,32 @@
 export const skillCategories = [
   {
-    name: "Frontend Development",
-    skills: ["JavaScript", "TypeScript", "React", "Next.js"],
+    name: "Frontend",
+    skills: ["React", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui"],
   },
   {
-    name: "UI Engineering",
+    name: "Backend",
     skills: [
-      "Tailwind CSS",
-      "Responsive Design",
-      "Accessibility",
-      "Component Systems",
-    ],
-  },
-  {
-    name: "Backend Integration",
-    skills: [
+      "Node.js",
+      "Express.js",
+      "NestJS",
       "REST APIs",
       "Prisma",
       "PostgreSQL",
-      "MongoDB",
-      "Authentication",
     ],
   },
   {
-    name: "Workflow",
-    skills: ["Git", "GitHub", "Figma", "VS Code", "Vercel", "Cloudinary"],
+    name: "Mobile",
+    skills: ["React Native", "Expo"],
+  },
+  {
+    name: "Tools",
+    skills: ["Git", "GitHub", "VS Code", "Postman", "Figma"],
   },
 ];
 
 export const skillLevels = {
-  comfortable: ["React", "Next.js", "Tailwind CSS", "TypeScript"],
-  improving: [
-    "System design",
-    "Performance",
-    "Testing",
-    "Advanced data fetching",
-  ],
-  exploring: ["AI tools", "Design systems", "Full-stack architecture"],
+  comfortable: ["React", "Next.js", "TypeScript", "Node.js", "Tailwind CSS"],
+  improving: ["System Design", "NestJS", "PostgreSQL", "React Native"],
+  exploring: ["Cloud Architecture", "Docker", "CI/CD Pipelines"],
 };
+

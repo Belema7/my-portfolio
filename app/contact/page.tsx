@@ -7,7 +7,7 @@ import { ContactForm } from "@/sections/contact/ContactForm";
 export const metadata: Metadata = {
   title: "Contact | Belema Girma",
   description:
-    "Get in touch for internships, collaborations, or frontend opportunities.",
+    "Get in touch for freelance projects, collaborations, or product-building opportunities.",
 };
 
 export default function ContactPage() {
@@ -16,7 +16,7 @@ export default function ContactPage() {
       <Container>
         <SectionHeader
           title="Contact"
-          subtitle="Have a project, internship opportunity, or collaboration idea?"
+          subtitle="Have a project, collaboration idea, or digital product you want to build?"
           align="center"
         />
         <div className="grid gap-12 lg:grid-cols-2">

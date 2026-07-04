@@ -5,12 +5,11 @@ export type PostCategory =
   | "Personal Thoughts";
 
 export type ProjectType =
-  | "Full-stack"
-  | "Frontend"
-  | "Landing Page"
-  | "AI Experiment"
-  | "Blog Platform"
-  | "Real Estate Platform";
+  | "Full-stack web application"
+  | "Client website"
+  | "Product landing page"
+  | "API-powered platform"
+  | "Modern responsive web application";
 
 export type Project = {
   title: string;
