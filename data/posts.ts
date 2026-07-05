@@ -1635,15 +1635,15 @@ Think of them as the server's way of saying:
 
 Every HTTP response begins with something like:
 
-```http
+\`\`\`http
 HTTP/1.1 200 OK
-```
+\`\`\`
 
 Let's break it down.
 
-```text
+\`\`\`text
 HTTP Version  →  Status Code  →  Reason Phrase
-```
+\`\`\`
 
 The most important part is the **status code**.
 It tells the client whether the request:
@@ -1663,9 +1663,9 @@ One thing I really liked is that HTTP status codes are grouped into five familie
 Instead of memorizing every code...
 You only need to remember the meaning of each family.
 
-```text
+\`\`\`text
 1xx → Information, 2xx → Success, 3xx → Redirection, 4xx → Client Errors, 5xx → Server Errors
-```
+\`\`\`
 
 The first digit tells the whole story.
 
@@ -1680,9 +1680,9 @@ These responses simply mean:
 The conversation is still in progress.
 Examples:
 
-```text
+\`\`\`text
 100 Continue, 101 Switching Protocols
-```
+\`\`\`
 
 As backend developers, we rarely work with these directly.
 They exist mostly for lower-level communication.
@@ -1698,9 +1698,9 @@ The request was successful.
 #### 200 OK
 The most common status code.
 
-```http
+\`\`\`http
 GET /users  →  200 OK
-```
+\`\`\`
 
 Meaning:
 > "Everything went well."
@@ -1710,9 +1710,9 @@ The server processed the request and returned the requested data.
 #### 201 Created
 Used when something new has been created.
 
-```http
+\`\`\`http
 POST /users  →  201 Created
-```
+\`\`\`
 
 Instead of saying "Okay", the server says:
 > "I successfully created your new resource."
@@ -1722,9 +1722,9 @@ A small difference... but a meaningful one.
 #### 204 No Content
 Sometimes the server succeeds... but doesn't need to return anything.
 
-```http
+\`\`\`http
 DELETE /users/5  →  204 No Content
-```
+\`\`\`
 
 The user was deleted successfully.
 No JSON needed. No message needed.
@@ -1740,17 +1740,17 @@ Instead of returning the data... the server tells the client:
 
 Examples:
 
-```text
+\`\`\`text
 301 Moved Permanently, 302 Found, 304 Not Modified
-```
+\`\`\`
 
 One interesting example is **304 Not Modified**.
 Imagine your browser already has a cached image.
 Instead of downloading it again... the server replies:
 
-```text
+\`\`\`text
 304 Not Modified
-```
+\`\`\`
 
 Meaning:
 > "Use the version you already have."
@@ -1788,17 +1788,17 @@ This is different. The server **knows who you are**.
 But... you're not allowed to perform the action.
 
 Example, a normal user tries to access:
-```http
+\`\`\`http
 DELETE /admin/users
-```
+\`\`\`
 Authentication succeeded. Authorization failed.
 
 #### 404 Not Found
 Probably the most famous status code.
 
-```http
+\`\`\`http
 GET /products/999999  →  404 Not Found
-```
+\`\`\`
 There is no such product. The resource simply doesn't exist.
 
 ---
@@ -1818,13 +1818,13 @@ Something inside the backend failed.
 #### 502 Bad Gateway
 Common when using Nginx.
 Imagine:
-```text
+\`\`\`text
 Browser → Nginx → Backend
-```
+\`\`\`
 If Nginx cannot communicate with the backend... it may return:
-```text
+\`\`\`text
 502 Bad Gateway
-```
+\`\`\`
 
 #### 503 Service Unavailable
 The server is temporarily unavailable.
@@ -1841,18 +1841,18 @@ The server isn't broken forever. It's simply unavailable right now.
 
 Imagine this login request.
 
-```http
+\`\`\`http
 POST /login
-```
+\`\`\`
 
 Possible outcomes:
 
-```text
+\`\`\`text
 200  →  Login successful
 401  →  Wrong password
 404  →  User doesn't exist
 500  →  Database crashed
-```
+\`\`\`
 
 Same endpoint. Different stories. Different status codes.
 
@@ -1860,16 +1860,16 @@ Same endpoint. Different stories. Different status codes.
 
 ### Don't Abuse Status Codes
 
-One mistake beginners sometimes make is returning `200 OK` for everything. Even errors.
+One mistake beginners sometimes make is returning \`200 OK\` for everything. Even errors.
 
-```json
+\`\`\`json
 {
    "success": false,
    "message": "Password incorrect"
 }
-```
+\`\`\`
 
-Still returning `200 OK`.
+Still returning \`200 OK\`.
 Technically possible. But misleading.
 HTTP already has status codes for these situations. Use them.
 Your API becomes much easier to understand.
@@ -1882,9 +1882,9 @@ Today I realized something.
 Status codes aren't just numbers. They're a communication language.
 Without reading the response body... I can already understand a lot.
 
-Seeing `200`, I immediately think: Success.
-Seeing `404`, Resource missing.
-Seeing `500`, Backend problem.
+Seeing \`200\`, I immediately think: Success.
+Seeing \`404\`, Resource missing.
+Seeing \`500\`, Backend problem.
 
 That's incredibly powerful for debugging.
 
@@ -1912,7 +1912,7 @@ A **500 Internal Server Error** indicates that something went wrong on the serve
 
 ### When should you return **201 Created** instead of **200 OK**?
 
-Return **201 Created** when a request successfully creates a new resource, such as after a successful `POST /users` or `POST /orders`. Use **200 OK** for successful operations that do not create a new resource, such as retrieving data or updating an existing one.
+Return **201 Created** when a request successfully creates a new resource, such as after a successful \`POST /users\` or \`POST /orders\`. Use **200 OK** for successful operations that do not create a new resource, such as retrieving data or updating an existing one.
 
 ---
 
