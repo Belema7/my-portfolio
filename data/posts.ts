@@ -92,33 +92,13 @@ Every website on the internet is basically millions of these tiny conversations 
 For example:
 
 \`\`\`text
-Browser:
-
-"Can I have the homepage?"
-
-↓
-
-Server:
-
-"Sure! Here it is."
+Browser: "Can I have the homepage?"  →  Server: "Sure! Here it is."
 \`\`\`
 
 Or:
 
 \`\`\`text
-Browser:
-
-"Can I log in with this email and password?"
-
-↓
-
-Server:
-
-"Yes, welcome back."
-
-or
-
-"No, your password is incorrect."
+Browser: "Can I log in with this email and password?"  →  Server: "Yes, welcome back." (or) "No, your password is incorrect."
 \`\`\`
 
 Every request follows exactly the same communication pattern.
@@ -140,19 +120,7 @@ HTTP works almost exactly the same way.
 Every HTTP request contains four parts.
 
 \`\`\`text
-Start Line
-
-↓
-
-Headers
-
-↓
-
-Blank Line
-
-↓
-
-Body
+Start Line  →  Headers  →  Blank Line  →  Body
 \`\`\`
 
 Every response from the server follows a similar structure.
@@ -190,15 +158,7 @@ It tells the server what action we want.
 Examples include:
 
 \`\`\`text
-GET
-
-POST
-
-PUT
-
-PATCH
-
-DELETE
+GET, POST, PUT, PATCH, DELETE
 \`\`\`
 
 We'll study these in detail later.
@@ -214,13 +174,7 @@ It tells the server which resource we're requesting.
 Example:
 
 \`\`\`text
-/users
-
-/products
-
-/login
-
-/api/tours
+/users, /products, /login, /api/tours
 \`\`\`
 
 Think of it like the destination address.
@@ -236,11 +190,7 @@ The client tells the server which version of HTTP it's speaking.
 Examples:
 
 \`\`\`text
-HTTP/1.1
-
-HTTP/2
-
-HTTP/3
+HTTP/1.1, HTTP/2, HTTP/3
 \`\`\`
 
 Just like two people agree on a language before talking...
@@ -382,19 +332,7 @@ Now it doesn't look scary anymore.
 It simply says:
 
 \`\`\`text
-POST
-
-↓
-
-to /login
-
-↓
-
-I'm sending JSON
-
-↓
-
-Here's the data
+POST  →  to /login  →  I'm sending JSON  →  Here's the data
 \`\`\`
 
 That's it.
@@ -410,19 +348,7 @@ The server sends a response.
 Responses also contain four parts.
 
 \`\`\`text
-Status Line
-
-↓
-
-Headers
-
-↓
-
-Blank Line
-
-↓
-
-Body
+Status Line  →  Headers  →  Blank Line  →  Body
 \`\`\`
 
 Very similar.
@@ -444,27 +370,13 @@ HTTP/1.1 200 OK
 Let's break it down.
 
 \`\`\`text
-HTTP Version
-
-↓
-
-Status Code
-
-↓
-
-Status Message
+HTTP Version  →  Status Code  →  Status Message
 \`\`\`
 
 Examples:
 
 \`\`\`text
-200 OK
-
-201 Created
-
-404 Not Found
-
-500 Internal Server Error
+200 OK, 201 Created, 404 Not Found, 500 Internal Server Error
 \`\`\`
 
 We'll spend an entire section on these later because they're incredibly important for backend development.
@@ -531,27 +443,7 @@ The browser reads this body and decides what to display to the user.
 Here's the complete conversation.
 
 \`\`\`http
-REQUEST
-
-POST /login HTTP/1.1
-
-Headers...
-
-Body...
-
-        ↓
-
-SERVER THINKS
-
-        ↓
-
-RESPONSE
-
-HTTP/1.1 200 OK
-
-Headers...
-
-Body...
+REQUEST (POST /login)  →  SERVER THINKS  →  RESPONSE (200 OK)
 \`\`\`
 
 Every API you've ever called follows this same structure.
@@ -574,11 +466,7 @@ Before today...
 I thought an API request was basically:
 
 \`\`\`text
-URL
-
-+
-
-JSON
+URL + JSON
 \`\`\`
 
 Now I understand it's much more organized.
@@ -759,19 +647,7 @@ Your backend usually generates a JWT.
 Every future request sends that token.
 
 \`\`\`text
-Login
-
-↓
-
-Receive JWT
-
-↓
-
-Store JWT
-
-↓
-
-Send JWT on every request
+Login  →  Receive JWT  →  Store JWT  →  Send JWT on every request
 \`\`\`
 
 Your backend checks this header before allowing access.
@@ -914,13 +790,7 @@ This tells the receiver:
 Other examples include:
 
 \`\`\`text
-application/json
-
-text/html
-
-image/png
-
-application/pdf
+application/json, text/html, image/png, application/pdf
 \`\`\`
 
 Without Content-Type...
@@ -1250,15 +1120,7 @@ The HTTP method tells the server **what we want to do with that resource**.
 Although HTTP defines many methods, backend developers spend most of their lives using these five.
 
 \`\`\`text
-GET
-
-POST
-
-PUT
-
-PATCH
-
-DELETE
+GET, POST, PUT, PATCH, DELETE
 \`\`\`
 
 The speaker called these the "Big Five."
@@ -1751,21 +1613,7 @@ Yesterday, I learned how a request travels from my browser all the way to the ba
 The journey looked like this:
 
 \`\`\`text
-Browser
-   ↓
-DNS
-   ↓
-Internet
-   ↓
-Cloud Server
-   ↓
-Firewall
-   ↓
-Nginx
-   ↓
-Backend Application
-   ↓
-Database
+Browser → DNS → Internet → Cloud Server → Firewall → Nginx → Backend App → Database
 \`\`\`
 
 At that point, I thought:
