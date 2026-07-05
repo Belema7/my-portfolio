@@ -2,6 +2,1735 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 2 — Learning Backend from First Principles (Part 2)",
+    slug: "backend-first-principles-day-2-part-2",
+    description: "What actually happens inside an HTTP request? Today I learned about the anatomy of HTTP communication, headers, and HTTP methods.",
+    category: "Learning Journey",
+    date: "2026-07-05",
+    readingTime: "10 min read",
+    content: `# The Anatomy of HTTP Communication
+
+> *"Every click, every login, every API call follows the same conversation pattern. Once you understand that conversation, HTTP becomes much less mysterious."*
+
+---
+
+## Introduction
+
+In **Part 1**, I learned something that completely changed how I think about networking.
+
+I discovered that:
+
+* HTTP isn't the only protocol.
+* Backend engineers mainly live at Layer 7 of the OSI Model.
+* TCP and UDP solve different problems.
+* HTTP/3 introduced QUIC to improve web performance.
+
+That was the foundation.
+
+But after learning all of that, another question came to my mind.
+
+> **What actually happens inside an HTTP request?**
+
+When I write:
+
+\`\`\`ts
+fetch("/api/users")
+\`\`\`
+
+or
+
+\`\`\`ts
+axios.post("/login")
+\`\`\`
+
+What is actually being sent over the internet?
+
+Is it just JSON?
+
+Is it just a URL?
+
+Or is there more to it?
+
+The answer surprised me.
+
+An HTTP message is much more structured than I imagined.
+
+It's almost like sending a formal letter.
+
+Every letter has:
+
+* an address
+* a subject
+* the actual message
+
+HTTP follows the same idea.
+
+Every request and every response follows a well-defined structure.
+
+Once I understood this structure, things like authentication, headers, CORS, APIs, and even debugging started making much more sense.
+
+So let's open the envelope and see what's really inside an HTTP message.
+
+---
+
+## Topic 2.1 — The HTTP Request & Response Structure
+
+One of the biggest realizations I had today was this:
+
+> **HTTP is simply a conversation between two computers.**
+
+Nothing more.
+
+Nothing less.
+
+The client says something.
+
+The server replies.
+
+Every website on the internet is basically millions of these tiny conversations happening every second.
+
+For example:
+
+\`\`\`text
+Browser:
+
+"Can I have the homepage?"
+
+↓
+
+Server:
+
+"Sure! Here it is."
+\`\`\`
+
+Or:
+
+\`\`\`text
+Browser:
+
+"Can I log in with this email and password?"
+
+↓
+
+Server:
+
+"Yes, welcome back."
+
+or
+
+"No, your password is incorrect."
+\`\`\`
+
+Every request follows exactly the same communication pattern.
+
+---
+
+### Think of HTTP Like Sending a Letter
+
+Imagine you're sending a letter to a friend.
+
+A proper letter usually contains:
+
+* Who you're sending it to.
+* Information about the letter.
+* The actual message.
+
+HTTP works almost exactly the same way.
+
+Every HTTP request contains four parts.
+
+\`\`\`text
+Start Line
+
+↓
+
+Headers
+
+↓
+
+Blank Line
+
+↓
+
+Body
+\`\`\`
+
+Every response from the server follows a similar structure.
+
+Once you learn these four parts...
+
+Reading HTTP becomes almost like reading English.
+
+---
+
+## Part 1 — The Start Line
+
+The Start Line is basically the title of the request.
+
+It answers three questions immediately:
+
+1. What do you want?
+2. Where do you want it?
+3. Which HTTP version are you using?
+
+For example:
+
+\`\`\`http
+GET /users HTTP/1.1
+\`\`\`
+
+Let's break it down.
+
+### GET
+
+The HTTP Method.
+
+It tells the server what action we want.
+
+Examples include:
+
+\`\`\`text
+GET
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+\`\`\`
+
+We'll study these in detail later.
+
+---
+
+### /users
+
+This is the path.
+
+It tells the server which resource we're requesting.
+
+Example:
+
+\`\`\`text
+/users
+
+/products
+
+/login
+
+/api/tours
+\`\`\`
+
+Think of it like the destination address.
+
+---
+
+### HTTP/1.1
+
+Finally...
+
+The client tells the server which version of HTTP it's speaking.
+
+Examples:
+
+\`\`\`text
+HTTP/1.1
+
+HTTP/2
+
+HTTP/3
+\`\`\`
+
+Just like two people agree on a language before talking...
+
+Client and server agree on the HTTP version.
+
+---
+
+## Part 2 — Headers
+
+Headers are one of the most important parts of HTTP.
+
+When I first saw them...
+
+They looked like random text.
+
+Now I think of them as **metadata**.
+
+Metadata simply means:
+
+> Information about the request.
+
+Not the actual data.
+
+But information describing the data.
+
+Example:
+
+\`\`\`http
+Host: api.example.com
+
+User-Agent: Chrome
+
+Accept: application/json
+
+Authorization: Bearer eyJhb...
+\`\`\`
+
+Notice something interesting.
+
+None of these are the user's data.
+
+Instead they answer questions like:
+
+* Which website am I contacting?
+* Which browser sent this request?
+* What response format do I prefer?
+* Who is the current user?
+
+Headers provide context.
+
+---
+
+## Part 3 — The Blank Line
+
+This might sound funny...
+
+But the blank line is actually important.
+
+It separates:
+
+Headers
+
+from
+
+Body.
+
+Think of it like the empty space between the envelope and the letter inside.
+
+Without this separator...
+
+The server wouldn't know where the headers end and the body begins.
+
+Sometimes...
+
+The simplest parts are the most important.
+
+---
+
+## Part 4 — The Body
+
+Finally...
+
+We reach the actual content.
+
+The body contains the real data being sent.
+
+For example:
+
+Logging in.
+
+\`\`\`json
+{
+  "email": "belema@example.com",
+  "password": "********"
+}
+\`\`\`
+
+Creating a product.
+
+\`\`\`json
+{
+  "name": "Mechanical Keyboard",
+  "price": 120
+}
+\`\`\`
+
+Booking a tour.
+
+\`\`\`json
+{
+  "tourId": 5,
+  "date": "2026-08-10"
+}
+\`\`\`
+
+This is usually the information we care about most.
+
+---
+
+## A Complete HTTP Request
+
+Putting everything together:
+
+\`\`\`http
+POST /login HTTP/1.1
+Host: api.my-app.com
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "belema@example.com",
+  "password": "super-secret-password"
+}
+\`\`\`
+
+Now it doesn't look scary anymore.
+
+It simply says:
+
+\`\`\`text
+POST
+
+↓
+
+to /login
+
+↓
+
+I'm sending JSON
+
+↓
+
+Here's the data
+\`\`\`
+
+That's it.
+
+---
+
+## The Server Responds
+
+After reading the request...
+
+The server sends a response.
+
+Responses also contain four parts.
+
+\`\`\`text
+Status Line
+
+↓
+
+Headers
+
+↓
+
+Blank Line
+
+↓
+
+Body
+\`\`\`
+
+Very similar.
+
+But instead of saying what we want...
+
+The response says what happened.
+
+---
+
+## Response Status Line
+
+Example:
+
+\`\`\`http
+HTTP/1.1 200 OK
+\`\`\`
+
+Let's break it down.
+
+\`\`\`text
+HTTP Version
+
+↓
+
+Status Code
+
+↓
+
+Status Message
+\`\`\`
+
+Examples:
+
+\`\`\`text
+200 OK
+
+201 Created
+
+404 Not Found
+
+500 Internal Server Error
+\`\`\`
+
+We'll spend an entire section on these later because they're incredibly important for backend development.
+
+---
+
+## Response Headers
+
+Just like requests...
+
+Responses also have headers.
+
+Example:
+
+\`\`\`http
+Content-Type: application/json
+
+Cache-Control: no-cache
+
+Content-Length: 256
+\`\`\`
+
+These tell the browser things like:
+
+* What type of data is this?
+* Can I cache it?
+* How large is it?
+
+Again...
+
+They're metadata.
+
+---
+
+## Response Body
+
+Finally...
+
+The server returns the actual result.
+
+Success:
+
+\`\`\`json
+{
+  "message": "Login successful",
+  "token": "eyJhbGc..."
+}
+\`\`\`
+
+Failure:
+
+\`\`\`json
+{
+  "message": "Invalid email or password"
+}
+\`\`\`
+
+The browser reads this body and decides what to display to the user.
+
+---
+
+## Putting Everything Together
+
+Here's the complete conversation.
+
+\`\`\`http
+REQUEST
+
+POST /login HTTP/1.1
+
+Headers...
+
+Body...
+
+        ↓
+
+SERVER THINKS
+
+        ↓
+
+RESPONSE
+
+HTTP/1.1 200 OK
+
+Headers...
+
+Body...
+\`\`\`
+
+Every API you've ever called follows this same structure.
+
+Whether it's:
+
+* GitHub API
+* Stripe API
+* OpenAI API
+* Your NestJS backend
+
+Everything follows the HTTP message format.
+
+---
+
+## My Biggest Realization
+
+Before today...
+
+I thought an API request was basically:
+
+\`\`\`text
+URL
+
++
+
+JSON
+\`\`\`
+
+Now I understand it's much more organized.
+
+Every HTTP message is carefully structured.
+
+Each part has a specific responsibility.
+
+The start line explains the intention.
+
+Headers provide context.
+
+The blank line separates metadata from content.
+
+The body carries the actual information.
+
+Once I started seeing HTTP as a structured conversation instead of random text, debugging API requests suddenly became much easier.
+
+---
+
+## Checkpoint Questions
+
+### Which part of the request contains the actual data the user submits?
+
+The **Body** contains the actual data submitted by the user. For example, when logging in, the email and password are usually sent inside the request body as JSON.
+
+---
+
+### Which part of the response tells the browser if the request succeeded or failed?
+
+The **Status Line**, specifically the **HTTP Status Code**, tells the browser whether the request was successful or not. For example, \`200 OK\` indicates success, while \`404 Not Found\` or \`500 Internal Server Error\` indicate different types of failures.
+
+---
+
+> **Coming next:** Now that we know the structure of an HTTP message, it's time to zoom in on one of its most important parts—**Headers**. We'll explore the four categories of HTTP headers, what they do, who sends them, and why almost every modern web application depends on them.
+
+
+
+## Topic 2.2 — The 4 Types of HTTP Headers
+
+After understanding the structure of an HTTP request, one thing immediately caught my attention.
+
+Headers.
+
+At first, they looked like random key-value pairs.
+
+Whenever I opened Chrome DevTools, I would see things like:
+
+\`\`\`http
+Content-Type: application/json
+
+Authorization: Bearer eyJhb...
+
+Accept: application/json
+
+User-Agent: Chrome
+\`\`\`
+
+Honestly...
+
+I ignored them.
+
+I thought:
+
+> "The important part is the JSON body."
+
+Turns out...
+
+Headers are just as important as the body.
+
+Sometimes...
+
+They're even **more important**.
+
+Without headers:
+
+* Authentication wouldn't work.
+* Browsers wouldn't know how to interpret responses.
+* CORS wouldn't exist.
+* HTTPS security would be much weaker.
+* File downloads would behave incorrectly.
+
+I finally realized that headers are basically **the instructions attached to every HTTP message.**
+
+---
+
+### What Exactly Is a Header?
+
+Think about shipping a package.
+
+The box contains the product.
+
+But outside the box, you usually find labels like:
+
+* Fragile
+* This Side Up
+* Keep Refrigerated
+* Express Delivery
+
+Those labels are **not the product**.
+
+They simply describe **how the package should be handled**.
+
+HTTP headers work exactly the same way.
+
+The **body** is the package.
+
+The **headers** are the labels.
+
+They provide additional information about the request or response.
+
+---
+
+## Four Categories of Headers
+
+The speaker grouped headers into four major categories.
+
+\`\`\`text
+1. Request Headers
+
+2. General Headers
+
+3. Representation (Entity) Headers
+
+4. Security Headers
+\`\`\`
+
+Each category solves a different problem.
+
+Let's go through them one by one.
+
+---
+
+## 1. Request Headers
+
+These are sent **from the client to the server**.
+
+Their job is to give the server more context.
+
+Imagine introducing yourself before asking a question.
+
+Example:
+
+\`\`\`http
+GET /users HTTP/1.1
+
+Authorization: Bearer eyJhb...
+
+Accept: application/json
+
+User-Agent: Chrome
+\`\`\`
+
+The server immediately learns:
+
+* Who is making the request?
+* What format does the client want?
+* Which browser is being used?
+
+Without even looking at the body.
+
+---
+
+### Authorization
+
+Probably the most important request header.
+
+Example:
+
+\`\`\`http
+Authorization: Bearer eyJhbGc...
+\`\`\`
+
+Whenever you log in...
+
+Your backend usually generates a JWT.
+
+Every future request sends that token.
+
+\`\`\`text
+Login
+
+↓
+
+Receive JWT
+
+↓
+
+Store JWT
+
+↓
+
+Send JWT on every request
+\`\`\`
+
+Your backend checks this header before allowing access.
+
+Without it...
+
+Protected routes wouldn't exist.
+
+---
+
+### Accept
+
+Example:
+
+\`\`\`http
+Accept: application/json
+\`\`\`
+
+The client tells the server:
+
+> "Please send JSON."
+
+Sometimes clients may request:
+
+* JSON
+* HTML
+* XML
+* Images
+
+The server chooses the best format.
+
+---
+
+### User-Agent
+
+Example:
+
+\`\`\`http
+User-Agent: Chrome
+\`\`\`
+
+This tells the server which browser or application made the request.
+
+Servers sometimes use this information to:
+
+* optimize responses
+* collect analytics
+* troubleshoot compatibility issues
+
+---
+
+## 2. General Headers
+
+General headers aren't specific to only requests or only responses.
+
+They can be used by both.
+
+Think of them as information relevant to the entire conversation.
+
+Examples include:
+
+\`\`\`http
+Date
+
+Connection
+
+Cache-Control
+\`\`\`
+
+---
+
+### Cache-Control
+
+Example:
+
+\`\`\`http
+Cache-Control: no-cache
+\`\`\`
+
+This tells browsers and proxies how caching should behave.
+
+Sometimes data changes frequently.
+
+Example:
+
+Bank balances.
+
+You never want a cached balance.
+
+Other times:
+
+Images or logos rarely change.
+
+Caching them improves performance dramatically.
+
+---
+
+### Connection
+
+Example:
+
+\`\`\`http
+Connection: keep-alive
+\`\`\`
+
+This tells the server:
+
+> "Let's keep this connection open."
+
+Instead of opening a new TCP connection for every request...
+
+The same connection can be reused.
+
+This improves performance.
+
+---
+
+## 3. Representation Headers
+
+These describe the actual data being transferred.
+
+Think of them as labels attached directly to the package itself.
+
+---
+
+### Content-Type
+
+One of the most common headers you'll ever see.
+
+Example:
+
+\`\`\`http
+Content-Type: application/json
+\`\`\`
+
+This tells the receiver:
+
+> "The body contains JSON."
+
+Other examples include:
+
+\`\`\`text
+application/json
+
+text/html
+
+image/png
+
+application/pdf
+\`\`\`
+
+Without Content-Type...
+
+The browser wouldn't know how to interpret the response.
+
+Imagine receiving bytes without knowing whether they're:
+
+* an image
+* a PDF
+* HTML
+* JSON
+
+Chaos.
+
+---
+
+### Content-Length
+
+Example:
+
+\`\`\`http
+Content-Length: 512
+\`\`\`
+
+This tells the receiver exactly how large the body is.
+
+The browser knows when it has received the complete response.
+
+---
+
+### Content-Encoding
+
+Sometimes data is compressed before transmission.
+
+Example:
+
+\`\`\`http
+Content-Encoding: gzip
+\`\`\`
+
+The browser automatically decompresses it.
+
+Smaller responses mean:
+
+Faster websites.
+
+---
+
+## 4. Security Headers
+
+These are some of the most important headers in modern web development.
+
+They don't transfer business data.
+
+Instead...
+
+They protect users.
+
+---
+
+### Content-Security-Policy (CSP)
+
+This header tells the browser:
+
+> "Only load JavaScript from trusted sources."
+
+Example:
+
+\`\`\`http
+Content-Security-Policy:
+default-src 'self'
+\`\`\`
+
+This helps prevent one of the web's biggest attacks:
+
+Cross-Site Scripting (XSS).
+
+Without CSP...
+
+Malicious JavaScript could potentially execute inside your website.
+
+---
+
+### Strict-Transport-Security (HSTS)
+
+Example:
+
+\`\`\`http
+Strict-Transport-Security:
+max-age=31536000
+\`\`\`
+
+This tells browsers:
+
+> "Always use HTTPS."
+
+Even if someone types:
+
+\`\`\`text
+http://example.com
+\`\`\`
+
+The browser automatically upgrades it to HTTPS.
+
+Safer.
+
+More secure.
+
+---
+
+### X-Frame-Options
+
+Example:
+
+\`\`\`http
+X-Frame-Options: DENY
+\`\`\`
+
+This prevents other websites from embedding your pages inside an \`<iframe>\`.
+
+It protects against:
+
+Clickjacking attacks.
+
+---
+
+### X-Content-Type-Options
+
+Example:
+
+\`\`\`http
+X-Content-Type-Options: nosniff
+\`\`\`
+
+This tells browsers:
+
+> "Trust the Content-Type header."
+
+Don't guess.
+
+This prevents certain types of content spoofing attacks.
+
+---
+
+## Why So Many Headers?
+
+When I first saw dozens of headers...
+
+I thought:
+
+> "Why make HTTP so complicated?"
+
+Now I understand.
+
+Headers keep HTTP flexible.
+
+Instead of changing the protocol every time we invent a new feature...
+
+We simply add another header.
+
+That's one reason HTTP has survived for decades.
+
+It's incredibly extensible.
+
+---
+
+## Example Response
+
+Imagine our backend returns:
+
+\`\`\`http
+HTTP/1.1 200 OK
+
+Content-Type: application/json
+
+Cache-Control: no-cache
+
+Content-Length: 154
+
+Content-Security-Policy: default-src 'self'
+
+{
+   "message":"Login successful"
+}
+\`\`\`
+
+Even before reading the body...
+
+The browser already knows:
+
+* The request succeeded.
+* The response is JSON.
+* Don't cache it.
+* Only trusted scripts may execute.
+
+That's powerful.
+
+---
+
+## My Biggest Realization
+
+Today I stopped thinking of headers as "extra information."
+
+They're actually **instructions**.
+
+Some instruct the server.
+
+Some instruct the browser.
+
+Some improve performance.
+
+Some improve security.
+
+Some identify users.
+
+Without headers...
+
+Modern web applications simply wouldn't function the way they do today.
+
+---
+
+## Checkpoint Questions
+
+### Which header does your backend read to authenticate a user?
+
+Typically the **Authorization** header.
+
+Example:
+
+\`\`\`http
+Authorization: Bearer eyJhbGc...
+\`\`\`
+
+The backend extracts the JWT or access token from this header, verifies it, and determines whether the user is authenticated.
+
+---
+
+### Which header does your backend set to tell the client that it is returning JSON?
+
+The **Content-Type** response header.
+
+Example:
+
+\`\`\`http
+Content-Type: application/json
+\`\`\`
+
+This tells the client how to interpret the response body.
+
+---
+
+### What happens if you forget to set Content-Security-Policy?
+
+Your application becomes more vulnerable to attacks such as **Cross-Site Scripting (XSS)**. Without a CSP, browsers have fewer restrictions on which scripts can execute, making it easier for malicious code to run if it gets injected into your page.
+
+---
+
+> **Coming next:** We've explored how HTTP messages are structured and how headers provide context and instructions. Now it's time to look at the actions themselves—the famous HTTP methods: **GET, POST, PUT, PATCH, and DELETE**, and why choosing the wrong one can lead to confusing APIs and unexpected bugs.
+
+
+## Topic 2.3 — HTTP Methods (The Verbs of the Web)
+
+After understanding the structure of an HTTP request and learning about headers, another question naturally came to mind.
+
+If every request has a **Start Line**, and that Start Line begins with words like:
+
+\`\`\`http
+GET /users
+
+POST /login
+
+PUT /users/1
+
+DELETE /posts/10
+\`\`\`
+
+What do those words actually mean?
+
+Why can't we just use **POST** for everything?
+
+Or **GET** for everything?
+
+Turns out...
+
+Those first words are one of the most important parts of HTTP.
+
+They're called **HTTP Methods**, or sometimes **HTTP Verbs**.
+
+Just like verbs in English describe actions (run, eat, write, sleep), HTTP methods describe **what action we want the server to perform**.
+
+Without them...
+
+The server wouldn't know what we're trying to do.
+
+---
+
+## Think of the Backend Like a Library
+
+Imagine walking into a library.
+
+You could ask the librarian to:
+
+* Show you a book.
+* Add a new book.
+* Update information about a book.
+* Remove a book.
+
+Notice something...
+
+The building is the same.
+
+The books are the same.
+
+Only **your intention changes**.
+
+HTTP methods work exactly like that.
+
+The URL identifies **which resource** we're talking about.
+
+The HTTP method tells the server **what we want to do with that resource**.
+
+---
+
+## The Big Five
+
+Although HTTP defines many methods, backend developers spend most of their lives using these five.
+
+\`\`\`text
+GET
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+\`\`\`
+
+The speaker called these the "Big Five."
+
+If you understand these five really well...
+
+You'll understand most REST APIs.
+
+---
+
+## GET — "Give Me Something"
+
+GET is the most common HTTP method.
+
+Its job is simple:
+
+> **Retrieve data.**
+
+Nothing more.
+
+Nothing less.
+
+Example:
+
+\`\`\`http
+GET /users
+\`\`\`
+
+Translation:
+
+> "Dear server...
+
+Can you please give me all users?"
+
+Or:
+
+\`\`\`http
+GET /users/25
+\`\`\`
+
+Translation:
+
+> "Please give me the user whose ID is 25."
+
+GET should never modify anything.
+
+It only asks for information.
+
+Think of GET like opening a book in a library.
+
+Reading doesn't change the book.
+
+---
+
+### SQL Comparison
+
+When using GET...
+
+The backend usually performs something like:
+
+\`\`\`sql
+SELECT * FROM users;
+\`\`\`
+
+GET maps nicely to:
+
+\`\`\`text
+SELECT
+\`\`\`
+
+---
+
+## POST — "Create Something"
+
+POST is used when we want to create a new resource.
+
+Example:
+
+\`\`\`http
+POST /users
+\`\`\`
+
+Body:
+
+\`\`\`json
+{
+  "name": "Belema",
+  "email": "belema@example.com"
+}
+\`\`\`
+
+Translation:
+
+> "Please create a new user using this data."
+
+The backend receives the request...
+
+Validates the information...
+
+Saves it to the database...
+
+Returns the newly created user.
+
+---
+
+### SQL Comparison
+
+POST usually maps to:
+
+\`\`\`sql
+INSERT INTO users...
+\`\`\`
+
+Simple.
+
+---
+
+## PUT — "Replace Everything"
+
+PUT confused me at first.
+
+I thought:
+
+> "Isn't PUT just another UPDATE?"
+
+Not exactly.
+
+PUT means:
+
+> **Replace the entire resource.**
+
+Imagine we currently have:
+
+\`\`\`json
+{
+  "name": "Belema",
+  "email": "belema@example.com",
+  "age": 22
+}
+\`\`\`
+
+Now we send:
+
+\`\`\`http
+PUT /users/1
+\`\`\`
+
+Body:
+
+\`\`\`json
+{
+  "name": "Bella",
+  "email": "bella@example.com",
+  "age": 23
+}
+\`\`\`
+
+The server replaces the whole user.
+
+Everything becomes the new version.
+
+Think of PUT like replacing an old document with a completely new one.
+
+---
+
+## PATCH — "Change Only This"
+
+PATCH is more precise.
+
+Instead of replacing everything...
+
+It updates only specific fields.
+
+Example:
+
+\`\`\`http
+PATCH /users/1
+\`\`\`
+
+Body:
+
+\`\`\`json
+{
+  "age": 23
+}
+\`\`\`
+
+Nothing else changes.
+
+Only the age.
+
+Imagine editing one sentence in a Word document.
+
+You don't rewrite the whole document.
+
+You simply modify one small section.
+
+That's PATCH.
+
+---
+
+## DELETE — "Remove It"
+
+DELETE is exactly what it sounds like.
+
+Example:
+
+\`\`\`http
+DELETE /users/1
+\`\`\`
+
+Translation:
+
+> "Please remove user number 1."
+
+The backend checks:
+
+* Does the user exist?
+* Do you have permission?
+* Is deletion allowed?
+
+If everything is okay...
+
+The user disappears from the database.
+
+---
+
+## CRUD Makes Everything Easier
+
+Suddenly...
+
+Everything clicked.
+
+These HTTP methods map almost perfectly to CRUD.
+
+| CRUD             | HTTP   | SQL    |
+| ---------------- | ------ | ------ |
+| Create           | POST   | INSERT |
+| Read             | GET    | SELECT |
+| Update (Replace) | PUT    | UPDATE |
+| Update (Partial) | PATCH  | UPDATE |
+| Delete           | DELETE | DELETE |
+
+This table became one of my favorite mental models.
+
+Whenever I build an API...
+
+I immediately know which HTTP method belongs to which database operation.
+
+---
+
+### Why Not Just Use POST?
+
+This question crossed my mind immediately.
+
+Technically...
+
+You *could* use POST for everything.
+
+Example:
+
+\`\`\`http
+POST /delete-user
+
+POST /update-user
+
+POST /get-users
+\`\`\`
+
+Would it work?
+
+Probably.
+
+Should you do it?
+
+Definitely not.
+
+Why?
+
+Because HTTP methods have meaning.
+
+Other developers expect:
+
+GET → Read
+
+POST → Create
+
+PUT → Replace
+
+PATCH → Update
+
+DELETE → Remove
+
+Using POST for everything makes your API confusing.
+
+Good APIs are predictable.
+
+---
+
+### GET Requests Shouldn't Change Data
+
+This is a very important rule.
+
+Imagine opening a webpage.
+
+The browser automatically sends:
+
+\`\`\`http
+GET /products
+\`\`\`
+
+If GET deleted products...
+
+Refreshing the page could accidentally destroy data.
+
+That's why GET must remain safe.
+
+It should never modify the server.
+
+Reading should not have side effects.
+
+---
+
+### PUT vs PATCH
+
+This was the biggest confusion for me.
+
+Now I think of it like this.
+
+PUT says:
+
+> "Here's the new version."
+
+PATCH says:
+
+> "Only change this."
+
+Example.
+
+Current user:
+
+\`\`\`json
+{
+  "name": "Belema",
+  "age": 22,
+  "city": "Addis Ababa"
+}
+\`\`\`
+
+PUT:
+
+\`\`\`json
+{
+  "name": "Bella",
+  "age": 23,
+  "city": "Adama"
+}
+\`\`\`
+
+Entire object replaced.
+
+PATCH:
+
+\`\`\`json
+{
+  "city": "Adama"
+}
+\`\`\`
+
+Only one field changes.
+
+Everything else stays exactly the same.
+
+---
+
+## Real Example (NestJS)
+
+Imagine our Tour API.
+
+\`\`\`http
+GET /tours
+\`\`\`
+
+Return all tours.
+
+---
+
+\`\`\`http
+POST /tours
+\`\`\`
+
+Create a new tour.
+
+---
+
+\`\`\`http
+PUT /tours/5
+\`\`\`
+
+Replace Tour #5 completely.
+
+---
+
+\`\`\`http
+PATCH /tours/5
+\`\`\`
+
+Update only the price.
+
+---
+
+\`\`\`http
+DELETE /tours/5
+\`\`\`
+
+Remove Tour #5.
+
+This feels so clean and predictable.
+
+That's exactly why REST became popular.
+
+---
+
+## My Biggest Realization
+
+Before today...
+
+I thought HTTP methods were just random keywords.
+
+Now I see them as the **language of REST APIs**.
+
+They communicate intent.
+
+The URL answers:
+
+> "Which resource?"
+
+The HTTP method answers:
+
+> "What should I do with it?"
+
+Once you combine those two...
+
+Your API becomes self-explanatory.
+
+---
+
+## Checkpoint Questions
+
+### Why should a GET request never have a body?
+
+Because GET is designed to retrieve data, not send new data to the server. Many servers, proxies, and browsers ignore GET request bodies entirely, and including one can lead to inconsistent behavior. The information needed for a GET request should typically be passed in the URL (path or query parameters), not in the body.
+
+---
+
+### If you use POST to update a resource, what are you doing wrong?
+
+You're ignoring the semantic meaning of HTTP methods. POST is intended for creating new resources, while updating existing resources should use **PUT** (for full replacement) or **PATCH** (for partial updates). Using POST for updates makes your API less predictable and harder for other developers to understand.
+
+---
+
+### What is the difference between \`PUT /users/123\` and \`PATCH /users/123\`?
+
+\`PUT\` replaces the entire resource. The client is expected to send the complete new representation of the user.
+
+\`PATCH\` modifies only the fields included in the request, leaving all other fields unchanged.
+
+---
+
+> **Coming next:** Every HTTP response includes a status code that tells the client what happened. Think of them as the server's emotions—or its **mood ring**. We'll explore the five status code families and learn why understanding them is one of the most valuable skills for every backend developer.`,
+  },
+  {
     title: "Day 2 — Learning Backend from First Principles (Part 1)",
     slug: "backend-first-principles-day-2-part-1",
     description:
