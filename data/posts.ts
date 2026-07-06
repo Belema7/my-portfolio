@@ -2,6 +2,509 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 2 — Learning Backend from First Principles (Part 6)",
+    slug: "backend-first-principles-day-2-part-6",
+    description: "Content Negotiation, Accept Headers, MIME Types, the Vary Header, and Compression (Gzip vs Brotli).",
+    category: "Learning Journey",
+    date: "2026-07-09",
+    readingTime: "11 min read",
+    content: `# Backend from First Principles — Day 2 (Part 6)
+
+# Content Negotiation & Compression
+
+> *"When I first learned HTTP, I thought a browser simply asked a server for a webpage, and the server returned it. Today's lesson completely changed that idea. I discovered that browsers don't just request data—they negotiate with the server to decide what kind of data they want and the best way to receive it."*
+
+---
+
+## Introduction
+
+Over the past few parts, I've gradually built a deeper understanding of how HTTP works.
+I started by learning how requests travel across the internet.
+Then I explored:
+- Networking protocols
+- The OSI Model
+- TCP vs UDP
+- HTTP Requests & Responses
+- Headers
+- Methods
+- Status Codes
+- Statelessness
+- Idempotency
+- CORS
+- Security Headers
+- Browser Caching
+- React Query
+
+By this point, I felt like I had a solid understanding of how browsers and servers communicate.
+Then today's lesson introduced another idea that I had never really thought about.
+
+> **Does the server always send the exact same response to everyone?**
+
+At first, my answer was:
+> "Of course."
+
+If everyone requests:
+\`\`\`text
+GET /products
+\`\`\`
+Shouldn't everyone receive exactly the same response?
+
+Surprisingly... Not always.
+The response you receive may depend on:
+- The language you speak.
+- The file format you understand.
+- Whether your browser supports Brotli compression.
+- Whether your device prefers images like WebP or AVIF.
+- Even the capabilities of your browser.
+
+In other words... The browser and the server have a conversation **before** deciding what data should actually be returned.
+That conversation is called **Content Negotiation**.
+
+---
+
+## Topic 6.1 — Content Negotiation
+
+One sentence from today's lesson immediately stood out to me.
+> **The client doesn't just ask for data—it tells the server what it is capable of understanding.**
+
+That idea completely changed the way I think about HTTP requests.
+I used to imagine the conversation like this:
+\`\`\`text
+Browser → "Give me the homepage." → Server → "Here it is."
+\`\`\`
+Simple. But real HTTP communication is much richer than that.
+The browser actually says something closer to this:
+> "I'd like the homepage. I understand JSON. I support Brotli compression. I prefer English. If possible, send me the best version."
+
+Only then does the server decide what to send back.
+
+---
+
+### A Restaurant Analogy
+
+The instructor used an analogy that made everything click.
+Imagine walking into an international restaurant. The waiter asks: "What would you like?"
+You don't simply answer: "Food."
+Instead, you provide preferences. For example: Not spicy, Vegetarian, No peanuts, Cold drink.
+
+The restaurant prepares a meal that matches your preferences.
+The same thing happens in HTTP. The browser doesn't simply ask for data. It also sends information about what it prefers. The server tries to satisfy those preferences whenever possible.
+That's content negotiation.
+
+---
+
+### Why Does Content Negotiation Exist?
+
+Imagine the internet without content negotiation. Every browser would receive exactly the same response.
+That sounds simple... until you consider how different users are.
+
+For example, one user speaks English, another speaks French, another speaks Spanish. Should everyone receive English? Probably not.
+Or imagine one browser supports modern image formats like WebP or AVIF, while another only understands JPEG. Should the server always send JPEG? That would work, but it wouldn't be the most efficient solution.
+
+Instead... the browser tells the server what it supports. The server responds with the best available option. Everybody wins.
+
+---
+
+### It's Really a Conversation
+
+One thing I love about HTTP is that it's not just a request-response protocol. It's also a negotiation protocol.
+Imagine two people trying to communicate.
+Person A asks: "Can you speak English?" Person B replies: "Yes." Conversation begins.
+Or: Person A asks: "Can you read French?" Person B replies: "No." They choose another language.
+
+HTTP works almost exactly the same way. The client advertises its capabilities. The server chooses the best response it can provide.
+
+---
+
+### Real Examples of Negotiation
+
+There are many things that browsers and servers negotiate. For example:
+
+**Response Format**
+The browser might say: "I want JSON."
+The server returns:
+\`\`\`json
+{
+  "name": "Belema"
+}
+\`\`\`
+Another client may ask for XML instead. The server can return:
+\`\`\`xml
+<user>
+  <name>Belema</name>
+</user>
+\`\`\`
+Same resource. Different representation.
+
+**Language**
+Suppose your website supports multiple languages. A browser configured for Ethiopia might prefer English. Another browser configured for France may prefer French. The server can return the exact same webpage... but translated into different languages. The URL never changes. Only the representation changes.
+
+**Image Formats**
+Modern browsers support newer image formats like WebP and AVIF. Older browsers might only support PNG and JPEG. Instead of always sending PNG... the server can send AVIF to browsers that support it. The image looks the same, but the file is much smaller. Better performance.
+
+**Compression**
+Another browser might say: "I understand Brotli compression." Another might only support Gzip. The server chooses whichever compression both sides understand.
+
+---
+
+### One Resource, Many Representations
+
+This idea was probably the biggest takeaway for me.
+Imagine this endpoint: \`/api/products\`
+It doesn't necessarily have only one response. Depending on the request... the server may return:
+- JSON
+- XML
+- English
+- French
+- Brotli-compressed
+- Gzip-compressed
+
+The resource stays the same. Only its **representation** changes.
+That's why it's called **Content Negotiation**. The content is negotiated before it's delivered.
+
+---
+
+### Who Starts the Negotiation?
+
+Does the server ask the browser what it wants? Actually... No.
+The browser starts the conversation. Every HTTP request already contains information about its preferences.
+Those preferences are communicated through special headers like \`Accept\`, \`Accept-Encoding\`, and \`Accept-Language\`.
+The server reads those headers. Then decides what to send.
+
+---
+
+### Why Backend Developers Should Care
+
+At first glance, content negotiation feels like something browsers handle automatically. But backend developers interact with it all the time.
+Imagine building a REST API. One client may expect \`application/json\`. Another system may still expect \`application/xml\`.
+Or imagine serving users from different countries. Your backend might return English, French, Spanish, or Arabic depending on what the client requests.
+The same endpoint can serve different users in different ways without changing the URL.
+Understanding content negotiation helps backend developers build APIs that are more flexible, efficient, and user-friendly.
+
+---
+
+### My Biggest Realization
+
+Before today... I thought HTTP requests were simply asking: "Please send me this resource."
+Now I understand they're actually saying something much richer. A browser doesn't just request data. It also introduces itself.
+It tells the server what formats it understands, which languages it prefers, which compression algorithms it supports, and sometimes even what image formats it can display.
+The server then chooses the best possible representation based on those capabilities.
+That negotiation happens so quickly that most users never notice it. But it's happening on almost every modern website.
+
+---
+
+## Topic 6.2 — Accept Headers: How Browsers Tell Servers What They Want
+
+How does the browser actually communicate its preferences?
+It uses **HTTP Headers**. Specifically, a family of headers called **Accept Headers**.
+
+### What Are Accept Headers?
+
+Accept Headers are request headers that tell the server:
+> **"These are the formats and capabilities I support."**
+
+Instead of forcing the server to guess... the browser simply introduces itself.
+Imagine meeting someone who speaks multiple languages. Before starting a conversation, you might say: "I speak English and French." Now the other person knows which language to use.
+That's exactly what Accept Headers do.
+
+### The Four Most Common Accept Headers
+
+\`\`\`text
+Accept → Accept-Encoding → Accept-Language → Accept-Charset
+\`\`\`
+Each one negotiates something different.
+
+---
+
+### Accept — What Type of Data Do You Want?
+
+The first and most common header is simply:
+\`\`\`http
+Accept: application/json
+\`\`\`
+Translation: "Please send me JSON."
+
+If the browser sends \`Accept: application/json\`, the server responds with \`Content-Type: application/json\`.
+But another client might send \`Accept: application/xml\`. Now the same endpoint could respond with \`Content-Type: application/xml\`.
+Same URL. Different representation.
+
+---
+
+### What Are MIME Types?
+
+A MIME Type tells computers:
+> **"This is the kind of data I'm sending."**
+
+Examples:
+\`text/html\`, \`application/json\`, \`application/xml\`, \`image/png\`, \`image/jpeg\`, \`application/pdf\`, \`text/css\`, \`application/javascript\`
+
+Whenever a browser receives data... the MIME Type tells it how that data should be handled.
+For example, if the server sends \`Content-Type: application/json\`, the browser knows: "This response contains JSON."
+Without MIME Types... the browser wouldn't know whether it received HTML, JavaScript, JSON, an image, or a PDF.
+
+---
+
+### Accept-Encoding — How Should the Data Be Compressed?
+
+Example:
+\`\`\`http
+Accept-Encoding: br, gzip, deflate
+\`\`\`
+Translation: "I understand these compression algorithms."
+
+Notice something. The browser isn't requesting different data. It's requesting **the same data in a smaller form**.
+Suppose the server supports Brotli. Instead of sending 500 KB, it might send 120 KB compressed using Brotli.
+The browser automatically decompresses it after receiving it. The user never notices. But the page loads much faster.
+
+---
+
+### Accept-Language — Which Language Do You Prefer?
+
+The browser may send:
+\`\`\`http
+Accept-Language: en-US,en;q=0.9
+\`\`\`
+Translation: "I prefer American English. If that's unavailable, regular English is fine."
+
+Another browser in France might send:
+\`\`\`http
+Accept-Language: fr-FR
+\`\`\`
+The backend can now return the same webpage... but translated into French.
+
+### What Does "q=0.9" Mean?
+The letter **q** stands for **Quality Factor**. Think of it as a ranking.
+\`\`\`text
+en-US → Highest Preference | en → Second Choice
+\`\`\`
+If the server can't provide American English... it falls back to regular English. The browser isn't just saying: "I support these languages." It's saying: "Here's the order I prefer them."
+
+---
+
+### Accept-Charset
+
+Example:
+\`\`\`http
+Accept-Charset: utf-8
+\`\`\`
+This tells the server which character encoding the client understands. Historically, this mattered much more because multiple character encodings were common. Today... almost every modern web application uses UTF-8, which supports text from languages all over the world.
+
+---
+
+### A Complete Negotiation Example
+
+Let's imagine a browser requesting the homepage:
+\`\`\`http
+GET / HTTP/1.1
+Accept: text/html
+Accept-Encoding: br, gzip
+Accept-Language: en-US
+Accept-Charset: utf-8
+\`\`\`
+
+The server reads those headers and decides:
+- Return HTML.
+- Compress it using Brotli.
+- Serve the English version.
+- Encode the text using UTF-8.
+
+Then it responds:
+\`\`\`http
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Encoding: br
+Content-Language: en-US
+\`\`\`
+Everything happened automatically.
+
+---
+
+### What Happens If the Server Can't Satisfy the Request?
+
+Imagine the browser says \`Accept: application/xml\`, but the server only knows how to return JSON.
+HTTP has a status code specifically for this situation.
+
+### 406 Not Acceptable
+This status code means: "I understood your request. But I can't produce a response matching the formats you asked for."
+In practice, many APIs simply return JSON anyway. But understanding \`406\` helps explain how HTTP negotiation is supposed to work.
+
+---
+
+### Where You'll See These Headers
+
+These headers are everywhere. Open your browser's Developer Tools. Inspect almost any request. You'll probably see \`Accept\`, \`Accept-Encoding\`, \`Accept-Language\`.
+The browser has been sending these headers all along. I just never noticed them. Now... I know exactly what they're doing.
+
+---
+
+## Topic 6.3 — The Vary Header: Teaching Caches When Responses Are Different
+
+If the same URL can return different responses, how does the browser know which version to cache?
+Imagine visiting \`/products\`. The server returns the page in English. Another user visits the exact same URL, but they prefer French. The server returns French.
+Now imagine the cache accidentally gives the French page to the English user. That would be a disaster.
+
+There has to be a way to tell caches: **"These responses are different."**
+That's exactly what the **Vary** header does.
+
+---
+
+### Why Do We Need the Vary Header?
+
+A browser sends: \`GET /home\` with \`Accept-Language: en-US\`. The server responds: "Welcome!"
+A second browser sends: \`GET /home\` with \`Accept-Language: fr-FR\`. The server responds: "Bienvenue !"
+The URL is identical, but the content is different. Without extra information... a cache only sees \`/home\`. It has no idea that language matters.
+
+### The Problem Without Vary
+The browser caches: \`GET /home → Welcome!\`
+Now a French visitor requests \`GET /home\`. The cache says: "I already have this page." And returns "Welcome!" instead of "Bienvenue !". The cache wasn't trying to be wrong. It simply didn't know that language affected the response.
+
+### Enter the Vary Header
+The backend can solve this problem with one header:
+\`\`\`http
+Vary: Accept-Language
+\`\`\`
+Translation: "Don't cache this response based only on the URL. Also consider Accept-Language."
+
+---
+
+### Think About Name Tags
+
+Imagine attending an international conference. Everyone wears a name tag that also shows English, French, or Spanish.
+If you ignored the language badge... you might give the wrong translation to someone.
+The **Vary** header acts like that badge. It tells caches: "This response depends on additional information."
+
+### Vary Doesn't Change the Response
+Vary doesn't change the content. The response body stays exactly the same. Instead... \`Vary\` changes **how caches store responses**. Think of it as instructions for the cache rather than instructions for the browser.
+
+---
+
+### Vary: Accept-Language
+English browser sends \`Accept-Language: en-US\`. Server responds with \`Vary: Accept-Language\`.
+Later... French browser sends \`Accept-Language: fr-FR\`. Because of \`Vary: Accept-Language\`, the cache understands: "These are different versions." It stores both. Problem solved.
+
+### Vary: Accept-Encoding
+Language isn't the only thing that can change. Browser A supports Brotli. Browser B supports Gzip. Same URL, different response. Without \`Vary: Accept-Encoding\`, the cache might accidentally give Gzip data to a browser expecting Brotli.
+
+### CDN Caches Need This Too
+A CDN may serve millions of users. If it doesn't know that language or compression changes the response... it may deliver the wrong version to thousands of people. That's why CDNs pay close attention to the \`Vary\` header.
+
+---
+
+### Why Not Create Different URLs?
+
+Instead of using \`/home\`, why not create \`/home-en\` and \`/home-fr\`?
+Sometimes that's perfectly fine. But many applications prefer keeping a single URL. Content negotiation allows one URL, multiple representations. The \`Vary\` header simply tells caches how to distinguish those representations.
+
+### How Caches Think
+Without Vary: \`URL → Response\`
+With Vary: \`URL + Selected Request Headers → Response\`
+The cache now understands that the same URL can legitimately produce different responses.
+
+---
+
+## Topic 6.4 — Compression: Sending Less, Delivering Faster
+
+Why compress data at all? Why doesn't the server simply send the original HTML, CSS, JavaScript, or JSON exactly as it exists?
+Because sending **less data** is almost always faster than sending **more data**.
+
+### What is Compression?
+Compression is the process of reducing the size of data before sending it across the network.
+Think about sending a large package. If you have a huge blanket and throw it into a box, it takes up lots of space. But if you vacuum-seal it... the package becomes much smaller. The blanket hasn't changed. Only its size.
+
+### Why Compress Data?
+Imagine a JavaScript file: \`app.js → 1 MB\`.
+Now suppose compression reduces it: \`1 MB → 250 KB\`.
+The browser still receives the exact same JavaScript. The only difference is less bandwidth, faster downloads, faster page loads, and lower server costs.
+
+### A Delivery Truck Analogy
+Without compression: \`100 Boxes → 100 Trips\`.
+With compression: \`100 Boxes → 20 Trips\`.
+The destination doesn't change. The contents don't change. Only the amount of space required changes.
+
+---
+
+### Compression Happens Automatically
+
+The browser sends: \`Accept-Encoding: br, gzip, deflate\`
+The server checks which algorithms it supports, chooses one, and responds: \`Content-Encoding: br\`
+The response body is compressed. The browser automatically decompresses it. To the user... everything looks normal. Most people never realize compression happened.
+
+---
+
+### Gzip — The Classic Standard
+For many years, **Gzip** has been the most widely used compression algorithm. It's fast, reliable, and supported by virtually every browser.
+
+### Brotli — The Modern Champion
+Later, Google introduced **Brotli**. Brotli generally achieves better compression and smaller file sizes, especially for HTML, CSS, and JavaScript.
+Example comparison:
+Original: \`800 KB\`
+Gzip: \`800 KB → 220 KB\`
+Brotli: \`800 KB → 180 KB\`
+Across millions of users, it saves enormous amounts of bandwidth.
+
+### Deflate
+Deflate is another compression algorithm. Historically it was more common. Today, Gzip is still extremely common, Brotli is becoming the preferred choice, and Deflate exists mainly for compatibility with older systems.
+
+---
+
+### How Does the Server Choose?
+The server checks the \`Accept-Encoding\` header. Can I use Brotli? Yes. Send Brotli. If not Brotli... maybe Gzip. If not Gzip... maybe Deflate. If none... send uncompressed. The client advertises its capabilities, and the server chooses the best available option.
+
+### What Gets Compressed?
+Text-based files compress extremely well: HTML, CSS, JavaScript, JSON, SVG. Compression algorithms recognize repetition in text and encode it much more efficiently.
+
+### What Usually Doesn't Need Compression?
+Some files are already compressed: JPEG, PNG, MP4, MP3, ZIP. Trying to compress them again often produces little improvement and wastes CPU time.
+
+---
+
+### A Real Example
+Imagine requesting an API endpoint that returns JSON data.
+Without compression: \`Response Size → 120 KB\`
+With Brotli: \`Response Size → 35 KB\`
+Same information. Much less data traveling across the internet.
+
+### Why Compression Matters Even More on Mobile
+Not everyone has fiber internet or unlimited bandwidth. Many users browse using mobile data, weak signals, and slow connections. Reducing every response from \`500 KB → 120 KB\` can dramatically improve the user experience. Compression isn't just about performance. It's also about accessibility.
+
+### Compression Isn't Encryption
+Does compression make my data secure? No. Compression only reduces size. Encryption protects confidentiality. HTTPS encrypts your traffic. Gzip compresses it. They're completely different technologies.
+
+---
+
+## Part 6 Complete!
+
+## Final Summary
+
+When I first started learning HTTP, I thought the communication was simple: The browser sends a request. The server sends a response.
+After today's lesson, I realized that before the server sends anything, the browser and the server first **negotiate**. They discuss format, language, compression, and the best version matching the client's capabilities. That negotiation happens automatically and has an enormous impact on performance and user experience.
+
+### Content Negotiation
+The browser actually says something closer to: "I'd like this page. I understand JSON. I prefer English. I support Brotli compression. Please send me the best version." The server chooses the most appropriate response.
+
+### Accept Headers and MIME Types
+Browsers openly advertise capabilities through Accept Headers. The server explicitly states the data type using MIME Types like \`Content-Type: application/json\`.
+
+### The Vary Header
+Caches need to know that the same URL can legitimately produce different responses. The \`Vary\` header prevents caches from delivering the wrong representation (like sending a French page to an English user).
+
+### Compression (Gzip vs Brotli)
+Performance often begins before the response leaves the server. The server compresses data into much smaller packages. Brotli can often compress text files even more efficiently than Gzip, saving enormous amounts of bandwidth every single day.
+
+---
+
+## What I Learned Today
+
+1. **HTTP Is a Negotiation Protocol**: Browsers communicate their capabilities. Servers respond with the best representation.
+2. **Headers Carry More Than Metadata**: Headers tell the server what format is understood, which language is preferred, and which compression is supported.
+3. **The Same URL Can Return Different Responses**: The resource stays the same. Only its representation changes.
+4. **Caches Need Instructions Too**: The \`Vary\` header ensures caches store the correct version of each response.
+5. **Performance Starts Before the Response Leaves the Server**: Compression reduces the amount of data transferred, benefiting users, servers, and networks alike.
+
+With every article, the web feels less like a black box and more like a carefully engineered system where every protocol, header, and optimization exists for a reason. See you in **Day 2 – Part 7**.`,
+  },
+
+  {
     title: "Day 2 — Learning Backend from First Principles (Part 5)",
     slug: "backend-first-principles-day-2-part-5",
     description: "HTTP Performance, Caching, and Client-Side Data. Why browsers and React Query cache different things, and how stale-while-revalidate works.",
