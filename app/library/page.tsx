@@ -24,11 +24,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   return (
     <div className="section">
       <Container>
-        <SectionHeader
-          title="Library"
-          subtitle="A collection of my writing, learning notes, books, quotes, and media reflections."
-          align="center"
-        />
+
         <LibraryTabs activeTab={activeTab} />
       </Container>
 
