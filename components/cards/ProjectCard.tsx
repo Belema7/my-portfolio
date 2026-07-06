@@ -32,7 +32,7 @@ export function ProjectCard({ project }: { project: Project }) {
       </div>
 
       {/* ── Info ───────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col p-3.5">
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
         <h3
           className="text-[1.1rem] leading-none text-[var(--color-primary)] transition-opacity group-hover:opacity-70"
           style={{ fontFamily: '"Bebas Neue", sans-serif', letterSpacing: "0.03em" }}
@@ -40,12 +40,12 @@ export function ProjectCard({ project }: { project: Project }) {
           {title}
         </h3>
 
-        <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)] line-clamp-2 sm:line-clamp-none">
           {description}
         </p>
 
         {/* Problem block */}
-        <div className="mt-3 border-t border-[var(--color-border)] pt-3">
+        <div className="mt-3 hidden border-t border-[var(--color-border)] pt-3 sm:block">
           <p className="label-numbered mb-1">// Problem</p>
           <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">{problem}</p>
         </div>

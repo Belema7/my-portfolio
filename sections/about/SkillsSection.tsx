@@ -15,7 +15,7 @@ export function SkillsSection() {
           {skillCategories.map((cat) => (
             <div
               key={cat.name}
-              className="rounded-2xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-transparent"
+              className="rounded-2xl border border-[var(--color-border)] bg-white p-4 sm:p-6 shadow-sm dark:border-white/10 dark:bg-transparent"
             >
               <h3 className="mb-4 font-semibold text-[var(--color-primary)]">
                 {cat.name}
@@ -38,7 +38,7 @@ export function SkillsSection() {
           ).map(([label, skills]) => (
             <div
               key={label}
-              className="rounded-2xl border border-[var(--color-border)] bg-white p-6 dark:border-white/10 dark:bg-transparent"
+              className="rounded-2xl border border-[var(--color-border)] bg-white p-4 sm:p-6 dark:border-white/10 dark:bg-transparent"
             >
               <h3 className="mb-3 text-sm font-semibold text-[var(--color-accent)]">
                 {label}

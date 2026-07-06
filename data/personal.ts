@@ -50,7 +50,7 @@ export const personal = {
   ],
   contactCtaTitle: "Let's build something useful together",
   contactCta:
-    "I’m open to freelance projects, collaboration opportunities, and technical work involving modern web applications.",
+    "I’m open to freelance projects, collaboration, or discussing new digital products. Feel free to reach out.",
   story: {
     summary: `I am Belema Girma, a Full Stack Developer who builds clean, scalable, and practical digital products. I work across frontend, backend, and mobile development using tools like React, Next.js, Node.js, NestJS, PostgreSQL, and React Native.
 

@@ -15,8 +15,7 @@ export default function ContactPage() {
     <section className="section">
       <Container>
         <SectionHeader
-          title="Contact"
-          subtitle="Have a project, collaboration idea, or digital product you want to build?"
+          title="Have a project, collaboration idea, or digital product you want to build?"
           align="center"
         />
         <div className="grid gap-12 lg:grid-cols-2">
