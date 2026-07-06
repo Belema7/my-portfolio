@@ -2,6 +2,579 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 2 — Learning Backend from First Principles (Part 5)",
+    slug: "backend-first-principles-day-2-part-5",
+    description: "HTTP Performance, Caching, and Client-Side Data. Why browsers and React Query cache different things, and how stale-while-revalidate works.",
+    category: "Learning Journey",
+    date: "2026-07-08",
+    readingTime: "11 min read",
+    content: `# Backend from First Principles — Day 2 (Part 5)
+
+# HTTP Performance — Caching & Client-Side Data
+
+> *"The fastest HTTP request isn't the one that reaches the server the quickest—it's the one that never has to leave the browser."*
+
+---
+
+## Introduction
+
+Over the past few articles, I've learned how the web communicates.
+
+I started by understanding how requests travel across the internet.
+Then I explored:
+- Networking protocols
+- The OSI Model
+- TCP vs UDP
+- HTTP Requests and Responses
+- Headers
+- HTTP Methods
+- Status Codes
+- Statelessness
+- Idempotency
+- CORS
+- Security Headers
+
+At this point, I could explain how a browser communicates with a backend.
+But another question came to my mind.
+
+> **If every request travels across the internet, doesn't that make websites slow?**
+
+Imagine opening Instagram. Then refreshing. Then opening your profile. Then going back. Then opening it again.
+If every page and every API request had to travel all the way to the server every single time... websites would feel much slower than they do today.
+Yet somehow... modern applications feel incredibly fast.
+How?
+
+The answer is one of the most important performance techniques on the web:
+> **Caching.**
+
+---
+
+## What Is Caching?
+
+The simplest definition is:
+> **Caching means storing a copy of data so it can be reused later instead of fetching it again.**
+
+That's it.
+Instead of asking for the same information over and over again... we remember it. Then reuse it whenever possible.
+
+Caching exists almost everywhere in computing:
+- CPUs have caches.
+- Databases have caches.
+- Browsers have caches.
+- CDNs have caches.
+- Backend applications have caches.
+
+The basic idea is always the same:
+> **Store once. Reuse many times.**
+
+---
+
+## Think About Borrowing a Book
+
+Imagine you're studying for an exam. Every morning, you need the same programming book. You have two options.
+
+### Option 1
+Walk to the library. Borrow the book. Study. Return it. Repeat every single day.
+\`\`\`text
+Home → Library → Borrow Book → Study → Return Book
+\`\`\`
+That works. But it's slow.
+
+### Option 2
+Borrow the book once. Keep it on your desk. Study whenever you need it.
+\`\`\`text
+Home → Desk → Study → Study Again → Study Again
+\`\`\`
+Much faster. That's caching.
+Instead of retrieving something repeatedly... you store it nearby.
+
+---
+
+## The Same Problem Exists on the Internet
+
+Imagine opening: \`https://github.com\`
+Your browser downloads: HTML, CSS, JavaScript, Images, Fonts.
+
+Now imagine refreshing the page. Should the browser download every image again?
+Probably not. Most of those files haven't changed.
+Downloading them again would waste time, bandwidth, and CPU resources.
+
+Instead... the browser asks:
+> "Do I already have a copy?"
+
+If yes... it uses the cached version.
+That's why the second visit is often much faster than the first.
+
+---
+
+## A Grocery Store Analogy
+
+Imagine your favorite grocery store is 30 minutes away.
+Every morning you need milk.
+Instead of driving to the store every single day... you buy several cartons at once. Then keep them in your refrigerator.
+
+\`\`\`text
+Store → Buy Milk → Refrigerator → Use When Needed
+\`\`\`
+
+Your refrigerator is acting as a cache.
+You're storing frequently used items closer to you.
+Browsers do exactly the same thing with website resources.
+
+---
+
+## Why Is Caching So Important?
+
+Without caching... every request must travel through the entire internet.
+
+\`\`\`text
+Browser → DNS → Internet → Firewall → Nginx → Backend → Database
+\`\`\`
+
+That's a lot of work.
+Now imagine asking for the same profile picture ten times.
+Without caching... that entire journey happens ten times.
+With caching... the browser simply says:
+> "I already have it."
+
+Much faster.
+
+---
+
+## The Cost of Every Request
+
+Every request has a cost. Not just money. Time. Network traffic. CPU usage. Memory. Database queries.
+Suppose one API request takes 250 milliseconds.
+That sounds fast. Now imagine making it 100 times.
+Suddenly you've spent 25 seconds waiting.
+
+Even worse... your server has also processed the same request 100 times.
+Caching reduces that workload dramatically.
+
+---
+
+## Caching Helps Everyone
+
+One thing I really liked about today's lesson is that caching doesn't just benefit users. It benefits everyone involved.
+
+### The User
+Pages load faster. Less waiting. Smoother experience.
+
+### The Network
+Fewer requests travel across the internet. Less bandwidth is consumed.
+
+### The Backend
+Fewer requests reach the server. Less CPU work. Less memory usage. Fewer database queries.
+The backend can now serve more users using the same hardware. That's a huge win.
+
+---
+
+## A Real Example
+
+Imagine you're browsing Instagram. You open your profile. Your profile picture loads.
+Five seconds later... you open your profile again.
+Should the browser download the same picture again? Of course not. Nothing has changed.
+Instead... the browser displays the cached image almost instantly.
+
+To you... it feels magical. Behind the scenes... it's simply smart resource management.
+
+---
+
+## Games Do This Too
+
+Think about a video game. When you first launch it... it loads textures, sounds, and models.
+If the game had to reload every texture every second... performance would be terrible.
+Instead... the game stores frequently used assets in memory.
+
+The web follows the same philosophy. Frequently accessed resources stay nearby.
+
+---
+
+## But What If Data Changes?
+
+This is where things become interesting.
+Imagine you update your profile picture.
+The browser still has the old image stored.
+Should it display the old one? Or fetch the new one?
+
+Now we have a completely different problem.
+Caching improves performance. But... how do we know **when cached data becomes outdated?**
+That's exactly the challenge HTTP caching tries to solve.
+
+---
+
+## Different Types of Caching
+
+Before diving into HTTP caching, it's important to realize that there isn't just one cache.
+The web actually has many layers of caching.
+
+\`\`\`text
+Browser Cache → CDN Cache → Reverse Proxy Cache → Application Cache → Database Cache
+\`\`\`
+
+Today's lesson focuses mainly on two of them: Browser Cache and Client-side Cache (React Query).
+Although they both improve performance... they work in very different ways.
+
+---
+
+## My Biggest Realization
+
+Before today... I thought caching was simply:
+> "Saving files."
+
+Now I understand it's much more than that.
+Caching is really about **avoiding unnecessary work**.
+
+One sentence from today's lesson really stuck with me:
+> **The fastest request is the one you never have to make.**
+
+That perfectly captures the purpose of caching.
+
+---
+
+## Topic 5.2 — HTTP Caching: How Browsers Decide What to Download
+
+In the previous section, I learned **why caching exists**.
+Its purpose is simple: Avoid doing the same work twice.
+
+Imagine I visit: \`https://my-app.com/profile\`
+The browser downloads my profile picture.
+Five minutes later... I visit the same page again.
+How does the browser know whether it should use the cached image or download it again?
+
+The browser can't simply guess. Maybe the image changed. Maybe it didn't.
+There has to be a system. That's exactly what **HTTP Caching** provides.
+
+---
+
+### What is HTTP Caching?
+
+HTTP Caching is a set of rules that allows browsers and servers to work together to determine:
+- What can be cached?
+- How long should it stay cached?
+- When should cached data expire?
+- How can the browser check whether the data has changed?
+
+Instead of blindly downloading everything... the browser follows instructions sent by the server.
+
+---
+
+### Browser Cache
+
+Every modern browser has its own storage area called the **Browser Cache**.
+Whenever you visit a website, the browser may store things like images, CSS files, JavaScript bundles, fonts, and API responses.
+
+\`\`\`text
+Website → Download Resource → Store in Browser Cache → Reuse Later
+\`\`\`
+
+The next time you need the same resource... the browser checks its warehouse first.
+
+---
+
+### Who Decides What Can Be Cached?
+
+The browser doesn't make the decision alone.
+The **server** tells the browser what to do using HTTP headers.
+
+For example:
+\`\`\`http
+Cache-Control: max-age=3600
+\`\`\`
+This is basically the server saying: "You may keep this resource for one hour."
+The browser simply follows the instructions.
+
+---
+
+### Cache-Control — The Boss of Browser Caching
+
+**Cache-Control** is the most important caching header.
+Almost every modern website uses it.
+
+\`max-age=3600\` means exactly one hour. The server is telling the browser:
+> "For the next hour, don't ask me for this file again."
+
+### A Real Example
+Imagine a company logo. Does a company change its logo every minute? Probably not.
+So the server can safely say:
+\`\`\`http
+Cache-Control: max-age=31536000
+\`\`\`
+That's one year. The browser downloads the logo once... then reuses it for an entire year.
+
+### Sometimes We Shouldn't Cache
+Now imagine a banking dashboard. Current Balance: $5,000.
+Should the browser reuse yesterday's balance? Absolutely not.
+The backend might return:
+\`\`\`http
+Cache-Control: no-store
+\`\`\`
+Translation: "Never save this." Fresh data is more important than speed.
+
+---
+
+### Common Cache-Control Directives
+
+- **max-age=600**: Cache this resource for 10 minutes.
+- **no-cache**: "You may store it... But you must check with me before using it." (Ask first)
+- **no-store**: "Don't store this anywhere." (For sensitive data)
+- **private**: Only the user's browser may cache this response. Shared caches (CDNs) should not.
+- **public**: Anyone may cache this response.
+
+---
+
+### Expires Header
+
+Before \`Cache-Control\` became the standard, HTTP used another header:
+\`\`\`http
+Expires: Wed, 30 Jul 2026 12:00:00 GMT
+\`\`\`
+This tells the browser: "After this date... Download a fresh copy."
+It still works today. However... most modern applications prefer \`Cache-Control\` because it's more flexible.
+
+---
+
+### But What Happens After the Cache Expires?
+
+Suppose: \`Cache-Control: max-age=60\`
+One minute passes. Now the browser has an old copy. Should it download everything again?
+Not necessarily. There are smarter ways using **Last-Modified** and **ETag**.
+
+### Last-Modified
+Imagine your backend returns:
+\`\`\`http
+Last-Modified: Tue, 07 Jul 2026 09:30:00 GMT
+\`\`\`
+The browser stores that timestamp.
+Later... instead of downloading the file again... the browser asks:
+\`\`\`http
+If-Modified-Since: Tue, 07 Jul 2026 09:30:00 GMT
+\`\`\`
+Translation: "Has this resource changed since that time?"
+The server checks. If nothing changed... it replies:
+\`\`\`http
+304 Not Modified
+\`\`\`
+The browser continues using its cached copy.
+
+### ETag — A Better Way
+Sometimes timestamps aren't enough. Instead of comparing dates... HTTP can compare unique identifiers.
+Example:
+\`\`\`http
+ETag: "abc123xyz"
+\`\`\`
+Think of an ETag as a fingerprint. Whenever the resource changes... its fingerprint changes too.
+Later the browser asks:
+\`\`\`http
+If-None-Match: "abc123xyz"
+\`\`\`
+If yes... the server replies \`304 Not Modified\`. Otherwise... the server sends the updated file.
+
+---
+
+### 304 Not Modified
+
+This status code finally makes sense now.
+Before today... whenever I saw \`304 Not Modified\`, I wondered where the response body was.
+Turns out... the browser already has it. The server is simply saying:
+> "Nothing has changed. Keep using your cached version."
+
+That tiny response saves network bandwidth, download time, and server resources.
+
+---
+
+### The Browser's Decision Tree
+
+One of the easiest ways I understood HTTP caching was by imagining the browser asking itself a series of questions.
+
+- Need Resource? → Do I already have it?
+- YES → Is Cache Still Fresh? → YES → Use Cached Copy
+- YES → Is Cache Still Fresh? → NO → Ask Server → 304? → YES → Use Cached Copy
+- YES → Is Cache Still Fresh? → NO → Ask Server → 304? → NO → Download New Version → Replace Cache
+- NO → Download It → Store It
+
+This simple flow explains almost every caching scenario.
+
+---
+
+### Real Example
+
+Imagine I visit: \`https://melba.et/logo.png\`
+First visit:
+\`\`\`text
+Browser → Downloads logo → Stores logo
+\`\`\`
+Second visit: The browser checks if the cached version is valid. If yes, it appears instantly. If not, it asks the server. The server responds \`304 Not Modified\`. The browser keeps using the cached copy.
+
+---
+
+## Topic 5.3 — Why HTTP Cache Isn't Enough (Introducing React Query)
+
+If browsers already cache data, why do libraries like React Query even exist?
+
+### Browser Cache Isn't Built for Modern Applications
+
+HTTP Browser Cache is excellent, but it was designed during a time when websites looked very different. An old website downloaded HTML, CSS, JavaScript, and images once, and it was done.
+
+Modern applications like Instagram, Notion, or Discord don't constantly reload entire pages. Instead, they continuously fetch data behind the scenes. Traditional browser caching wasn't designed for this kind of application.
+
+### Static Files vs Dynamic Data
+
+Not all data changes at the same speed.
+Static files (Company Logo, CSS Files, JavaScript Bundles, Fonts) are great candidates for HTTP Browser Cache.
+Dynamic data (Notifications, Messages, User Profile, Shopping Cart) change constantly. The browser can't simply assume they're still correct.
+
+### Modern Apps Need Smarter Data Management
+
+Imagine opening Instagram. You visit your profile, then notifications, then messages, then back to your profile.
+Should Instagram make another network request for your profile? Probably not. It stores the profile data in memory. When you return, the information appears instantly.
+That's exactly what React Query does.
+
+### So What Is React Query?
+
+React Query isn't an HTTP cache. It's a **client-side data cache**.
+Instead of storing images or CSS, it stores API Responses.
+React Query stores that response inside your application. The next component that asks for the same data can reuse it immediately.
+
+### Browser Cache vs React Query
+
+Browser Cache stores: Images, CSS, JavaScript, Fonts.
+React Query stores: JSON responses, API data, User profiles, Lists, Dashboard information.
+
+Think of it as two different storage rooms. Your garage stores your car and bicycle. Your refrigerator stores milk and fruit. Both are storage, but they store different things.
+
+### React Query Lives in Memory
+
+Browser Cache usually stores data on disk. It can survive refreshing the page.
+React Query stores data in application memory.
+\`\`\`text
+Refresh Page → Memory Cleared → React Query Cache Gone
+\`\`\`
+This makes React Query extremely fast, but temporary.
+
+### Fresh vs Stale
+
+Instead of asking "Is this cached?", React Query asks "Is this fresh?"
+Suppose we configure: \`staleTime: 5 * 60 * 1000\` (Five minutes).
+During those five minutes... React Query considers the data fresh. Any component requesting it receives the cached version instantly.
+
+What happens after staleTime? The data is still there. It simply becomes **Stale**.
+React Query may still show the cached data immediately... while fetching a newer version in the background.
+
+### Stale-While-Revalidate
+
+This strategy is brilliant. Show cached data first. Then silently verify it.
+You visit a list of tours. React Query stores them. You navigate away and come back. The list appears instantly. Meanwhile, React Query checks the server for updates. If a new tour was added, the UI refreshes automatically. Users get speed and freshness at the same time.
+
+---
+
+## Topic 5.4 — React Query Deep Dive: Smarter Client-Side Caching
+
+### cacheTime (gcTime) — How Long Should the Cache Stay?
+
+In newer versions of React Query, \`cacheTime\` is called \`gcTime\` (Garbage Collection Time).
+When nobody is using cached data anymore... React Query doesn't delete it immediately. It waits. Only after the configured garbage collection time passes does it remove the cache.
+
+Example:
+\`\`\`ts
+staleTime: 5 * 60 * 1000,
+gcTime: 30 * 60 * 1000
+\`\`\`
+\`\`\`text
+0 Minutes → Fresh → 5 Minutes → Stale → Still Stored → 30 Minutes → Removed From Memory
+\`\`\`
+The data becomes stale long before it disappears.
+
+### Fresh ≠ Cached
+
+Cached data goes through three stages:
+\`\`\`text
+Fresh → Stale → Garbage Collected
+\`\`\`
+
+### Manual Cache Invalidation
+
+Suppose our application updates a user's profile. React Query still has the old profile cached.
+We manually tell React Query: "This data is outdated. Fetch it again."
+\`\`\`ts
+queryClient.invalidateQueries({ queryKey: ["profile"] });
+\`\`\`
+Immediately after invalidation... the next request retrieves fresh data from the backend.
+
+### Optimistic Updates
+
+Normally the flow looks like this:
+\`\`\`text
+Click Like → Send Request → Wait → Server Responds → Update UI
+\`\`\`
+
+The optimistic approach assumes the request will succeed:
+\`\`\`text
+Click Like → Update UI Immediately → Send Request → Server Confirms
+\`\`\`
+If everything succeeds, nothing changes. The user experiences an incredibly fast interface.
+If the request fails, React Query rolls back the optimistic update:
+\`\`\`text
+Optimistic Update → Server Error → Restore Previous State
+\`\`\`
+
+### Browser Cache vs React Query
+
+| Browser Cache | React Query |
+| --- | --- |
+| Built into the browser | Library inside your application |
+| Stores files | Stores API data |
+| Managed through HTTP headers | Managed through JavaScript configuration |
+| Persists across page refreshes | Lives in application memory by default |
+| Best for static resources | Best for dynamic server data |
+| Controlled mainly by the backend | Controlled mainly by the frontend |
+
+They aren't competing technologies. They're solving different problems.
+
+---
+
+## Part 5 Complete!
+
+## Final Summary
+
+Caching isn't just about speed. It's about making better decisions. Instead of repeatedly doing expensive work... we reuse work we've already done.
+
+### HTTP Caching — Let the Browser Help
+Browsers follow instructions sent by the server through HTTP headers like Cache-Control, ETag, Last-Modified, and Expires. The backend tells it exactly how resources should be cached.
+
+### Cache-Control — The Most Important Rule
+Through simple directives like \`max-age=3600\`, the backend can tell browsers to cache resources for a set amount of time.
+
+### ETag and Last-Modified
+Using ETag or Last-Modified, the browser and server can compare versions of a resource. If nothing changed, the server responds with \`304 Not Modified\`. No file download. Just a tiny response saying: "Keep using what you already have."
+
+### React Query — A Different Kind of Cache
+Modern applications need something much smarter. Instead of caching images and JavaScript, they cache server data. That's where React Query shines. It doesn't replace HTTP caching, it complements it.
+
+### Stale-While-Revalidate
+This strategy provides the cached version immediately, while asking the backend if anything has changed. If yes, the UI updates automatically. Users experience a fast interface without sacrificing freshness.
+
+### How Browser Cache and React Query Work Together
+\`\`\`text
+Browser Cache → Stores (Images, CSS, JavaScript, Fonts)
+React Query → Stores (API Responses, Profiles, Products, Orders, Notifications)
+\`\`\`
+Together... they create the smooth experiences we expect from modern web applications.
+
+---
+
+## What I Learned Today
+
+1. **Caching Is About Avoiding Unnecessary Work**: Instead of repeating expensive operations, reuse previous results whenever possible.
+2. **The Browser and Backend Work Together**: The backend sends caching rules. The browser follows them.
+3. **Not All Data Changes at the Same Speed**: Different types of data require different caching strategies.
+4. **React Query Solves a Different Problem**: Browser Cache stores resources. React Query stores application data.
+5. **Performance Is a Shared Responsibility**: A fast application happens when the backend returns proper headers, the browser follows them, and the frontend manages data intelligently.
+
+Every article makes the overall picture of backend engineering a little clearer. I'm beginning to see how they all work together. See you in **Day 2 – Part 6**.`,
+  },
+
+  {
     title: "Day 2 — Learning Backend from First Principles (Part 4)",
     slug: "backend-first-principles-day-2-part-4",
     description: "CORS, Security Headers, and Same-Origin Policy. Why browsers block cross-origin requests and how to configure them safely.",
