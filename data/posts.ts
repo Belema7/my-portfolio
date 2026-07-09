@@ -2,6 +2,406 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 3 — Learning Backend from First Principles (Part 2)",
+    slug: "backend-first-principles-day-3-part-2",
+    description: "HTTP Methods: The Language of Client-Server Communication. Deep dive into GET, POST, PUT, PATCH, DELETE, and special methods.",
+    category: "Learning Journey",
+    date: "2026-07-16",
+    readingTime: "14 min read",
+    content: `# Backend from First Principles — Day 3 (Part 2)
+
+# HTTP Methods: The Language of Client–Server Communication
+
+> *"In Part 1, I learned that an endpoint is made of two things: an HTTP Method and a Route. The route tells the server **what resource** I'm talking about, while the HTTP method tells the server **what I want to do** with that resource. Today, I'm diving deeper into HTTP methods because they're much more than simple keywords like GET or POST. They're the language that clients and servers use to communicate their intentions."*
+
+---
+
+## Introduction
+
+In the previous part, I learned one of the most important formulas in backend development.
+\`\`\`text id="formula"
+HTTP Method + Route = Endpoint
+\`\`\`
+At first, I thought the route was the most important part.
+But then I realized something interesting.
+These two endpoints look almost identical:
+\`\`\`http id="endpoint1"
+GET /users
+\`\`\`
+\`\`\`http id="endpoint2"
+POST /users
+\`\`\`
+The route is exactly the same. Yet they perform completely different tasks. That means the HTTP method isn't just extra information. It's a fundamental part of every request.
+
+---
+
+## What Are HTTP Methods?
+
+HTTP methods are sometimes called HTTP Verbs, Request Methods, or Request Verbs.
+They describe the **intention** of a request.
+Think about a conversation between two people. One person might say: "Show me...", "Create...", "Update...", "Delete...".
+Each sentence begins with a verb. HTTP methods play the same role.
+
+---
+
+### A Simple Conversation
+
+Imagine talking to a librarian.
+You might say:
+> "Show me all programming books."
+
+Or:
+> "Add this new book."
+
+Notice something. The book stays the same. Only the action changes.
+HTTP methods work exactly like these verbs. The resource stays the same. The requested action changes.
+
+---
+
+### The Most Common HTTP Methods
+
+Although HTTP defines several methods, five are used most often in REST APIs.
+\`\`\`text id="methods"
+GET → Read | POST → Create | PUT → Replace | PATCH → Update | DELETE → Remove
+\`\`\`
+These five methods form the foundation of almost every modern backend application.
+
+---
+
+## Topic 2.1 — GET: Asking the Server for Information
+
+If I had to choose the HTTP method I use most often... It would definitely be **GET**.
+Every time I visit a website, my browser immediately starts sending GET requests.
+\`\`\`text id="examples"
+GET /
+GET /products
+GET /users
+GET /about
+\`\`\`
+
+### What Does GET Mean?
+
+GET simply means:
+> **"Please give me this resource."**
+
+GET is used whenever the client wants to **retrieve data**. Not create it. Not update it. Not delete it. Only retrieve it.
+
+### Think About a Library
+
+Imagine visiting a library. You walk to the librarian and say:
+> "Can I see the JavaScript books?"
+
+Did you change anything? No. You simply viewed them. That's exactly what GET does.
+
+### What Does the Server Return?
+
+Suppose I request:
+\`\`\`http id="request-users"
+GET /users
+\`\`\`
+The server might respond with:
+\`\`\`json id="response-users"
+[
+  {
+    "id": 1,
+    "name": "Belema"
+  },
+  {
+    "id": 2,
+    "name": "Sara"
+  }
+]
+\`\`\`
+The server returns data. It doesn't change anything. That's the defining characteristic of GET.
+
+### GET Should Never Modify Data
+
+A GET request should **never change the state of the server**.
+Good:
+\`\`\`http id="good-get"
+GET /products
+\`\`\`
+Bad:
+\`\`\`http id="bad-get"
+GET /deleteProduct/15
+\`\`\`
+GET is supposed to be **safe**.
+
+### GET Is a Safe Method
+
+In HTTP, GET is classified as a **safe method**. That means sending the request should **not change server data**.
+
+### GET Is Also Idempotent
+
+GET is one of the easiest examples of idempotency. Repeated requests produce the same effect on the server.
+
+### GET Can Be Cached
+
+GET is highly cacheable. Instead of contacting the server every single time, the browser may use Browser Cache, CDN Cache, or Proxy Cache.
+
+### GET Usually Doesn't Have a Request Body
+
+In practice, **GET requests should not include a request body.** Instead, information is usually sent using Path Parameters or Query Parameters.
+
+### A Day in the Life of a Browser
+\`\`\`text id="browser"
+GET / → GET /styles.css → GET /app.js → GET /logo.png → GET /api/products
+\`\`\`
+
+---
+
+## Topic 2.2 — POST: Creating New Resources
+
+GET is simple. Its job is to retrieve information. But eventually, every application reaches a point where simply reading data isn't enough.
+I need to **create something new**.
+That's exactly why HTTP provides another method: **POST**.
+
+### What Does POST Mean?
+
+POST simply means:
+> **"Please create a new resource using the data I'm sending."**
+
+Unlike GET, POST almost always includes a request body. Think of POST as **submitting information to the server**.
+
+### Think About Sending a Letter
+
+Imagine writing a letter. You place it inside an envelope. The post office simply delivers the envelope. POST works similarly. The request body is the envelope. The server opens it and decides what to do with the data.
+
+### Real Examples of POST Requests
+
+\`\`\`http id="create-user"
+POST /users
+\`\`\`
+\`\`\`http id="create-product"
+POST /products
+\`\`\`
+
+### A Typical POST Request
+
+\`\`\`http id="post-request"
+POST /users
+Content-Type: application/json
+\`\`\`
+Body:
+\`\`\`json id="post-body"
+{
+  "name": "Belema",
+  "email": "belema@example.com",
+  "password": "********"
+}
+\`\`\`
+
+### What Happens Inside the Backend?
+
+\`\`\`text id="backend-flow"
+Receive Request → Validate Input → Apply Business Rules → Save Data → Return Response
+\`\`\`
+
+### POST Usually Writes to the Database
+
+Imagine this request: \`POST /users\`
+Before the request: \`Users → 15 Records\`
+After the request: \`Users → 16 Records\`
+Something changed. A new resource now exists.
+
+### POST Is NOT Safe and NOT Idempotent
+
+POST changes server data, so it is **not considered safe**.
+Also, if repeating the same request creates multiple records (e.g., placing the same order twice), POST is **not idempotent**.
+
+### What Does the Server Return?
+
+After creating a resource, the server usually responds with:
+\`\`\`http id="created"
+HTTP/1.1 201 Created
+\`\`\`
+
+### GET vs POST
+
+| GET                         | POST                            |
+| --------------------------- | ------------------------------- |
+| Retrieves data              | Creates data                    |
+| Safe                        | Not safe                        |
+| Idempotent                  | Not idempotent                  |
+| Usually no request body     | Usually includes a request body |
+| Can be cached               | Usually not cached              |
+| Doesn't modify server state | Modifies server state           |
+
+---
+
+## Topic 2.3 — PUT vs PATCH: Replacing vs Updating Resources
+
+What happens after the resource already exists?
+Which HTTP method should I use to update it?
+HTTP provides two methods: PUT and PATCH.
+
+### What Is PUT?
+
+PUT means:
+> **"Replace the entire resource with this new version."**
+
+### Example of PUT
+
+\`\`\`http
+PUT /users/15
+\`\`\`
+Body:
+\`\`\`json
+{
+  "name": "Belema Girma",
+  "email": "belema31@example.com",
+  "country": "Ethiopia",
+  "bio": "Backend Engineer"
+}
+\`\`\`
+The server replaces the existing resource with this new version.
+
+### What Is PATCH?
+
+PATCH means:
+> **"Only modify the fields I'm sending."**
+
+### Example of PATCH
+
+\`\`\`http
+PATCH /users/15
+\`\`\`
+Body:
+\`\`\`json
+{
+  "bio": "Backend Engineer"
+}
+\`\`\`
+The server updates only the bio field. Everything else remains unchanged.
+
+### PUT vs PATCH
+
+| PUT                           | PATCH                        |
+| ----------------------------- | ---------------------------- |
+| Replaces the entire resource  | Updates part of the resource |
+| Usually sends every field     | Sends only changed fields    |
+| Idempotent                    | Sometimes idempotent         |
+| Good for complete replacement | Good for partial updates     |
+
+Most modern REST APIs prefer PATCH because users usually change only small pieces of information.
+
+---
+
+## Topic 2.4 — DELETE & Special HTTP Methods (HEAD, OPTIONS, TRACE, CONNECT)
+
+### DELETE — Removing Resources
+
+DELETE means:
+> **"Remove this resource."**
+
+\`\`\`http id="delete-user"
+DELETE /users/15
+\`\`\`
+
+### DELETE Is Idempotent
+
+Once the resource has been removed, repeating the same request usually doesn't change anything further.
+
+### Hard Delete vs Soft Delete
+
+**Hard Delete:**
+\`\`\`text id="hard"
+Database → User Removed Forever
+\`\`\`
+
+**Soft Delete:**
+\`\`\`json id="soft"
+{
+  "deleted": true
+}
+\`\`\`
+The data still exists. Normal users simply can't see it anymore.
+
+### HEAD — Like GET Without the Body
+
+HEAD returns **only the response headers**. It does **not** return the response body.
+Useful for checking if a file exists or checking file size before downloading.
+
+### OPTIONS — Asking What Is Allowed
+
+OPTIONS asks the server:
+> **"What operations are allowed here?"**
+
+Browsers automatically send OPTIONS requests during a CORS preflight.
+\`\`\`text id="cors"
+Browser → OPTIONS → Server → Allowed? → POST
+\`\`\`
+
+### TRACE and CONNECT
+
+**TRACE** is for diagnostics, echoing the request back to the client.
+**CONNECT** creates a communication tunnel, mostly used by HTTPS proxies.
+
+### Common vs Rare HTTP Methods
+
+| Method  | Purpose                  | Commonly Used?                  |
+| ------- | ------------------------ | ------------------------------- |
+| GET     | Retrieve resources       | Very common                     |
+| POST    | Create resources         | Very common                     |
+| PUT     | Replace resources        | Common                          |
+| PATCH   | Partially update         | Very common                     |
+| DELETE  | Remove resources         | Common                          |
+| HEAD    | Retrieve headers only    | Occasionally                    |
+| OPTIONS | Discover allowed methods | Frequently behind the scenes    |
+| TRACE   | Debug request path       | Rare                            |
+| CONNECT | Create network tunnel    | Rare                            |
+
+---
+
+## Part 2 Complete!
+## Final Summary
+
+HTTP methods are much more than simple commands. They are a language that allows clients and servers to communicate their intentions clearly.
+
+**1. HTTP Methods Express Intent**
+Routes identify what resource I'm working with. HTTP methods identify what I want to do.
+
+**2. Choosing the Correct Method Matters**
+Using the correct HTTP method makes APIs predictable, consistent, and easier to maintain.
+
+**3. Safety and Idempotency Are Important**
+Some methods are safe. Some are idempotent. Understanding these guarantees helps design more reliable APIs.
+
+**4. PUT and PATCH Are Different**
+PUT replaces. PATCH updates.
+
+**5. HTTP Offers More Than CRUD**
+There are additional methods designed for metadata, CORS, debugging, and secure tunnels.
+
+---
+
+### Checkpoint Questions
+
+**Which HTTP method should retrieve data?**
+GET.
+
+**Which HTTP method should create a new resource?**
+POST.
+
+**What's the difference between PUT and PATCH?**
+PUT replaces the entire resource. PATCH updates only specific fields.
+
+**Which HTTP methods are idempotent?**
+GET, PUT, DELETE, HEAD, OPTIONS. (PATCH may be idempotent depending on implementation. POST is not).
+
+**Which method is used during a CORS preflight request?**
+OPTIONS.
+
+**Which method returns only response headers?**
+HEAD.
+
+---
+
+### Preview — Day 3 (Part 3)
+In Part 3, I'll begin exploring **Static Routes**, including how frameworks register routes and best practices for organizing them.`,
+  },
+
+  {
     title: "Day 3 — Learning Backend from First Principles (Part 1)",
     slug: "backend-first-principles-day-3-part-1",
     description: "Routing Mastery: The Architectural Blueprint of Your API. Understanding how requests are mapped to code, RESTful principles, and why routes should use nouns instead of verbs.",
