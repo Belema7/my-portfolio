@@ -587,7 +587,7 @@ Whenever I see an ID inside the path, I immediately know the client wants one sp
 \`\`\`javascript id="express"
 app.get("/users/:id", (req, res) => {
   const id = req.params.id; // req.params.id → 42
-  res.send(\`User ID: ${id}\`);
+  res.send(\`User ID: \${id}\`);
 });
 \`\`\`
 
