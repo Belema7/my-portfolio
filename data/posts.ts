@@ -2,6 +2,417 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 3 — Learning Backend from First Principles (Part 5)",
+    slug: "backend-first-principles-day-3-part-5",
+    description: "Query Parameters: Customizing Requests Without Changing Resources. A deep dive into pagination, filtering, sorting, searching, URL encoding, and security.",
+    category: "Learning Journey",
+    date: "2026-07-16",
+    readingTime: "18 min read",
+    content: `# Backend from First Principles — Day 3 (Part 5)
+
+# Query Parameters: Customizing Requests Without Changing Resources
+
+> *"In the previous part, I learned the difference between path parameters and query parameters. Path parameters identify a specific resource, while query parameters modify how that resource is returned. Today, I'm diving much deeper into query parameters because they're one of the most frequently used features in modern APIs. Every time I search, filter, sort, or paginate data on a website, query parameters are working behind the scenes."*
+
+---
+
+## Introduction
+
+Throughout this routing series, I've learned how URLs are structured. I started with static routes, then dynamic routes, then path parameters. Finally, I discovered query parameters.
+
+For example, \`/products\` and \`/products?page=2\` both point to the same resource. Yet the second request says: "Give me the products... but give me **page 2**." That tiny addition completely changes the server's response.
+
+Today's lesson is all about understanding how query parameters work and why they're one of the most powerful tools in API design.
+
+---
+
+### Why Do Query Parameters Exist?
+
+Imagine an online store with one million products. If the client sends \`GET /products\`, should the server return all one million products? No. That would be extremely slow, waste bandwidth, and create a terrible user experience.
+
+The client needs a way to say things like: give me only laptops, show page 3, sort by price, or search for "iPhone." That's exactly why query parameters exist. They allow the client to customize the request without changing the resource itself.
+
+---
+
+### What Is a Query Parameter?
+
+A **query parameter** is a key-value pair attached to the end of a URL. It begins after the question mark \`?\`.
+
+Let's analyze a realistic URL:
+\`\`\`text id="full-url"
+/products?category=laptop&sort=price&page=2&limit=20
+\`\`\`
+
+| URL Part          | Meaning                   |
+| ----------------- | ------------------------- |
+| \`/products\`       | Resource (Route)          |
+| \`?\`               | Beginning of query string |
+| \`category=laptop\` | Filter products           |
+| \`&\`               | Separator                 |
+| \`sort=price\`      | Sort by price             |
+| \`page=2\`          | Return the second page    |
+| \`limit=20\`        | Return only 20 products   |
+
+The route never changed. The client simply added instructions about **how** the data should be returned.
+
+---
+
+### Understanding Key-Value Pairs
+
+Every query parameter follows the same pattern: \`key=value\`. For example: \`page=2\`, \`category=laptop\`, \`search=nestjs\`. The key explains what is being modified. The value specifies the requested option.
+
+---
+
+### Think About Ordering Food
+
+You order pizza (the main resource). Then you add: extra cheese, no onions, medium size, thin crust. The pizza didn't change. You simply customized how you wanted it prepared. Query parameters work the same way.
+
+---
+
+### Multiple Query Parameters
+
+One of the biggest strengths of query parameters is that you can combine many of them.
+\`\`\`text id="multiple"
+/products?category=laptop&page=2&sort=price&limit=20
+\`\`\`
+The client is requesting: Products, only laptops, second page, sorted by price, maximum of 20 results. One URL communicates several instructions at once.
+
+---
+
+### Accessing Query Parameters in Different Frameworks
+
+**Express.js** stores query parameters inside \`req.query\`:
+\`\`\`javascript id="express-code"
+app.get("/products", (req, res) => {
+  const page = req.query.page;     // "2"
+  const category = req.query.category; // "laptop"
+});
+\`\`\`
+
+**NestJS** uses the \`@Query()\` decorator:
+\`\`\`typescript id="nestjs"
+@Get()
+findAll(
+  @Query("page") page: number,
+  @Query("category") category: string
+) {}
+\`\`\`
+
+**Spring Boot** uses \`@RequestParam\`:
+\`\`\`java id="spring"
+@GetMapping("/products")
+public List<Product> findAll(
+  @RequestParam int page,
+  @RequestParam String category
+) {}
+\`\`\`
+
+Different syntax. Same idea.
+
+---
+
+### Path Parameters vs Query Parameters
+
+| Path Parameters    | Query Parameters   |
+| ------------------ | ------------------ |
+| Identify resources | Customize requests |
+| Required           | Usually optional   |
+| Part of URL path   | After \`?\`          |
+| \`/users/15\`        | \`/users?page=2\`    |
+
+---
+
+## Topic 5.2 — Pagination, Filtering, Sorting & Searching: Returning the Right Data
+
+Almost every modern application uses query parameters for four major purposes: Pagination, Filtering, Sorting, and Searching.
+
+### Why We Can't Return Everything
+
+Imagine a database with 2 million products, 5 million customers, and 30 million orders. Returning everything at once would create huge problems: extremely slow responses, high memory usage, and poor user experience.
+
+---
+
+### Pagination
+
+Pagination means breaking large datasets into smaller pages. Instead of returning 2,000,000 products, the server returns 20 per request.
+
+Example:
+\`\`\`http id="page1"
+GET /products?page=1  → Products 1-20
+GET /products?page=2  → Products 21-40
+GET /products?page=3  → Products 41-60
+\`\`\`
+
+Many APIs also include a \`limit\` parameter:
+\`\`\`http id="limit"
+GET /products?page=2&limit=10
+\`\`\`
+
+**Offset Pagination** is another style:
+\`\`\`http id="offset"
+GET /products?limit=20&offset=40
+\`\`\`
+Skip the first 40 products, then return the next 20.
+
+**Cursor Pagination** is used by large platforms like Facebook and Twitter:
+\`\`\`http id="cursor"
+GET /posts?cursor=eyJpZCI6MTUw...
+\`\`\`
+Instead of a page number, the client says "continue from this specific point." Cursor pagination is faster for very large datasets.
+
+---
+
+### Filtering
+
+Filtering means returning only items that match certain conditions:
+\`\`\`http id="filter"
+GET /products?category=laptop
+GET /products?category=laptop&brand=apple
+GET /products?category=phone&minPrice=500&maxPrice=1000
+\`\`\`
+
+---
+
+### Sorting
+
+Sorting changes the order of results:
+\`\`\`http id="sort"
+GET /products?sort=price
+GET /products?sort=price&order=asc
+GET /products?sort=price&order=desc
+\`\`\`
+
+---
+
+### Searching
+
+Searching looks for matching text across fields:
+\`\`\`http id="search"
+GET /products?search=keyboard
+GET /articles?search=nestjs
+\`\`\`
+
+---
+
+### Combining Everything Together
+
+\`\`\`http id="combined"
+GET /products?category=laptop&brand=lenovo&search=thinkpad&sort=price&order=asc&page=2&limit=10
+\`\`\`
+That's an incredible amount of flexibility from one URL.
+
+---
+
+### The Four Main Uses of Query Parameters
+
+| Purpose    | Example                 |
+| ---------- | ----------------------- |
+| Pagination | \`?page=2&limit=20\`      |
+| Filtering  | \`?category=laptop\`      |
+| Sorting    | \`?sort=price&order=asc\` |
+| Searching  | \`?search=keyboard\`      |
+
+---
+
+### Common Beginner Mistakes
+
+One mistake beginners make is creating separate routes for every filter:
+\`\`\`text id="bad"
+/products/laptops
+/products/phones
+/products/cheap
+\`\`\`
+Instead, one resource route \`/products\` combined with query parameters can support thousands of combinations.
+
+---
+
+## Topic 5.3 — URL Encoding: Why Spaces Become %20
+
+I noticed something strange while searching on Google: \`https://www.google.com/search?q=full%20stack%20developer\`. Where did the spaces go? This led me to discover URL Encoding.
+
+### What Is URL Encoding?
+
+URL Encoding (also called **Percent Encoding**) is the process of converting special characters into a format that can safely travel through a URL.
+
+Some characters have special meanings inside URLs: Space, \`&\`, \`?\`, \`#\`, \`%\`, \`=\`, \`/\`. If browsers sent these directly, servers could misunderstand the request.
+
+### Why Is It Necessary?
+
+\`/search?q=full stack developer\` — spaces are not valid inside URLs. The browser automatically converts them:
+\`\`\`text id="encoded"
+/search?q=full%20stack%20developer
+\`\`\`
+
+### Common Encoded Characters
+
+| Character | Encoded Value |
+| --------- | ------------- |
+| Space     | \`%20\`         |
+| \`!\`       | \`%21\`         |
+| \`#\`       | \`%23\`         |
+| \`&\`       | \`%26\`         |
+| \`=\`       | \`%3D\`         |
+| \`?\`       | \`%3F\`         |
+| \`@\`       | \`%40\`         |
+
+Most encoded values begin with \`%\` followed by two hexadecimal digits. That's why this is called **Percent Encoding**.
+
+### Why "&" Must Be Encoded
+
+\`&\` has a special meaning inside URLs — it separates query parameters. If the actual search term contains an ampersand (e.g., \`AT&T\`), without encoding the server may mistakenly think \`q=AT\` and \`T\` are separate parameters. Instead, the browser sends \`/search?q=AT%26T\`.
+
+### Encoding in JavaScript
+
+\`\`\`javascript id="encode"
+const search = "Full Stack Developer";
+const encoded = encodeURIComponent(search);
+// → "Full%20Stack%20Developer"
+
+const decoded = decodeURIComponent(encoded);
+// → "Full Stack Developer"
+\`\`\`
+
+Fortunately, frameworks like Express, NestJS, and Spring Boot automatically decode query parameters. Developers rarely decode URLs manually.
+
+---
+
+## Topic 5.4 — Security & Best Practices: Never Trust User Input
+
+Users can modify **any query parameter** they want. Nothing stops them from changing \`/products?page=1&limit=20\` to \`/products?page=999&limit=100000\`. And one of the biggest rules in backend development is:
+> **Never trust client input.**
+
+---
+
+### Everything From the Client Is Untrusted
+
+Whether information comes from forms, JSON bodies, headers, cookies, query parameters, or path parameters — it all comes from the client. And the client can change it. That's why backend validation is essential.
+
+---
+
+### Common Validations Required
+
+**Pagination Parameters:**
+\`\`\`http id="bad-page"
+GET /products?page=-50&limit=5000000
+\`\`\`
+Page must be > 0. Limit must be between 1 and 100. If validation fails, return \`400 Bad Request\`.
+
+**Data Types:** If the API expects a number but receives \`page=apple\`, reject the request.
+
+**Ranges:** Even valid numbers can be dangerous. Don't let clients request \`limit=100000000\`.
+
+**Whitelisting:** For sorting, only allow predefined values (\`price\`, \`name\`, \`rating\`). Reject anything else.
+
+---
+
+### Never Build SQL Using User Input
+
+SQL Injection is one of the most common security vulnerabilities. If someone sends \`search=' OR 1=1 --\` and the backend concatenates it directly into SQL, the attacker changes the meaning of the query.
+
+Modern applications avoid this by using:
+* Parameterized queries
+* Prepared statements
+* ORMs like Prisma, Hibernate, or TypeORM
+
+These tools separate user input from SQL commands.
+
+---
+
+### Validation in Different Frameworks
+
+**Express.js** (with Zod or Joi):
+\`\`\`javascript id="express-valid"
+const page = Number(req.query.page);
+if (isNaN(page) || page < 1) {
+  return res.status(400).send("Invalid page.");
+}
+\`\`\`
+
+**NestJS** (with DTOs and ValidationPipe):
+\`\`\`typescript id="nestjs-valid"
+@Get()
+findAll(@Query() query: ProductQueryDto) {}
+// NestJS automatically returns 400 if input fails rules
+\`\`\`
+
+**Spring Boot** (with annotations):
+\`\`\`java id="spring-valid"
+@Min(1) @Max(100) @NotNull
+\`\`\`
+
+---
+
+### Common Validation Rules
+
+| Parameter  | Typical Validation       |
+| ---------- | ------------------------ |
+| \`page\`     | Integer >= 1             |
+| \`limit\`    | Between 1 and 100        |
+| \`sort\`     | Allowed field names only |
+| \`order\`    | \`asc\` or \`desc\`          |
+| \`search\`   | Maximum length           |
+| \`category\` | Existing categories only |
+
+---
+
+### Best Practices for Query Parameters
+
+* Use meaningful parameter names (\`?page=2\` not \`?p=2\`)
+* Keep them optional when appropriate
+* Use sensible defaults (page = 1, limit = 20 if not specified)
+* Validate everything: type, range, format, allowed values
+* Reject invalid requests early with \`400 Bad Request\`
+* Never trust the frontend — backend validation protects the system
+
+---
+
+## Part 5 Complete!
+## Final Summary
+
+Query parameters are one of the most powerful tools in HTTP and REST APIs. They allow clients to customize requests without changing the identity of the resource.
+
+**1. Query Parameters Customize Requests**
+They do not identify resources. They answer questions like: which page? which category? which sorting order?
+
+**2. Pagination Is Essential**
+Returning millions of records at once is impractical. Pagination keeps APIs fast and efficient.
+
+**3. Filtering, Sorting, and Searching Are Everywhere**
+Modern applications rely heavily on these techniques to help users find the data they need.
+
+**4. URL Encoding Makes Communication Reliable**
+Special characters can't always travel safely inside URLs. Encoding ensures browsers and servers interpret requests correctly.
+
+**5. Every Query Parameter Is User Input**
+Users can change query parameters at any time. Backend validation is non-negotiable.
+
+### Checkpoint Questions
+
+**What is a query parameter?**
+A key-value pair appended to the end of a URL after the \`?\` character. It customizes how a resource is returned without changing the resource itself.
+
+**When should I use query parameters instead of path parameters?**
+Use query parameters for pagination, filtering, sorting, and searching. Use path parameters when identifying a specific resource.
+
+**Why is pagination important?**
+It prevents the server from returning enormous datasets in a single response, improving performance and reducing bandwidth usage.
+
+**What is URL encoding?**
+It converts special characters into a safe format for transmission in URLs (e.g., \`Hello World\` → \`Hello%20World\`).
+
+**Why should I validate query parameters?**
+Because clients can modify them freely. Validation protects the application from invalid data, abuse, and security vulnerabilities.
+
+**Which HTTP status code for invalid query parameters?**
+\`400 Bad Request\`.
+
+---
+
+### Preview — Day 3 (Part 6)
+In Part 6, I'll explore **Route Organization** — how large backend applications keep their routing clean, maintainable, and scalable through Route Groups, Nested Routes, Controllers, Modular Routing, and API Versioning.`,
+  },
+
+  {
     title: "Day 3 — Learning Backend from First Principles (Part 4)",
     slug: "backend-first-principles-day-3-part-4",
     description: "Dynamic Routes: One Route for Millions of Resources. Exploring path parameters, query parameters, wildcards, and regex in routing.",
