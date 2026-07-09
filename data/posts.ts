@@ -2,6 +2,333 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 3 — Learning Backend from First Principles (Part 4)",
+    slug: "backend-first-principles-day-3-part-4",
+    description: "Dynamic Routes: One Route for Millions of Resources. Exploring path parameters, query parameters, wildcards, and regex in routing.",
+    category: "Learning Journey",
+    date: "2026-07-16",
+    readingTime: "16 min read",
+    content: `# Backend from First Principles — Day 3 (Part 4)
+
+# Dynamic Routes: One Route for Millions of Resources
+
+> *"In the previous part, I learned about static routes. They work perfectly when the URL never changes, such as \`/about\` or \`/contact\`. But real-world applications aren't built with only fixed pages. Every e-commerce website has thousands of products. Every social media platform has millions of users. Surely developers don't create one route for every single resource. So how does one route handle millions of different URLs? Today's lesson answers that question by introducing one of the most powerful features of routing: Dynamic Routes."*
+
+---
+
+## Introduction
+
+So far in my routing journey, everything has been straightforward. If someone visits \`/about\`, the router executes the About page. Every route has a fixed destination.
+
+But then I started thinking about websites I use every day. Take Instagram as an example. Every user has a different profile:
+\`\`\`text id="profiles"
+/users/1
+/users/2
+/users/100
+\`\`\`
+Did Instagram's developers actually create one route for every user? Of course not. That would be impossible. So how does one backend route handle millions of different users?
+The answer is:
+> **Dynamic Routes.**
+
+---
+
+### The Problem with Static Routes
+
+Imagine I'm building an online bookstore. Initially, everything looks fine. I create \`/about\`, \`/contact\`, \`/books\`.
+Then I need individual book pages. Book 1, Book 2, Book 3...
+If I continue using static routes, I'd end up creating something like this:
+\`\`\`text id="bad"
+/books/1
+/books/2
+/books/3
+...
+/books/500000
+\`\`\`
+That doesn't make sense. As the number of books grows, the number of routes grows too. We need a smarter solution.
+
+---
+
+### What Is a Dynamic Route?
+
+A **dynamic route** is a route where **part of the URL can change**.
+Instead of matching one exact URL, it matches a pattern.
+For example:
+\`\`\`text id="dynamic"
+/users/{id}
+\`\`\`
+The route says:
+> **"Whatever value appears here, I'll treat it as the user's ID."**
+
+That single route can match \`/users/1\`, \`/users/15\`, \`/users/1000000\`. One route. Millions of possible URLs. That's incredibly powerful.
+
+---
+
+### Think About Apartment Buildings
+
+Imagine a large apartment building. The building has one address: Sunrise Apartments.
+Inside the building are hundreds of apartments: 101, 102, 201...
+Instead of creating a different building for every apartment, the building stays the same. Only the apartment number changes.
+Dynamic routes work exactly like that. The base route stays the same. Only one small part changes.
+
+---
+
+### A Library Analogy
+
+Every book has a unique identification number. You don't ask for \`/book1\`, \`/book2\`. Instead, you say: "I'd like the book with ID 1527."
+The librarian uses the ID to find the correct book. Backend applications do exactly the same thing.
+
+---
+
+### A Real Example
+
+Suppose someone visits:
+\`\`\`http id="request"
+GET /products/25
+\`\`\`
+The router has a pattern like \`/products/{id}\`. It notices:
+\`\`\`text id="extract"
+{id} → 25
+\`\`\`
+Then it forwards:
+\`\`\`text id="flow"
+Controller → Product ID = 25 → Database Query → Return Product 25
+\`\`\`
+The same route handles any ID.
+
+---
+
+### Dynamic Routes Are Templates
+
+> **A dynamic route is like a template.**
+
+Instead of writing individual routes, we write one template (\`/users/{id}\`). Whenever a request arrives, the router fills in the missing piece. It's almost like using a placeholder.
+
+---
+
+### What Actually Changes?
+
+Consider \`/products/12\` and \`/products/98\`. What's different? Only the last segment. Everything else remains identical. That changing segment is what makes the route dynamic.
+
+---
+
+### Dynamic Routes Make APIs Scalable
+
+Dynamic routes are one of the reasons modern web applications can scale to millions of resources without creating millions of route definitions. They're essential for YouTube videos, GitHub repositories, Amazon products, and Spotify playlists.
+
+---
+
+### Static vs Dynamic Routes
+
+| Static Route         | Dynamic Route                    |
+| -------------------- | -------------------------------- |
+| \`/about\`             | \`/users/{id}\`                    |
+| Fixed URL            | Part of the URL changes          |
+| Exact match          | Pattern match                    |
+| No variables         | Contains variables               |
+| Best for fixed pages | Best for resource-specific pages |
+
+---
+
+### When Should I Use Dynamic Routes?
+
+Dynamic routes are ideal whenever the resource changes based on user input. Examples include User profiles (\`/users/{id}\`), Products (\`/products/{id}\`), Orders (\`/orders/{id}\`), Blog posts (\`/posts/{slug}\`), Categories (\`/categories/{name}\`).
+
+---
+
+## Topic 4.2 — Path Parameters: The Dynamic Part of a URL
+
+If dynamic routes are the template, then path parameters are the values that fill that template.
+
+### What Is a Path Parameter?
+
+A **path parameter** is a variable that appears inside a URL path.
+For example, in \`/users/{id}\`, the \`{id}\` is a placeholder. When a client sends \`GET /users/42\`, the backend replaces \`{id}\` with \`42\`. That value becomes the path parameter.
+
+### Think About a Hotel Room Number
+
+The hotel address stays the same, only the room number changes. \`/rooms/{roomNumber}\` matches \`/rooms/101\`, \`/rooms/205\`.
+
+### A Real Example
+
+\`\`\`http id="product-request"
+GET /products/15
+\`\`\`
+The router matches the route and extracts:
+\`\`\`text id="extract"
+id → 15
+\`\`\`
+Then the backend searches the database:
+\`\`\`text id="database"
+SELECT * FROM Products WHERE id = 15
+\`\`\`
+
+### Path Parameters Represent Identity
+
+> **Path parameters identify a specific resource.**
+
+Whenever I see an ID inside the path, I immediately know the client wants one specific item.
+
+---
+
+### Path Parameters in Different Frameworks
+
+**Express.js** uses a colon (\`:\`):
+\`\`\`javascript id="express"
+app.get("/users/:id", (req, res) => {
+  const id = req.params.id; // req.params.id → 42
+  res.send(\`User ID: ${id}\`);
+});
+\`\`\`
+
+**NestJS** uses decorators:
+\`\`\`typescript id="nestjs"
+@Get(":id")
+findOne(@Param("id") id: string) {
+    return id; // id → 42
+}
+\`\`\`
+
+**Spring Boot** uses annotations:
+\`\`\`java id="spring"
+@GetMapping("/users/{id}")
+public User getUser(@PathVariable Long id) { // {id} → 42
+    return userService.findById(id);
+}
+\`\`\`
+
+Although the code changes, the routing principle remains identical.
+
+### Multiple Path Parameters
+
+A route can contain more than one parameter, e.g. \`/users/{userId}/orders/{orderId}\`. The router extracts both \`userId\` and \`orderId\`. This pattern is very common in REST APIs.
+
+### Common Beginner Mistakes
+
+Confusing resource identity with filtering. \`/users/15\` is good. \`/users?userId=15\` to retrieve a single user isn't typically RESTful. Path parameters identify.
+
+### The Router Doesn't Care What the Value Is
+
+If someone requests \`/users/banana\`, the router may still match the route because it simply sees something where \`{id}\` should be. Whether "banana" is valid is usually handled later by the application through validation.
+
+---
+
+## Topic 4.3 — Path Parameters vs Query Parameters: What's the Difference?
+
+Why do I sometimes see URLs like \`/users?page=2\` or \`/products?category=laptop&sort=price\`?
+Although both send information through the URL, they serve completely different purposes.
+
+### What Is a Query Parameter?
+
+A **query parameter** is extra information attached to the end of a URL. It always begins with a \`?\`. Everything before the question mark is the route. Everything after it is additional information.
+
+### Anatomy of a URL
+
+\`/products?category=laptop&sort=price&page=2\`
+* \`/products\` : Route
+* \`?\` : Start of query string
+* \`category=laptop\` : First query parameter
+* \`&\` : Separator
+* \`sort=price\` : Second query parameter
+
+### Path Parameters Identify Resources
+
+Path parameters identify a specific resource (e.g. User 15, Product 88).
+
+### Query Parameters Modify the Request
+
+Query parameters answer different questions: Which page? Which category? Which sorting order?
+The resource is still \`/products\`, only the way we retrieve the products changes.
+
+### A Simple Rule I Learned
+
+> **Path Parameters identify.**
+> **Query Parameters filter, sort, search, or paginate.**
+
+If I'm requesting one specific resource, use a path parameter. If I'm changing how a collection is returned, use query parameters.
+
+### Common Uses for Query Parameters
+* Searching: \`/products?search=iphone\`
+* Pagination: \`/products?page=3\`
+* Sorting: \`/products?sort=price\`
+* Filtering: \`/products?category=laptop\`
+* Limiting: \`/products?limit=20\`
+
+### Express.js Example
+\`\`\`javascript id="express-query"
+app.get("/products", (req, res) => {
+  const category = req.query.category;
+  const page = req.query.page;
+});
+// req.query.category → "laptop" | req.query.page → "2"
+\`\`\`
+
+### Path vs Query Parameters
+
+| Path Parameters        | Query Parameters              |
+| ---------------------- | ----------------------------- |
+| Identify one resource  | Modify the request            |
+| Required               | Usually optional              |
+| Part of the URL path   | After \`?\`                     |
+| \`/users/15\`            | \`/users?page=2\`               |
+| REST resource identity | Filtering, searching, sorting |
+
+### Can We Use Both Together?
+
+Absolutely. \`/users/15/orders?page=2&sort=date\` is very common.
+
+---
+
+## Topic 4.4 — Regex, Wildcards & Framework Differences: Advanced Route Matching
+
+What if I only want numbers? What if someone requests \`/users/banana\`? Or what if I want a route that matches any number of path segments like \`/files/*\`?
+Modern routing systems provide powerful tools like Regular Expressions (Regex), Wildcards, and Route Constraints.
+
+### Why Do We Need Advanced Route Matching?
+
+Without validation, the router would still match \`/users/banana\`. The backend would waste time processing invalid data. Advanced route matching helps prevent this.
+
+### What Is Regex?
+
+Regex (Regular Expression) is a pattern used to match text. Instead of matching anything, Regex matches only text that follows specific rules.
+
+### Matching Only Numbers
+
+Desired: \`/users/1\`, \`/users/25\`
+Invalid: \`/users/apple\`, \`/users/abc123\`
+Regex allows the router to distinguish between valid and invalid requests before the application even starts processing them.
+
+### What Is a Wildcard?
+
+Wildcards match **anything**. \`/files/*\` matches \`/files/image.png\`, \`/files/docs/report.pdf\`, etc. Instead of defining hundreds of routes, one wildcard route handles them all. Useful for static file servers.
+
+### Different Frameworks, Same Goal
+
+* **Express**: Route patterns / Regex (e.g. \`app.get("/users/:id(\\d+)")\`)
+* **NestJS**: Pipes + Validation (e.g. \`@Param("id", ParseIntPipe)\`)
+* **Spring Boot**: Type conversion + Regex (e.g. \`@PathVariable Long id\`)
+
+Their objective is identical: Prevent invalid URLs from reaching business logic.
+
+### Route Matching Comparison
+
+| Feature       | Purpose                    |
+| ------------- | -------------------------- |
+| Static Route  | Match one exact URL        |
+| Dynamic Route | Match one changing segment |
+| Regex         | Restrict allowed values    |
+| Wildcard      | Match many possible paths  |
+
+### Common Beginner Mistakes
+
+Putting all validation inside controllers is a mistake. It's often better to let the framework reject obviously invalid requests before they reach the controller.
+
+---
+
+### Preview — Day 3 (Part 5)
+In the next part, I'll bring everything together and conclude the routing series!`,
+  },
+
+  {
     title: "Day 3 — Learning Backend from First Principles (Part 3)",
     slug: "backend-first-principles-day-3-part-3",
     description: "Static Routes: The Simplest Form of Routing. Discover how backend frameworks recognize URLs and match fixed paths to handlers.",
