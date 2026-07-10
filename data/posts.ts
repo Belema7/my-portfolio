@@ -2,6 +2,389 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 3 — Learning Backend from First Principles (Part 6)",
+    slug: "backend-first-principles-day-3-part-6",
+    description: "Nested Routes: Modeling Relationships Between Resources. Learn when and how to use nested routes, and how they differ from query parameters.",
+    category: "Learning Journey",
+    date: "2026-07-17",
+    readingTime: "15 min read",
+    content: `# Backend from First Principles — Day 3 (Part 6)
+
+# Nested Routes: Modeling Relationships Between Resources
+
+> *"So far, I've learned how to create static routes, dynamic routes, path parameters, and query parameters. I now know how to identify resources and customize requests. But while studying real-world APIs like GitHub and Stripe, I noticed something interesting. Many endpoints weren't flat. Instead of \`/orders\`, I often saw routes like \`/users/15/orders\` or \`/posts/8/comments\`. Why are resources organized this way? Today's lesson introduces one of the most important concepts in RESTful API design: Nested Routes."*
+
+---
+
+## Introduction
+
+Until now, most routes I've studied look like this: \`/users\`, \`/products\`, \`/orders\`. Each route represents a single resource. But then I started exploring real production APIs and began seeing routes like:
+\`\`\`text id="nested-examples"
+/users/15/orders
+/posts/10/comments
+/products/8/reviews
+\`\`\`
+Why place one resource inside another? The answer is surprisingly simple. Some resources naturally **belong to** other resources. To represent those relationships clearly, REST APIs use **nested routes**.
+
+---
+
+### What Is a Nested Route?
+
+A **nested route** is a route that expresses a relationship between two or more resources. Instead of treating every resource as completely independent, it shows that one resource exists **within the context of another**.
+
+For example, \`/users/15/orders\` doesn't mean "give me every order." It means:
+> **"Give me the orders that belong to User 15."**
+
+The route itself communicates the relationship.
+
+---
+
+### Understanding Parent and Child Resources
+
+Nested routes introduce two important ideas.
+
+**Parent Resource** — the resource that owns or contains another resource (e.g., \`/users/15\`).
+
+**Child Resource** — the resource that belongs to the parent (e.g., \`/users/15/orders\`).
+
+So: User = Parent, Orders = Child. This parent-child relationship is the foundation of nested routing.
+
+---
+
+### Think About a House
+
+Inside a house are several rooms. You wouldn't describe a bedroom without first knowing which house it belongs to. Nested routes work the same way — the orders exist within the context of User 15.
+
+### A Library Analogy
+
+The library contains many shelves. Each shelf contains many books. \`/shelves/science/books\` returns only books on the Science shelf — more context than just \`/books\`. That's exactly what nested routes do.
+
+---
+
+### Real-World Examples
+
+| Platform          | Nested Route                      |
+| ----------------- | --------------------------------- |
+| GitHub            | \`/users/belema/repositories\`      |
+| Blog              | \`/posts/42/comments\`              |
+| E-commerce        | \`/products/18/reviews\`            |
+| Education         | \`/courses/5/lessons\`              |
+| Banking           | \`/accounts/1001/transactions\`     |
+
+In each example, the child resource belongs to the parent.
+
+---
+
+### Why Not Keep Everything Flat?
+
+Without nested routes, \`GET /comments\` is ambiguous — which comments? From every post? But \`GET /posts/42/comments\` is crystal clear: comments belonging to Post 42. Nested routes make relationships explicit.
+
+---
+
+### Resource Hierarchy
+
+Nested routes naturally create hierarchies: \`/users/15/orders/300/items\` tells a story — User 15 → Order 300 → items in that order. The URL itself explains how the resources are connected.
+
+---
+
+### Flat vs Nested Routes
+
+| Flat Route           | Nested Route                   |
+| -------------------- | ------------------------------ |
+| \`/orders\`            | \`/users/15/orders\`             |
+| \`/comments\`          | \`/posts/42/comments\`           |
+| Independent resource | Resource within a relationship |
+
+---
+
+### Don't Nest Everything
+
+Most REST API designers recommend keeping nesting shallow — usually no more than two or three levels. \`/companies/3/departments/8/employees/15/projects/20/tasks/5/comments\` is technically valid but practically unreadable.
+
+---
+
+## Topic 6.2 — Nested Routing in Practice: Express.js, NestJS & Spring Boot
+
+### A Real Scenario
+
+Building an e-commerce app: each user can place multiple orders. To retrieve every order placed by User 15:
+\`\`\`http id="endpoint"
+GET /users/15/orders
+\`\`\`
+
+Nested routes often contain multiple path parameters: \`/users/{userId}/orders/{orderId}\`. The router extracts both \`userId\` and \`orderId\`.
+
+---
+
+### Nested Routes in Express.js
+
+\`\`\`javascript id="express"
+app.get("/users/:userId/orders", (req, res) => {
+    const userId = req.params.userId; // → 15
+    res.send("Orders for User " + userId);
+});
+\`\`\`
+
+For one specific order:
+\`\`\`javascript id="express2"
+app.get("/users/:userId/orders/:orderId", (req, res) => {
+    const userId = req.params.userId;   // → 15
+    const orderId = req.params.orderId; // → 300
+});
+\`\`\`
+
+---
+
+### Nested Routes in NestJS
+
+\`\`\`typescript id="nestjs"
+@Controller("users")
+export class UsersController {
+  @Get(":userId/orders")
+  findOrders(@Param("userId") userId: string) {
+    return "Orders for User " + userId;
+  }
+}
+\`\`\`
+
+For multiple parameters:
+\`\`\`typescript id="nestjs2"
+@Get(":userId/orders/:orderId")
+findOrder(
+  @Param("userId") userId: string,
+  @Param("orderId") orderId: string
+) {}
+\`\`\`
+
+---
+
+### Nested Routes in Spring Boot
+
+\`\`\`java id="spring"
+@GetMapping("/users/{userId}/orders")
+public List<Order> getOrders(@PathVariable Long userId) {
+    // userId → 15
+}
+\`\`\`
+
+For multiple parameters:
+\`\`\`java id="spring2"
+@GetMapping("/users/{userId}/orders/{orderId}")
+public Order getOrder(
+    @PathVariable Long userId,
+    @PathVariable Long orderId
+) {}
+\`\`\`
+
+---
+
+### Same Concept Across Frameworks
+
+| Framework   | Parameter Syntax    |
+| ----------- | ------------------- |
+| Express     | \`req.params.userId\` |
+| NestJS      | \`@Param("userId")\`  |
+| Spring Boot | \`@PathVariable\`     |
+
+The router extracts values from the URL, the framework passes them into the handler, and the application uses them to fetch data.
+
+---
+
+### Complete Request Flow
+\`\`\`text id="flow"
+GET /users/15/orders/300
+    → Match Route: /users/:userId/orders/:orderId
+    → Extract: userId = 15, orderId = 300
+    → Call Controller
+    → Query Database
+    → Return Response
+\`\`\`
+
+The router doesn't know what a user or an order is. It simply extracts values and forwards them to the application.
+
+---
+
+## Topic 6.3 — Nested Routes vs Query Parameters: Which One Should You Use?
+
+Both \`/users/15/orders\` and \`/orders?userId=15\` can return the same data. The difference isn't the response — it's the **meaning** of the URL.
+
+### Nested Routes Express Relationships
+
+\`/users/15/orders\` communicates:
+> **"Orders that belong to User 15."**
+
+The relationship is part of the resource itself.
+
+### Query Parameters Express Filtering
+
+\`/orders?userId=15\` communicates:
+> **"Filter the orders where userId = 15."**
+
+The relationship isn't part of the route — it's a filter.
+
+---
+
+### Identity vs Filtering
+
+The biggest lesson from this section:
+> **Nested routes represent identity and ownership.**
+> **Query parameters represent filtering and customization.**
+
+| Nested: \`/users/15/orders\`   | Question answered: **Whose orders?** |
+| Query: \`/orders?status=completed\` | Question answered: **Which orders?** |
+
+---
+
+### When Nested Routes Make Sense
+
+When one resource naturally belongs to another:
+* \`/posts/42/comments\` — comments for one post
+* \`/products/18/reviews\` — reviews for one product
+* \`/accounts/1001/transactions\` — transactions for one account
+
+### When Query Parameters Make Sense
+
+When retrieving a collection with optional conditions:
+* \`/orders?status=completed\`
+* \`/products?maxPrice=100\`
+* \`/articles?search=nestjs\`
+
+---
+
+### Sometimes Both Are Used Together
+\`\`\`http id="combined"
+GET /users/15/orders?status=completed&page=2
+\`\`\`
+Parent resource: \`/users/15\` | Child: \`/orders\` | Filters: \`status=completed\`, \`page=2\`.
+Translation: "Give me User 15's completed orders. Return page 2."
+
+---
+
+### Side-by-Side Comparison
+
+| Nested Routes      | Query Parameters         |
+| ------------------ | ------------------------ |
+| Show relationships | Filter or customize data |
+| Express ownership  | Express conditions       |
+| Usually required   | Usually optional         |
+| \`/users/15/orders\` | \`/orders?userId=15\`      |
+| Resource hierarchy | Collection filtering     |
+
+---
+
+### Common Beginner Mistakes
+
+**Over-nesting:** \`/companies/3/departments/8/employees/15/projects/20/tasks/5/comments\` — avoid.
+
+**Using query params for everything:** \`/comments?postId=42\` is less expressive than \`/posts/42/comments\` when the relationship is primary.
+
+**Nesting independent resources:** If orders can stand alone, \`/orders/300\` is often clearer than \`/users/15/orders/300\`.
+
+---
+
+### A Practical Rule
+
+Ask one question before designing a route:
+> **Am I identifying a relationship, or am I filtering a collection?**
+
+Relationship → Nested route. Filtering → Query parameters.
+
+---
+
+## Topic 6.4 — Best Practices for Designing Nested Routes
+
+### Best Practice 1 — Keep Nesting Shallow
+
+A good nested route looks like \`/users/15/orders\` or \`/posts/42/comments\`. Most APIs keep nesting to **two or three levels**. Deeper than that and URLs become hard to read, type, debug, and maintain.
+
+### Best Practice 2 — Nest Only When There's a Real Relationship
+
+Ask: "Does this resource actually belong to another resource?" Comments belong to a post (\`/posts/42/comments\`). Products exist independently — \`/products\` not \`/users/15/products\`.
+
+### Best Practice 3 — Give Resources Their Own Identity
+
+\`/users/15/orders/300\` is fine when accessing Order 300 through a user. But if orders are frequently accessed directly, \`/orders/300\` is simpler because the order already has its own unique identity.
+
+### Best Practice 4 — Keep URLs Consistent
+
+Choose one naming style and use it throughout. Mixing \`/users/15/orders\` with \`/customer/15/purchases\` is confusing. Consistency makes APIs much easier to learn.
+
+### Best Practice 5 — Use Nouns, Not Verbs
+
+The URL identifies the resource. The HTTP method identifies the action.
+* Use \`GET /orders\` not \`/getOrders\`
+* Use \`POST /comments\` not \`/createComment\`
+
+### Best Practice 6 — Combine Nested Routes with Query Parameters
+
+\`GET /users/15/orders?page=2&status=completed\` — the route identifies the relationship, the query parameters customize the response. This combination is extremely common in production APIs.
+
+---
+
+### A Simple Decision Checklist
+
+* Does the child resource truly belong to the parent? → Consider nesting
+* Does the child already have its own unique identity? → Top-level resource may be better
+* Is the URL becoming too deep? → Simplify it
+* Am I expressing a relationship or filtering data? → Relationship = nested, Filtering = query params
+
+---
+
+### Good vs Bad Examples
+
+| Better Design               | Less Clear Design                                                      |
+| --------------------------- | ---------------------------------------------------------------------- |
+| \`/users/15/orders\`          | \`/orders?owner=15\` (when ownership is the primary relationship)        |
+| \`/orders/300\`               | \`/users/15/orders/300\` (if the order is uniquely identifiable on its own)|
+| \`/products/18/reviews\`      | \`/reviews?productId=18\` (when reviews naturally belong to a product)   |
+| \`/posts/42/comments?page=2\` | \`/posts/42/comments/page/2\`                                            |
+
+---
+
+## Part 6 Complete!
+## Final Summary
+
+Nested routes are a way of expressing how data is connected. They make APIs more expressive by clearly showing how resources relate to each other.
+
+**1. Nested Routes Express Ownership and Relationships**
+\`/users/15/orders\` means: the orders that belong to User 15.
+
+**2. Parent and Child Resources**
+The parent owns the child. Understanding this hierarchy makes route design more intuitive.
+
+**3. Nested Routes vs Query Parameters**
+Nested routes describe relationships. Query parameters describe how the client wants data returned.
+
+**4. Don't Over-Nest**
+Deep URLs become difficult to read. Most production APIs keep nesting to two or three levels.
+
+**5. Frameworks Differ, Principles Stay the Same**
+Express, NestJS, Spring Boot all follow the same routing principles — only the syntax changes.
+
+### Checkpoint Questions
+
+**What is a nested route?**
+A route that represents a relationship between two or more resources (e.g., \`/users/15/orders\`).
+
+**When should I use nested routes?**
+When one resource naturally belongs to another (comments to a post, orders to a user).
+
+**When should I use query parameters instead?**
+When you want to filter, search, sort, or paginate (e.g., \`/orders?status=completed&page=2\`).
+
+**Can nested routes and query parameters be used together?**
+Yes. \`/users/15/orders?status=completed&page=2\` — the nested route identifies the relationship, the query parameters customize the response.
+
+**Why are nested routes useful?**
+They make APIs more expressive. The relationship becomes obvious directly from the URL, even without documentation.
+
+---
+
+### Preview — Day 3 (Part 7)
+In Part 7, I'll learn about **Route Middleware** — what middleware is, the request pipeline, authentication middleware, logging middleware, error handling, and middleware in Express.js, NestJS, and Spring Boot.`,
+  },
+
+  {
     title: "Day 3 — Learning Backend from First Principles (Part 5)",
     slug: "backend-first-principles-day-3-part-5",
     description: "Query Parameters: Customizing Requests Without Changing Resources. A deep dive into pagination, filtering, sorting, searching, URL encoding, and security.",
