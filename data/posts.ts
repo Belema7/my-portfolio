@@ -2,6 +2,270 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 4 — Learning Backend from First Principles (Part 1)",
+    slug: "backend-first-principles-day-4-part-1",
+    description: "The Language Barrier Problem: Why frontend and backend cannot talk directly, the translator analogy, and understanding serialization and deserialization.",
+    category: "Learning Journey",
+    date: "2026-07-18",
+    readingTime: "12 min read",
+    content: `# Backend from First Principles — Day 4 (Part 1)
+
+# The Language Barrier: Serialization and Deserialization
+
+> *"When building a full-stack application, the frontend and backend constantly exchange information. At first, this communication may look simple. The frontend sends some data, the backend receives it, processes it, and sends a response back. However, there is an important problem: the frontend and backend cannot directly send programming-language objects to each other over a network. Today's lesson explores why this language barrier exists and how applications overcome it using a common standard."*
+
+---
+
+## Introduction: Why Frontend and Backend Cannot Talk Directly
+
+When building a full-stack application, the frontend and backend constantly exchange information. The frontend may ask the backend to log in a user, create an account, retrieve products, submit a form, update a profile, delete a record, or load data from a database.
+
+At first, this communication may look simple. The frontend sends some data, the backend receives it, processes it, and sends a response back. However, there is an important problem:
+
+> The frontend and backend cannot directly send programming-language objects to each other over a network.
+
+To understand why, we first need to understand what the frontend and backend actually work with.
+
+---
+
+### The Frontend Works With JavaScript Objects
+
+In a frontend application, data is commonly represented using JavaScript objects.
+
+\`\`\`ts
+const user = {
+  id: 1,
+  name: "Belema",
+  email: "belema@example.com",
+  isActive: true,
+};
+\`\`\`
+
+This object exists inside the memory of the browser's JavaScript environment. The frontend can easily access or modify its properties. Inside the frontend application, this object is completely understandable because JavaScript knows where the object is stored, what its properties are, what data types it contains, and how the object should behave.
+
+But this object only exists inside the frontend application's memory. The backend cannot directly access it.
+
+---
+
+### The Backend Has Its Own Data Structures
+
+The backend also works with objects or similar data structures. A NestJS backend may use a TypeScript object, a Python backend may use a dictionary, and a Java backend may use a class instance. 
+
+Although these represent similar information, they are not the same thing internally. Each programming language has its own memory model, object structure, data types, syntax, runtime, and representation of values.
+
+Even when the frontend and backend both use TypeScript, they still run in different environments. The frontend may run inside the browser on a user's laptop, while the backend runs on a remote cloud server. Their objects exist in completely separate memory spaces. 
+
+---
+
+### Networks Do Not Transport JavaScript Objects
+
+The frontend cannot place a JavaScript object directly onto the internet. A network does not understand concepts such as JavaScript objects, Python dictionaries, Java records, or NestJS DTOs. 
+
+Networks transmit data as sequences of bytes. These bytes must represent something that both the sender and receiver understand. Therefore, the frontend object must first be converted into a transportable format.
+
+---
+
+### TypeScript Types Do Not Travel Through the Network
+
+Consider a frontend interface:
+
+\`\`\`ts
+interface CreateUserData {
+  name: string;
+  email: string;
+  age: number;
+}
+\`\`\`
+
+The \`CreateUserData\` interface helps TypeScript validate the object during development, but the interface does not exist at runtime. It is removed when TypeScript is compiled into JavaScript. The backend only receives the actual transmitted data, not the TypeScript types. This is why frontend TypeScript types cannot automatically protect the backend.
+
+---
+
+### Functions Cannot Normally Be Sent as Request Data
+
+JavaScript objects may contain functions.
+
+\`\`\`ts
+const user = {
+  name: "Belema",
+  greet() {
+    return \`Hello, \${this.name}\`;
+  },
+};
+\`\`\`
+
+The \`greet\` function makes sense inside JavaScript memory, but it cannot normally be transmitted as regular API data. The backend needs the user's information, not the JavaScript function implementation. The transmitted representation usually contains data only, not behavior.
+
+---
+
+### Some JavaScript Values Do Not Have a Direct Network Representation
+
+JavaScript supports values such as \`undefined\`, \`BigInt\`, \`Symbol\`, \`Date\`, \`Map\`, and \`Set\`. Common network formats do not represent all of them directly.
+
+For example, when converted into JSON, a property set to \`undefined\` may disappear. A JavaScript \`Date\` object becomes a string:
+
+\`\`\`json
+{
+  "createdAt": "2026-07-10T00:00:00.000Z"
+}
+\`\`\`
+
+The backend receives a string, not a \`Date\` object, and must decide how to convert that string into its own date type.
+
+---
+
+### The Frontend and Backend Need a Shared Representation
+
+These systems need a language-independent format for exchanging data that is understandable by browsers, servers, mobile applications, and different programming languages.
+
+One of the most common formats used for this purpose is JSON (JavaScript Object Notation). JSON provides a standard textual representation of structured data. Because it is text, it can be transmitted through HTTP, read by different programming languages, and processed by APIs.
+
+---
+
+### A Simple Request Example
+
+Imagine a user completes a registration form. The frontend collects the values as a JavaScript object. Before sending it, the frontend converts it into JSON text:
+
+\`\`\`ts
+const requestBody = JSON.stringify(formData);
+\`\`\`
+
+The frontend then sends the JSON representation through an HTTP request. The request body travels through the network. The backend receives the transmitted data, converts it into a data structure it can work with, and processes it.
+
+Communication happens in both directions. The backend converts its response object into JSON before sending it back, and the frontend converts that JSON back into a JavaScript value.
+
+---
+
+### A Physical Package Analogy
+
+Imagine that the frontend and backend are two offices located in different countries. Each office has an internal document format that only its employees understand.
+
+The frontend cannot send its entire office filing system to the backend. Instead, it must extract the required information, place it into an agreed format, package it, send it, and allow the backend to reconstruct the information.
+
+The agreed package format is similar to JSON. The delivery system is similar to HTTP.
+
+---
+
+## The Translator Analogy
+
+A useful way to understand this is through the translator analogy. 
+
+Suppose Person A speaks Amharic and Person B speaks French. They cannot communicate directly. A translator listens, understands the meaning, and expresses the same meaning in a language Person B understands. The translator converts the information into a shared form.
+
+If both people agree to communicate using English, English becomes the common language between them. In API communication, JSON plays this role. 
+
+The frontend does not need to understand the backend's internal programming language, and the backend does not need to understand the frontend's internal implementation. Both only need to understand JSON.
+
+---
+
+### JSON Is a Standard, Not a Programming Language
+
+Although JSON originated from JavaScript syntax, it is a language-independent data format. Many programming languages can read and produce JSON, including Python, Java, C#, Go, PHP, Ruby, Rust, Kotlin, and Swift.
+
+JSON is fundamentally a text format. A JavaScript object is usable directly by JavaScript. A JSON string is simply the text representation of the object's data.
+
+### What JSON Can and Cannot Represent
+
+JSON supports a small set of value types: String, Number, Boolean, Null, Array, and Object. 
+
+JSON does not support every programming-language value. It cannot directly represent functions, \`undefined\`, symbols, BigInt, circular references, or complex class behavior. 
+
+---
+
+### Content-Type Tells the Receiver Which Language Is Being Used
+
+When the frontend sends JSON, it usually includes this HTTP header:
+
+\`\`\`http
+Content-Type: application/json
+\`\`\`
+
+This header tells the backend that the request body is formatted as JSON. It is similar to writing the language name on a document so the receiver knows which parser to use.
+
+---
+
+### Validation Protects the Translation Boundary
+
+Even when the frontend follows the API contract, the backend must validate incoming data. A malicious user can bypass the frontend and send requests directly. 
+
+The backend must verify required fields, value types, accepted ranges, allowed formats, and business rules. JSON solves the representation problem. Validation solves the correctness and trust problem.
+
+---
+
+## Serialization and Deserialization
+
+The two processes that make this communication possible are **serialization** and **deserialization**.
+
+### Serialization
+
+Serialization is the process of converting an in-memory data structure into a format that can be stored or transmitted. 
+
+> Serialization converts an object into a transferable representation.
+
+For a typical web API, this means converting a JavaScript object into JSON text using \`JSON.stringify()\`. 
+
+\`\`\`ts
+const jsonData = JSON.stringify(user);
+\`\`\`
+
+The result is no longer a JavaScript object; it is a string containing JSON-formatted data.
+
+### Deserialization
+
+Deserialization is the reverse process. It converts serialized data back into an in-memory data structure that the program can use.
+
+> Deserialization converts a transferable representation back into an object or another usable program value.
+
+Suppose we receive a JSON string. We can deserialize it with \`JSON.parse()\`:
+
+\`\`\`ts
+const user = JSON.parse(jsonData);
+\`\`\`
+
+Now \`user\` is a JavaScript object again. 
+
+### The Two Processes Together
+
+Serialization and deserialization usually work as a pair.
+
+\`\`\`text
+Object → Serialization → JSON → Deserialization → Object
+\`\`\`
+
+The object created after deserialization is not the exact original object in memory. It is a new object reconstructed from the serialized data. Serialization preserves a representation of the data, not the original memory reference.
+
+---
+
+### Serialization Does Not Always Mean JSON
+
+Serialization is a broader concept than JSON. Other serialization formats include XML, Protocol Buffers, MessagePack, YAML, CSV, and custom binary formats. 
+
+The exact output format may differ, but the general process is the same: data is converted from an internal representation into a format suitable for transport or storage.
+
+---
+
+### Serialization Is Used Beyond APIs
+
+Serialization appears in many systems:
+* **File storage**: Saving application settings as JSON in a file.
+* **Browser storage**: \`localStorage\` stores strings, so objects must be serialized first.
+* **Caching**: Redis frequently stores serialized values.
+* **Message queues**: Systems like RabbitMQ transmit serialized messages.
+
+The same principle applies everywhere: program data is serialized into a storable or transferable format.
+
+---
+
+## Final Thoughts
+
+The frontend and backend cannot directly share objects because they run in separate memory spaces and communicate through a network. They must first convert their internal data into a common transport format such as JSON.
+
+JSON acts like a common language between the frontend and backend. The frontend translates its internal object into JSON, sends it through the network, and the backend translates the received JSON into its own internal data structure. 
+
+This conversion process—serialization and deserialization—is what makes communication between different applications, languages, and systems possible.`,
+  },
+
+  {
     title: "Day 3 — Learning Backend from First Principles (Part 9)",
     slug: "backend-first-principles-day-3-part-9",
     description: "Complete Routing Flow: Following a Request from Start to Finish. The complete mental model — golden rules, senior engineer mindset, and Day 3 summary.",
