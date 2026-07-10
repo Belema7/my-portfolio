@@ -2,6 +2,204 @@ import type { Post } from "@/types/content";
 
 export const posts: Post[] = [
   {
+    title: "Day 4 — Learning Backend from First Principles (Part 3)",
+    slug: "backend-first-principles-day-4-part-3",
+    description: "Text-Based Serialization Formats: Why do we have multiple formats? A deep dive into JSON, XML, and YAML, their strengths, and how to choose between them.",
+    category: "Learning Journey",
+    date: "2026-07-20",
+    readingTime: "10 min read",
+    content: `# Backend from First Principles — Day 4 (Part 3)
+
+# Text-Based Serialization Formats: JSON, XML, and YAML
+
+> *"In the previous parts, I learned why serialization exists and how it allows different programming languages to communicate. I also discovered that HTTP doesn't understand JavaScript objects or Python dictionaries—it only transports bytes. But if serialization converts objects into transferable data, why do some systems use JSON, others use XML, and others use YAML? Why isn't there just one universal serialization format? Today's lesson explores text-based serialization formats, why they exist, and how to choose between them."*
+
+---
+
+## Why Do We Need Different Formats?
+
+Imagine I have a JavaScript object.
+
+\`\`\`ts
+const user = {
+    name: "Belema",
+    age: 22
+};
+\`\`\`
+
+Earlier, I learned that this object cannot travel directly across the internet, so I serialize it. The result becomes JSON:
+
+\`\`\`json
+{
+    "name": "Belema",
+    "age": 22
+}
+\`\`\`
+
+Everything works. But in another project, I might see something completely different describing the exact same information:
+
+\`\`\`xml
+<user>
+    <name>Belema</name>
+    <age>22</age>
+</user>
+\`\`\`
+
+Or in a configuration file, I might find:
+
+\`\`\`yaml
+name: Belema
+age: 22
+\`\`\`
+
+All three describe the same information. Why do we have multiple formats?
+
+### What Is a Serialization Format?
+
+A serialization format defines the rules for representing structured data as text (or bytes) so it can be stored or transmitted. Think of it as a language for describing data. Just as humans use different spoken languages (English, French, Amharic), computers use different serialization formats. Each format has its own syntax and strengths.
+
+### The Same Data, Different Formats
+
+The information hasn't changed; only its representation has. Imagine three people introducing themselves in different languages. The words look different, but the meaning is identical. 
+
+Similarly, think about file formats. You can save a document as \`.docx\`, \`.pdf\`, or \`.txt\`. Each file format stores the same content differently. Serialization formats follow exactly the same idea. They simply represent data in different ways.
+
+### Why Don't We Use Just One Format?
+
+Different applications have different priorities. Some care most about human readability, others about performance, others about backward compatibility, and others need rich document structures. One format cannot optimize for every situation. 
+
+For example:
+* **JSON** focuses on simplicity and web APIs.
+* **XML** focuses on structured documents and enterprise systems.
+* **YAML** focuses on human-readable configuration files.
+
+Every format solves a different problem.
+
+### Text-Based vs Binary Formats
+
+Serialization formats fall into two broad categories:
+
+* **Text-Based Formats**: Humans can read them (JSON, XML, YAML). They are easy to debug, edit manually, and share.
+* **Binary Formats**: Humans usually can't read them directly; they are designed for machines (Protocol Buffers, MessagePack). We will explore these in the next part.
+
+---
+
+## JSON: The Standard for Web APIs
+
+Whether I build applications with React, Next.js, Express.js, NestJS, Spring Boot, or Django, they almost always communicate using JSON. 
+
+### What Is JSON?
+
+JSON stands for **JavaScript Object Notation**. Although it was inspired by JavaScript object syntax, today it is a language-independent data format. Every major programming language can read, write, serialize, and deserialize JSON. That's one of the biggest reasons for its success.
+
+Any programming language can understand this:
+
+\`\`\`json
+{
+    "name": "Belema",
+    "age": 22,
+    "isStudent": true
+}
+\`\`\`
+
+### Think About English or Shipping Containers
+
+Imagine people from different countries meeting for a conference. Instead of everyone learning every language, they agree to communicate in English. JSON plays the same role for software. Instead of every programming language understanding every other language, they all agree to communicate using JSON.
+
+Similarly, shipping companies use standardized shipping containers worldwide. JSON is the same "container" for data.
+
+### Why JSON Became So Popular
+
+JSON became popular because it's remarkably simple and lightweight. Unlike XML, it doesn't require extra tags. 
+
+* **Easy for Humans**: Even someone who has never written JavaScript can often understand its key-value structure, making debugging much easier.
+* **Easy for Computers**: Almost every language includes built-in libraries for working with JSON (\`JSON.parse\` in JavaScript, \`json.loads\` in Python, \`ObjectMapper\` in Java).
+
+### JSON Fits HTTP Perfectly
+
+HTTP only transports bytes; it doesn't understand programming languages. When a request includes the header \`Content-Type: application/json\`, the server knows exactly how to interpret the incoming bytes. This made JSON the natural companion to HTTP. 
+
+Today, JSON appears in REST APIs, mobile applications, cloud services, microservices, and browser communication.
+
+---
+
+## YAML & XML: Two Other Important Serialization Formats
+
+If JSON is so good, why do XML and YAML still exist? Because there is rarely one perfect solution for every problem.
+
+### What Is XML?
+
+XML stands for **Extensible Markup Language**. It was introduced long before JSON to provide a flexible way to represent structured data using opening and closing tags.
+
+\`\`\`xml
+<user>
+    <name>Belema</name>
+    <age>22</age>
+</user>
+\`\`\`
+
+XML is self-describing, supports complex hierarchies naturally, and can be validated against strict schemas. For many years, it became the standard format for enterprise applications, banking software, and SOAP web services. Its biggest weakness is verbosity—it requires much more syntax than JSON, increasing document size.
+
+### What Is YAML?
+
+YAML stands for **YAML Ain't Markup Language**. Unlike XML, it wasn't primarily designed for APIs. Its main goal is human-readable configuration.
+
+\`\`\`yaml
+name: Belema
+age: 22
+country: Ethiopia
+\`\`\`
+
+YAML uses clean syntax without braces, quotation marks, or closing tags. Instead, it relies on indentation. Developers love it for configuration files, deployment files, and infrastructure definitions (like Docker Compose, GitHub Actions, and Kubernetes manifests). Instead of sending data between applications, YAML usually tells software how to behave.
+
+---
+
+## JSON vs XML vs YAML: Which One Should You Use?
+
+They all represent structured data, but how do you choose?
+
+### Comparing Readability and Syntax
+
+* **JSON**: Easy to read, but requires braces and quotation marks.
+* **XML**: Very explicit with tags, but can be verbose.
+* **YAML**: The cleanest syntax relying on indentation, making it highly readable but sensitive to formatting errors.
+
+### Comparing File Size and Parsing
+
+* **JSON**: Small and fast to parse.
+* **XML**: Usually the largest due to repeating tags, and can be slower to parse.
+* **YAML**: Compact, but parsing can be slower due to flexible syntax rules.
+
+### Web API Support vs Configuration
+
+* **Web APIs**: JSON dominates. Most modern frontend frameworks expect JSON by default.
+* **Enterprise Systems**: XML remains highly relevant for legacy systems, SOAP services, and rich document structures.
+* **Configuration**: YAML dominates DevOps and configuration files.
+
+### Quick Decision Guide
+
+| If You're Building... | Recommended Format |
+| --- | --- |
+| REST API | JSON |
+| React Application | JSON |
+| Mobile Backend | JSON |
+| Docker Configuration | YAML |
+| Kubernetes Deployment | YAML |
+| Legacy SOAP Service | XML |
+| Enterprise Document Exchange | XML |
+
+---
+
+## Final Thoughts
+
+Serialization and serialization formats are two different concepts. Serialization is the process, while JSON, XML, and YAML are formats that the process can produce.
+
+There is no universal best format. JSON focuses on communication between web applications. XML focuses on richly structured documents and enterprise interoperability. YAML focuses on making configuration files easy for humans to read and edit. 
+
+By understanding when to use each format, you can choose the right tool for the right problem rather than simply picking the most popular one. In the next part, we will explore what happens when performance becomes more important than readability: **Binary Serialization**.`,
+  },
+
+  {
     title: "Day 4 — Learning Backend from First Principles (Part 2)",
     slug: "backend-first-principles-day-4-part-2",
     description: "Serialization vs Deserialization: Understanding the core differences and the complete request and response lifecycle in a web application.",
