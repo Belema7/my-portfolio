@@ -1,0 +1,410 @@
+---
+title: Day 2 — Learning Backend from First Principles (Part 7)
+description: >-
+  Faster Connections: The evolution from HTTP/1.0 to Keep-Alive, HTTP/2
+  Multiplexing, and HTTP/3 QUIC Connection Migration.
+slug: backend-first-principles-day-2-part-7
+date: '2026-07-10'
+category: Learning Journey
+readingTime: 12 min read
+day: 2
+part: 7
+series: Learning Backend from First Principles
+order: 207
+published: true
+---
+# Backend from First Principles — Day 2 (Part 7)
+
+# Faster Connections — From HTTP/1.0 to HTTP/3
+
+> *"For a long time, I believed website speed mainly depended on internet speed. If my Wi-Fi was fast, websites should load quickly. Today's lesson completely changed that idea. I discovered that one of the biggest reasons modern websites feel so much faster is because HTTP itself has evolved over the years."*
+
+---
+
+## Introduction
+
+Throughout this journey, I've been learning HTTP from first principles.
+So far, I've explored:
+- Networking Protocols
+- The OSI Model
+- TCP vs UDP
+- HTTP Requests & Responses
+- HTTP Headers
+- HTTP Methods
+- Status Codes
+- Statelessness
+- Idempotency
+- CORS
+- Security Headers
+- Browser Caching
+- React Query
+- Content Negotiation
+- Compression
+
+At this point, I understood **what** travels across the network. I understood **how** browsers and servers negotiate. I understood **how** responses are compressed.
+Then another question came to mind.
+
+> **If we've already optimized requests with caching and compression, why did HTTP continue evolving?**
+
+Why did we get HTTP/1.1, HTTP/2, and HTTP/3? Wasn't HTTP already "good enough"?
+Today's lesson answered that question. The problem wasn't just **what** was being sent. The problem was **how the connection itself worked**.
+
+---
+
+## Imagine Ordering Food Every Time
+
+The instructor gave an idea that made everything click.
+Imagine your favorite restaurant is right next to your house. Every time you want food, you do this:
+1. Walk to the restaurant.
+2. Open the door.
+3. Order one meal.
+4. Walk home.
+
+Five minutes later... you're hungry again. What do you do?
+Walk there. Open the door. Order one meal. Walk home. Repeat. Again.
+Sounds inefficient, right?
+
+Now imagine the restaurant says: "Why don't you stay here? Just keep ordering whenever you need something."
+That saves walking back and forth, opening the door repeatedly, and waiting every single time.
+This is surprisingly similar to how early versions of HTTP worked.
+
+---
+
+## What Was HTTP/1.0?
+
+HTTP/1.0 was one of the earliest widely used versions of HTTP. It was simple. Reliable. Easy to understand.
+The basic flow looked like this:
+```text
+Open TCP Connection → Send HTTP Request → Receive Response → Close Connection
+```
+Simple. But there was one huge problem. The connection closed **after every single request**.
+
+---
+
+### One Connection = One Request
+
+Imagine opening a webpage in the 1990s. That page contains HTML, CSS, JavaScript, and five images.
+How many HTTP requests does the browser need?
+```text
+HTML → CSS → JavaScript → Image 1 → Image 2 → Image 3 → Image 4 → Image 5
+```
+That's **eight requests**.
+With HTTP/1.0... each request required its **own TCP connection**.
+
+Meaning:
+```text
+Open Connection → Request HTML → Close Connection | Open Connection → Request CSS → Close Connection | Open Connection → Request JavaScript → Close Connection
+```
+Imagine doing that dozens of times for one webpage.
+
+---
+
+### Remember the TCP Three-Way Handshake?
+
+Earlier in this series, I learned that TCP doesn't immediately start sending data. Before communication begins, it performs the famous **Three-Way Handshake**:
+```text
+Client → SYN → Server → SYN + ACK → Client → ACK → Connection Established
+```
+Only after completing those steps can HTTP send data.
+Now imagine repeating that handshake for every image, every CSS file, every JavaScript file, every API request. That's a lot of unnecessary work.
+
+---
+
+### A Highway Analogy
+
+Imagine driving on a highway. Every kilometer... someone forces you to stop your car, turn off the engine, get out, start the engine again, and continue driving.
+You'd eventually reach your destination. But it would take much longer.
+That's exactly what HTTP/1.0 was doing.
+
+---
+
+### Why This Became a Problem
+
+In the early days of the web... most websites were very simple. A page might contain some text, one image, and a few hyperlinks.
+Opening a new TCP connection for every request wasn't a huge issue. But websites evolved.
+Modern websites contain hundreds of images, fonts, CSS files, JavaScript bundles, videos, and API requests.
+Imagine opening a modern website with 120 Requests. Under HTTP/1.0... that could mean 120 TCP Connections. That's incredibly inefficient.
+
+---
+
+### The Hidden Cost of Connections
+
+Opening a connection isn't free. Every new connection requires a TCP handshake, memory allocation, operating system resources, and network resources.
+Even if the actual HTTP response is tiny... the connection itself still has a cost.
+Imagine requesting `favicon.ico` (2 KB). You still paid the full cost of creating an entirely new TCP connection. That's wasteful.
+
+---
+
+### Real Example
+
+Suppose I visit `https://melba.et`. The homepage loads HTML, CSS, JavaScript, Logo, Icons, Hero Image, Team Photos, API Calls.
+If HTTP/1.0 handled this page... the browser would repeatedly do:
+```text
+Open TCP → Request File → Receive Response → Close TCP
+```
+Again and again. The website would still work. But users would spend a lot of time waiting.
+
+---
+
+### The Internet Became Faster... But Websites Became Heavier
+
+Internet speeds have increased dramatically over the years. But websites have also become much larger.
+Simply increasing internet speed wasn't enough. The communication protocol itself needed to improve.
+
+---
+
+### The Biggest Limitation of HTTP/1.0
+
+After today's lesson, I think the biggest weakness of HTTP/1.0 can be summarized in one sentence:
+> **Every request started from scratch.**
+
+Even when the browser needed another request just milliseconds later. That design worked for the early web, but it couldn't keep up with modern applications.
+
+---
+
+### My Biggest Realization
+
+Before today... I assumed the biggest factor affecting website speed was internet bandwidth.
+Now I understand another important factor: **Connection management.**
+Even if your internet is incredibly fast... constantly opening and closing TCP connections wastes time. Sometimes the problem isn't the size of the data, it's the overhead of repeatedly establishing connections.
+
+---
+
+## Topic 7.2 — Keep-Alive: Reusing Connections Instead of Starting Over
+
+If we need multiple files, why don't we simply reuse the same TCP connection?
+That single idea gave birth to one of the most important improvements in HTTP history: **Persistent Connections**, commonly known as **Keep-Alive**.
+
+### Think About Calling Your Friend
+Imagine calling your friend. "Hey. I have one question." Answer. Hang up. Five seconds later... call again. "I forgot another question." Answer. Hang up. Repeat. That would be exhausting.
+Now imagine leaving the phone call connected. You simply continue asking questions whenever you think of them. Much easier. That's exactly what Keep-Alive does.
+
+---
+
+### What Is Keep-Alive?
+
+Keep-Alive allows the browser and the server to **reuse the same TCP connection** for multiple HTTP requests.
+Instead of:
+```text
+Open Connection → One Request → Close Connection
+```
+We now have:
+```text
+Open Connection → Request 1 → Request 2 → Request 3 → Request 4 → Close Connection
+```
+One connection. Many requests.
+Because the TCP connection remains open instead of being closed immediately, this simple improvement saves an enormous amount of work. No repeated handshakes. No repeated connection setup. Less waiting.
+
+---
+
+### How Keep-Alive Works
+
+The browser first opens one TCP connection (`TCP Connection → Established`).
+Instead of closing it immediately... the browser requests:
+```text
+HTML → CSS → JavaScript → Logo → Icons → Fonts
+```
+All through the same connection. Only after communication is finished does the connection close.
+
+---
+
+### The Connection Header
+Historically, HTTP clients indicated they wanted to keep the connection alive using `Connection: keep-alive`.
+Today, in **HTTP/1.1**, persistent connections are the default behavior, so this header usually isn't necessary anymore.
+
+---
+
+### Comparing HTTP/1.0 and Keep-Alive
+
+**HTTP/1.0**
+```text
+Open TCP → HTML → Close TCP | Open TCP → CSS → Close TCP | Open TCP → JavaScript → Close TCP
+```
+Five requests. Five TCP connections.
+
+**Keep-Alive**
+```text
+Open TCP → HTML → CSS → JavaScript → Images → Fonts → Close TCP
+```
+Five requests. One TCP connection. The difference is dramatic.
+
+---
+
+### Why Is This Faster?
+Every new connection requires the TCP Three-Way Handshake (`SYN → SYN + ACK → ACK`). That takes time. Keep-Alive performs that handshake only once. Everything afterward becomes much more efficient.
+
+### Less Work for the Server
+Without Keep-Alive, the server repeatedly has to accept new TCP connections, allocate resources, close connections, and clean up memory. With persistent connections, the server performs much less work. It can handle more users with the same hardware.
+
+---
+
+### Is Keep-Alive Perfect?
+Keep-Alive removed one major bottleneck. But another limitation remained.
+Imagine sending these requests:
+```text
+Request 1 → Request 2 → Request 3 → Request 4
+```
+Even though they're using the same TCP connection... traditional HTTP still processes them in order. If one request becomes slow... everything behind it has to wait.
+This creates another performance problem known as **Head-of-Line Blocking**.
+
+---
+
+## Topic 7.3 — HTTP/2 Multiplexing: Solving the Traffic Jam
+
+With Keep-Alive, browsers reused one TCP connection. But requests still behaved like a queue.
+
+### Imagine a Supermarket Checkout
+There's only one checkout lane. Five customers arrive.
+```text
+Customer A → Customer B → Customer C → Customer D → Customer E
+```
+Now imagine Customer A has a problem. Their credit card isn't working. Everyone behind them must wait. The entire line is blocked.
+This situation is **Head-of-Line Blocking**. The same thing happened inside HTTP/1.1.
+
+---
+
+### A Highway Analogy
+Imagine a one-lane road: `Truck → Car 1 → Car 2 → Motorcycle`. The truck is slow. Everyone must follow the truck.
+Now imagine adding four more lanes: `Truck | Car 1 | Car 2 | Motorcycle`. Vehicles can travel independently. Traffic flows much faster. That's essentially what HTTP/2 introduced.
+
+---
+
+### Enter HTTP/2
+Instead of forcing every request to wait in line, HTTP/2 introduced **Multiplexing**.
+Rather than sending:
+```text
+Request 1 → Response 1 → Request 2 → Response 2
+```
+HTTP/2 allows:
+```text
+Request 1, 2, 3, 4 → Responses arrive independently
+```
+Multiple conversations happen simultaneously over **one TCP connection**.
+
+---
+
+### Streams — The Secret Behind HTTP/2
+Think of a stream as an independent conversation inside one TCP connection.
+```text
+TCP Connection → Stream 1, Stream 2, Stream 3, Stream 4, Stream 5
+```
+Every request gets its own stream. The browser and server can process them independently.
+
+### Binary Framing
+Before HTTP/2, HTTP messages were plain text. HTTP/2 breaks requests into small **binary frames**. Computers process binary data much more efficiently than text.
+
+### Stream Prioritization
+Not every resource is equally important. HTML, CSS, JavaScript are more important than footer images or advertisements. HTTP/2 allows browsers to assign priorities to streams. Important resources can be delivered first.
+
+---
+
+### One Connection Is Enough
+Before today... I assumed faster websites required more TCP connections. Instead, HTTP/2 says: "One well-managed connection is enough." It improves how that single connection is used.
+
+### HTTP/1.1 vs HTTP/2
+
+| HTTP/1.1 | HTTP/2 |
+| --- | --- |
+| Text-based protocol | Binary protocol |
+| One request effectively progresses at a time per connection | Multiple streams share one connection |
+| Suffers from application-level Head-of-Line blocking | Multiplexing greatly reduces waiting between requests |
+| More waiting | Better resource utilization |
+| Slower for resource-heavy pages | Much faster for modern websites |
+
+---
+
+### Did HTTP/2 Solve Every Problem?
+Even though HTTP/2 solved **HTTP-level Head-of-Line Blocking**, it still relied on **TCP**. And TCP has its own version of Head-of-Line blocking. If a TCP packet is lost, every stream sharing that connection has to wait until the missing packet is retransmitted. So there was still room for improvement: **HTTP/3**.
+
+---
+
+## Topic 7.4 — HTTP/3 & Connection Migration: The Final Evolution
+
+HTTP/2 still runs on top of TCP: `HTTP/2 → TCP → IP`.
+TCP is reliable, but imagine one packet gets lost. TCP refuses to continue until that missing packet arrives.
+```text
+1, 2, 3 (OK) → 4 (Missing) → 5, 6, 7, 8, 9, 10 (OK)
+```
+Everyone waits until package #4 arrives. This is Head-of-Line Blocking happening inside TCP itself.
+
+---
+
+### Enter HTTP/3
+Instead of asking how to improve HTTP, engineers asked: "What if we changed the transport protocol itself?"
+```text
+HTTP/1.1 → TCP | HTTP/2 → TCP | HTTP/3 → QUIC → UDP
+```
+This was one of the biggest architectural changes in HTTP history.
+
+### Meet QUIC
+QUIC is a modern transport protocol originally developed by Google, built on UDP.
+QUIC provides its own reliability mechanisms **on top of UDP**. It gets the flexibility of UDP and the reliability applications need.
+
+### Why UDP?
+HTTP/3 uses UDP because UDP doesn't force every stream to wait when one packet is delayed. QUIC manages each stream independently.
+If Stream B loses a packet, Streams A and C continue moving. Only Stream B waits.
+
+---
+
+### One Feature That Blew My Mind: Connection Migration
+Imagine watching YouTube on your phone. You leave home. Your phone disconnects from Wi-Fi. A few seconds later... it switches to 5G.
+With older protocols: `Disconnect → Create New Connection → Continue`. This introduces delays.
+QUIC introduces **Connection IDs**. Instead of identifying a connection by IP Address + Port, QUIC gives each connection a unique identifier. Even if your IP address changes, the connection ID stays the same.
+The connection simply continues. That's **Connection Migration**. It makes transitioning between Wi-Fi and mobile data much smoother.
+
+---
+
+### Faster on Unstable Networks
+On unstable networks (packet loss, weak Wi-Fi, mobile data), HTTP/3 often performs significantly better because it avoids unnecessary waiting. Only the affected stream waits.
+
+### HTTP/2 vs HTTP/3
+
+| HTTP/2 | HTTP/3 |
+| --- | --- |
+| Uses TCP | Uses QUIC over UDP |
+| Multiplexing | Multiplexing |
+| Still affected by TCP Head-of-Line Blocking | Eliminates TCP-level Head-of-Line Blocking |
+| Connection tied to IP address | Uses Connection IDs |
+| Network changes often require reconnection | Supports Connection Migration |
+| Excellent performance | Even better on unstable networks |
+
+---
+
+### The Evolution of HTTP
+
+```text
+HTTP/1.0 (One Connection, One Request) → HTTP/1.1 (Keep-Alive, Reuse Connection) → HTTP/2 (Multiplexing, Many Streams) → HTTP/3 (QUIC, UDP, Connection Migration)
+```
+Each version didn't replace everything before it. It solved the biggest limitation of the previous generation.
+
+---
+
+## Part 7 Complete!
+
+## Final Summary
+
+The connection between the browser and the server is just as important as the data being exchanged. Even if the response is compressed, cached, and tiny, the experience can still feel slow if the connection itself isn't efficient.
+
+### HTTP/1.0 — A Great Beginning, But Not Built for Today's Web
+Opening a new TCP connection for every request wasn't a huge issue back then: `Open Connection → Request → Response → Close Connection`. But as websites became larger, this design became increasingly inefficient.
+
+### Keep-Alive — Reusing Instead of Rebuilding
+Keep-Alive allowed browsers to send multiple requests using the same TCP connection: `Request 1 → Request 2 → Request 3 → Request 4`. That eliminated countless unnecessary TCP handshakes.
+
+### HTTP/2 — Solving the Waiting Problem
+HTTP/2 introduced Multiplexing. Instead of one connection and one request at a time, HTTP/2 introduced one connection with many independent streams. That change dramatically reduced waiting.
+
+### HTTP/3 — Changing the Foundation
+HTTP/3 changed the transport layer beneath it: `HTTP/3 → QUIC → UDP`. QUIC builds its own reliability on top of UDP, allowing HTTP/3 to eliminate several limitations that TCP could never solve efficiently (like TCP Head-of-Line Blocking). Connection Migration allows mobile devices to switch networks without losing the connection.
+
+---
+
+## What I Learned Today
+
+1. **Website Speed Isn't Just About Internet Speed**: Connection management is equally important. A poorly managed connection wastes time before data even begins to travel.
+2. **Every HTTP Version Solved a Real Problem**: HTTP/1.1 (reusing connections), HTTP/2 (multiplexing to stop waiting in line), HTTP/3 (QUIC/UDP to remove TCP's bottlenecks).
+3. **Multiplexing Was a Game Changer**: One well-managed connection can outperform many inefficient ones.
+4. **QUIC Changed More Than I Expected**: Connection Migration alone completely changed how I think about mobile networking.
+5. **The Web Keeps Evolving**: Studying the history of HTTP makes modern technologies much easier to understand.
+
+Every part of this series has added another layer to my understanding. I'm beginning to see HTTP as one complete system where every improvement builds on the last. See you in **Day 2 – Part 8**.

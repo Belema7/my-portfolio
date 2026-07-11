@@ -1,0 +1,439 @@
+---
+title: Day 3 — Learning Backend from First Principles (Part 7)
+description: >-
+  Route Versioning: Why APIs Need Versions. Explore the four versioning
+  strategies, URL versioning in practice, and the API deprecation lifecycle.
+slug: backend-first-principles-day-3-part-7
+date: '2026-07-17'
+category: Learning Journey
+readingTime: 16 min read
+day: 3
+part: 7
+series: Learning Backend from First Principles
+order: 307
+published: true
+---
+# Backend from First Principles — Day 3 (Part 7)
+
+# Route Versioning: Why APIs Need Versions
+
+> *"Throughout this routing series, I've learned how to design clean and scalable API routes using static routes, dynamic routes, path parameters, query parameters, and nested routes. But another question came to mind. What happens after an API has been running for months or even years? Businesses evolve, features change, bugs are fixed, and endpoints improve. If I change an existing API, won't I break every application already using it? Today's lesson introduces one of the most important concepts in long-term API development: API Versioning."*
+
+---
+
+## Introduction
+
+Imagine I've built my first REST API. Clients start using it. Mobile apps connect. Web applications connect. Third-party developers integrate. Everything works perfectly.
+
+Six months later, my company decides to redesign the API — renaming fields, improving response structure, removing outdated endpoints. At first, that sounds easy. I simply update the code. But it's not that simple.
+
+---
+
+### The Problem With Changing APIs
+
+Suppose Version 1 returns:
+```json id="v1"
+{ "id": 15, "name": "Belema Girma" }
+```
+Thousands of mobile applications already expect this exact response. Now I decide to improve it. Version 2 returns:
+```json id="v2"
+{ "userId": 15, "fullName": "Belema Girma" }
+```
+Every application expecting `id` and `name` suddenly stops working. The API changed. The clients didn't.
+
+---
+
+### APIs Are Contracts
+
+> **An API is a contract between the server and its clients.**
+
+When clients start using an endpoint, they rely on its behavior. Unexpected changes can break applications, even if the server is technically "better."
+
+Think of electrical outlets — if the electricity company changed every outlet overnight, your charger would no longer fit. Nothing is wrong with your charger. The standard changed. That's exactly what happens when an API changes without versioning.
+
+---
+
+### What Is API Versioning?
+
+API versioning means:
+> **Maintaining multiple versions of an API so existing clients continue working while newer clients adopt improved versions.**
+
+Instead of replacing Version 1, we introduce Version 2:
+```text id="versions"
+/api/v1/users  ← older applications continue using this
+/api/v2/users  ← new applications use this
+```
+Nobody is forced to upgrade immediately.
+
+---
+
+### Why Versioning Matters
+
+| Without Versioning        | With Versioning                |
+| ------------------------- | ------------------------------ |
+| Existing apps may break   | Existing apps continue working |
+| Forced upgrades           | Gradual migration              |
+| High deployment risk      | Safer releases                 |
+| Poor developer experience | Better long-term maintenance   |
+
+Versioning allows innovation without sacrificing stability.
+
+---
+
+### Breaking Changes vs Non-Breaking Changes
+
+**Breaking changes** (require a new version):
+* Renaming a field
+* Removing an endpoint
+* Changing response structure
+* Changing required request parameters
+
+**Non-breaking changes** (usually don't require versioning):
+* Adding an optional field
+* Improving documentation
+* Fixing internal bugs
+* Optimizing database queries
+
+Knowing the difference helps developers decide when a new version is actually necessary.
+
+---
+
+### Backward Compatibility
+
+An API is **backward compatible** if existing clients continue working after new versions are released. Large companies spend significant effort maintaining backward compatibility because thousands — or even millions — of clients may depend on older API versions.
+
+---
+
+## Topic 7.2 — The Four API Versioning Strategies
+
+Modern REST APIs generally use one of these approaches:
+
+1. URL Versioning
+2. Header Versioning
+3. Media Type (Accept Header) Versioning
+4. Hostname Versioning
+
+All four allow multiple API versions to exist simultaneously. The difference is **where the version information is stored**.
+
+---
+
+### Strategy 1 — URL Versioning
+
+The most common approach — the version becomes part of the URL.
+```text id="url-version"
+/api/v1/users
+/api/v2/users
+```
+The version is immediately visible. That's one reason this approach is so popular.
+
+---
+
+### Strategy 2 — Header Versioning
+
+The version is stored inside an HTTP header:
+```http id="header"
+GET /users
+API-Version: 2
+```
+The URL never changes. The server reads the header and decides which version should handle the request.
+
+Think of shipping labels — the boxes look identical, but the label attached determines where they go.
+
+---
+
+### Strategy 3 — Media Type Versioning
+
+Uses the standard `Accept` header:
+```http id="media"
+GET /users
+Accept: application/vnd.company.v2+json
+```
+The URL remains `/users`. The requested media type specifies which version to return. Elegant but more complex to debug.
+
+---
+
+### Strategy 4 — Hostname Versioning
+
+Different subdomains for each version:
+```text id="host"
+https://v1.api.example.com/users
+https://v2.api.example.com/users
+```
+Less common for public REST APIs, sometimes used in large enterprise systems.
+
+---
+
+### Comparing the Four Strategies
+
+| Strategy              | Example                                   |
+| --------------------- | ----------------------------------------- |
+| URL Versioning        | `/api/v1/users`                           |
+| Header Versioning     | `API-Version: 1`                          |
+| Media Type Versioning | `Accept: application/vnd.company.v1+json` |
+| Hostname Versioning   | `v1.api.example.com`                      |
+
+| Strategy   | Strength            | Weakness                            |
+| ---------- | ------------------- | ----------------------------------- |
+| URL        | Simple and explicit | Version becomes part of the URL     |
+| Header     | Clean URLs          | Harder to test manually             |
+| Media Type | Pure HTTP design    | More complex                        |
+| Hostname   | Strong separation   | Infrastructure becomes more complex |
+
+---
+
+## Topic 7.3 — URL Versioning: The Most Popular API Versioning Strategy
+
+### What Is URL Versioning?
+
+URL versioning places the API version directly inside the URL:
+```text id="versioned"
+/api/v1/users
+/api/v2/users
+```
+Every request clearly indicates which version of the API should handle it.
+
+### A Simple Example
+
+Version 1 returns `{ "id": 15, "name": "Belema Girma" }`. Version 2 returns `{ "userId": 15, "fullName": "Belema Girma", "joinedAt": "2026-01-15" }`.
+
+Now both endpoints coexist:
+```http id="both"
+GET /api/v1/users/15  ← older applications
+GET /api/v2/users/15  ← new applications
+```
+Nobody breaks.
+
+---
+
+### Why Developers Love URL Versioning
+
+When I see `/api/v1/users`, I instantly know this request uses Version 1. No hidden metadata. No inspecting headers. Everything is visible in the URL. That simplicity makes debugging much faster and easier.
+
+It's also trivial to test — just change the URL in a browser, Postman, or curl. No special configuration needed.
+
+---
+
+### URL Versioning in Different Frameworks
+
+**Express.js:**
+```javascript id="express"
+app.get("/api/v1/users", (req, res) => {
+    res.send("Users V1");
+});
+
+app.get("/api/v2/users", (req, res) => {
+    res.send("Users V2");
+});
+```
+
+Or organized with route groups:
+```javascript id="express-groups"
+app.use("/api/v1", v1Routes);
+app.use("/api/v2", v2Routes);
+```
+
+**NestJS** (built-in versioning support):
+```typescript id="nestjs"
+app.enableVersioning({ type: VersioningType.URI });
+
+@Controller({ path: "users", version: "1" })
+// → maps to /v1/users
+
+@Controller({ path: "users", version: "2" })
+// → maps to /v2/users
+```
+
+**Spring Boot:**
+```java id="spring"
+@RestController
+@RequestMapping("/api/v1/users")
+// Version 1
+
+@RestController
+@RequestMapping("/api/v2/users")
+// Version 2
+```
+
+---
+
+### Versioning an Entire API
+
+Most APIs version the entire collection of routes together:
+```text id="api-tree"
+/api
+    /v1 → /users, /products, /orders
+    /v2 → /users, /products, /orders
+```
+This keeps the structure organized and makes maintenance straightforward.
+
+---
+
+### Benefits of URL Versioning
+
+* Easy to understand — version visible immediately
+* Easy to debug — logs clearly show `/api/v1/users` vs `/api/v2/users`
+* Easy to document — each version has its own section
+* Easy to cache — caches treat different versions as separate resources
+* Framework support — almost every backend framework supports it
+
+---
+
+### URL Versioning vs Header Versioning
+
+| URL Versioning                   | Header Versioning           |
+| -------------------------------- | --------------------------- |
+| Version visible in URL           | Version hidden in headers   |
+| Easy to test manually            | Requires custom headers     |
+| Beginner-friendly                | Slightly more advanced      |
+| Widely used for public REST APIs | Often used in internal APIs |
+
+---
+
+### Common Beginner Mistakes
+
+**Removing the old version too soon:** Clients need time to migrate. Keep older versions available until users have had a reasonable opportunity to upgrade.
+
+**Mixing versions inconsistently:** Avoid `/api/v1/users` with `/api/v2/products` and `/api/v1/orders` unless there's a deliberate strategy.
+
+**Versioning too early:** Bug fixes, performance improvements, and optional response fields usually don't require a new version. Reserve versioning for meaningful, breaking changes.
+
+---
+
+## Topic 7.4 — The API Deprecation Lifecycle: Retiring APIs Without Breaking Clients
+
+If every old version remains online forever, the backend becomes increasingly difficult to maintain. At some point, older versions need to be retired. But removing them immediately would break applications that still depend on them.
+
+### What Does "Deprecated" Mean?
+
+> **Still available, but scheduled to be removed in the future.**
+
+A deprecated API still works today. Developers simply shouldn't build new applications with it — they should begin migrating to its replacement.
+
+Think of an old bridge: engineers don't immediately destroy it when a new one opens. They build the new bridge, inform drivers, wait until traffic has moved, then close the old one. API deprecation follows exactly the same process.
+
+---
+
+### The API Lifecycle
+```text id="lifecycle"
+Develop → Release → Maintain → Deprecate → Migrate → Sunset → Retire
+```
+Every successful API eventually reaches each of these stages.
+
+---
+
+### Step 1 — Announce Deprecation
+
+Instead of silently removing Version 1, announce that it is deprecated:
+> API Version 1 is deprecated. Please migrate to Version 2 before December 31.
+
+Communication channels include documentation updates, release notes, developer newsletters, API dashboards, email notifications, and response headers.
+
+---
+
+### Step 2 — Release the New Version
+
+Deprecation should always include a replacement. Clients can begin migrating immediately once the new version is available.
+
+---
+
+### Step 3 — Allow a Migration Period
+
+Large companies rarely remove APIs immediately. They provide a migration window — sometimes 30 days, sometimes 6 months, sometimes a year. This gives organizations time to update applications, test integrations, and deploy new versions.
+
+---
+
+### Step 4 — Sunset the Old Version
+
+After the migration deadline, the old version reaches its **sunset date** — the day it officially stops working:
+```http id="gone"
+410 Gone
+```
+The important point: clients were warned well in advance.
+
+---
+
+### Deprecation Headers
+
+Modern APIs communicate deprecation directly through HTTP response headers:
+```http id="headers"
+Deprecation: true
+Sunset: Wed, 31 Dec 2026 23:59:59 GMT
+```
+These tell clients: this version is deprecated, and here's when it stops working.
+
+---
+
+### Breaking Changes Need Migration Guides
+
+If Version 2 renames fields (e.g., `name` → `fullName`, `id` → `userId`), simply saying "use Version 2" isn't enough. Document exactly what changed and how developers should update their code. Migration guides save developers countless hours.
+
+---
+
+### Complete Deprecation Lifecycle
+
+| Stage     | Description                        |
+| --------- | ---------------------------------- |
+| Release   | Publish the API                    |
+| Maintain  | Fix bugs and improve stability     |
+| Deprecate | Announce future removal            |
+| Migrate   | Clients upgrade to the new version |
+| Sunset    | Old version is retired             |
+
+---
+
+### Common Beginner Mistakes
+
+**Removing APIs immediately:** Always provide a migration period.
+
+**No migration guide:** Explain the differences clearly. Developers shouldn't have to guess how to upgrade.
+
+**No communication:** Changing an API without informing users damages trust.
+
+**Supporting every version forever:** Keeping `/v1` through `/v6` alive indefinitely creates unnecessary maintenance work. Retire old versions responsibly after a fair migration period.
+
+---
+
+## Part 7 Complete!
+## Final Summary
+
+An API is a contract. Once clients begin using that contract, changing it carelessly can cause widespread failures. API Versioning exists to allow APIs to evolve while protecting existing users.
+
+**1. APIs Change — Versioning Protects Clients**
+Instead of replacing existing APIs, new versions are introduced alongside them. Clients migrate at their own pace.
+
+**2. Four Versioning Strategies Exist**
+URL, Header, Media Type, and Hostname versioning all solve the same problem differently.
+
+**3. URL Versioning Is the Most Common**
+For public REST APIs, URL versioning is preferred because it's simple, visible, and easy to use.
+
+**4. Deprecation Is a Process, Not a Deletion**
+Responsible teams announce deprecations, provide migration guides, allow time for upgrades, and retire old versions gracefully — never overnight.
+
+**5. Know Breaking vs Non-Breaking Changes**
+Not every code change requires a new version. Understanding this distinction prevents unnecessary complexity.
+
+### Checkpoint Questions
+
+**Why do APIs need versioning?**
+Because changing an existing API can break applications that already depend on it. Versioning allows new functionality while maintaining compatibility.
+
+**What is a breaking change?**
+Any modification that causes existing clients to stop working — renaming fields, removing endpoints, changing request/response formats.
+
+**What are the four API versioning strategies?**
+URL Versioning, Header Versioning, Media Type Versioning, Hostname Versioning.
+
+**Which versioning strategy is most common for public REST APIs?**
+URL Versioning (e.g., `/api/v1/users`).
+
+**What does "deprecated" mean?**
+A deprecated API still works but is planned for future removal. Developers should migrate before the sunset date.
+
+**Why shouldn't old API versions be removed immediately?**
+Existing applications may still depend on them. A migration period prevents outages and gives developers time to update.
+
+---
+
+### Preview — Day 3 (Part 8)
+In Part 8, I'll learn about **Route Middleware** — what middleware is, the request pipeline, authentication middleware, logging middleware, error-handling middleware, and middleware in Express.js, NestJS, and Spring Boot.

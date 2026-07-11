@@ -1,0 +1,69 @@
+---
+title: How I Structure React Projects
+description: >-
+  The folder conventions I use to keep components, data, and routes maintainable
+  as projects grow.
+slug: react-project-structure
+date: '2026-03-22'
+category: Technical Notes
+readingTime: 6 min read
+published: true
+---
+Folder structure does not make an app good by itself, but bad structure makes every change slower. I have rebuilt enough projects to care about conventions that help future-me find things in minutes, not hours.
+
+I organize by feature and route, not by file type alone. That does not mean I abandon shared folders—it means the top level answers "where would I look for this?" before "what extension is it?"
+
+## The top-level map
+
+A typical project I work on looks roughly like this:
+
+- app/ for routes, layouts, and page-level composition
+- components/ for reusable UI, split into ui primitives and domain-specific cards or sections
+- data/ or lib/ for static content, helpers, and server utilities
+- types/ for shared TypeScript contracts
+- sections/ for larger page blocks that are not quite routes but more than atoms
+
+Routes stay thin. They wire data to layout and defer presentation to components or sections. If a page file grows past a screen, something probably belongs in components/ or sections/.
+
+## components/ui vs domain components
+
+I keep design-system primitives—buttons, badges, containers, inputs—in components/ui. They know nothing about "projects" or "blog posts". Domain components like ProjectCard or BlogCard live alongside them but import from ui, not the other way around.
+
+That separation stops business copy and layout hacks from leaking into primitives. It also makes it obvious what I can copy into another project wholesale.
+
+## Data lives in one place
+
+Static content for this portfolio—posts, projects, timeline entries—lives under data/ with small helper functions for sorting, filtering, and lookup by slug. Pages do not embed long arrays inline.
+
+For full-stack apps, the same idea applies: Prisma client and query helpers sit near the database layer; route handlers and server components call those helpers instead of duplicating Prisma queries across files.
+
+## Colocation when a feature is cohesive
+
+If only one route uses a complex widget and it is unlikely to be reused, I colocate it under app/.../_components or next to the feature folder. I do not promote everything to global components/ on day one.
+
+When a second route needs the same widget, I move it up. That rule prevents premature abstraction.
+
+## Naming and imports
+
+I use path aliases (@/components, @/data) so imports stay readable. File names match the default export: ProjectCard.tsx exports ProjectCard. Index barrels are sparing—I have seen barrels hide circular dependencies and slow down refactors.
+
+## What this portfolio does specifically
+
+This site uses app/ for routes, components/ for cards and layout chrome, sections/ for home and about blocks, and data/ for posts and projects. Blog slugs resolve through helpers; the blog page itself does not own the content array.
+
+That mirrors how I structure DevLink and DevMeet: routes orchestrate, data layer supplies shape, UI components render.
+
+## Signs the structure is failing
+
+I reorganize when I notice:
+
+- The same query copied in three route files
+- A components folder with forty unrelated files and no subfolders
+- Pages importing from five levels deep with relative paths
+- "utils.ts" becoming a thousand-line junk drawer
+
+None of those are fatal, but they are signals to split by feature or extract a data layer.
+
+## Closing thought
+
+Structure should reduce decisions, not create ceremony. I want a new contributor—or me in six months—to know where to add a blog post, a project, or a form without reading the entire repo. These conventions are how I get there.

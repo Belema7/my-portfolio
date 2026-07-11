@@ -1,9 +1,4 @@
-import {
-  booksReading,
-  booksFinished,
-  quotes,
-  movies,
-} from "@/data/library";
+import { getLibraryContent } from "@/lib/library/get-library-content";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { BookCard } from "@/components/cards/BookCard";
@@ -11,6 +6,7 @@ import { MovieCard } from "@/components/cards/MovieCard";
 import { HomeSection } from "@/components/home/HomeSection";
 
 export function LibraryView() {
+  const { booksReading, booksFinished, quotes, movies } = getLibraryContent();
   return (
     <div className="space-y-20">
       <HomeSection index={1} showConnector={false} markerAlign="flush">

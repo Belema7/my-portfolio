@@ -1,4 +1,4 @@
-import type { Book } from "@/types/content";
+import type { Book } from "@/lib/library/types";
 import { Badge } from "@/components/ui/Badge";
 
 export function BookCard({ book }: { book: Book }) {

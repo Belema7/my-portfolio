@@ -1,0 +1,59 @@
+---
+title: 'Week 1: Rebuilding My Portfolio'
+description: >-
+  Documenting the shift from a single-page beginner portfolio to a
+  content-driven personal site.
+slug: week-1-portfolio-rebuild
+date: '2026-05-01'
+category: Building in Public
+readingTime: 6 min read
+published: true
+---
+This week I started rebuilding my portfolio from a one-page layout into a multi-route site with writing, a library, project case studies, and a clearer about page. I am documenting the process because the goal is not more pages—it is more signal.
+
+## Why rebuild now
+
+My earlier portfolio proved I could ship a responsive page: hero, projects grid, contact links. That was enough for a first version. It was not enough to show how I think, what I am learning, or how I write about technical decisions.
+
+Recruiters and collaborators do not only want screenshots. They want context: problems, tradeoffs, and growth. A content-driven site supports that story better than a single scroll.
+
+## Information architecture first
+
+Before touching visual polish, I mapped routes: home, projects with detail pages, blog, library, about, contact. Each route has a job. Home orients and highlights; projects prove depth; blog shows thinking over time; library shares what I read and watch; about grounds the person behind the work.
+
+That map prevented me from adding random sections because they looked cool elsewhere. Every page justifies its place in the nav.
+
+## Content as data
+
+Posts and projects live in typed data files with helpers for slugs, featured flags, and latest lists. That keeps pages thin and makes adding a new post a content edit, not a layout rewrite.
+
+It also sets me up for MDX or a CMS later if I outgrow files. The abstraction boundary is already there: pages ask for getPostBySlug, not for inline arrays.
+
+## Design system in small pieces
+
+I leaned on a short list of primitives: container width, badges, cards, section headers. Tokens for color and spacing live in global CSS variables so dark mode and accent colors stay consistent.
+
+The win is not a huge component library—it is not redesigning every section from scratch when I add the blog or library.
+
+## What shipped in week one
+
+By the end of the first week I had routing in place, core layout (header, footer), home sections wired to real data, project listing and detail templates, blog listing and post pages, and the start of library and about content.
+
+Not everything was polished. Some posts were stubs. But the skeleton was real—you could navigate the whole site and see where content would deepen.
+
+## Friction I hit
+
+I re-learned that scope creeps quietly: "while I am at it" animations, perfect typography, every blog post fully written. I had to remind myself that a navigable site with honest placeholders beats a beautiful single page forever.
+
+I also hit App Router details—async params, server vs client boundaries—that slowed me down in a good way. Fixing them once on the portfolio teaches the pattern for client work.
+
+## Next weeks (intent)
+
+- Flesh out blog posts and case study copy
+- Tighten visual consistency on cards and section spacing
+- Improve metadata and Open Graph for sharing
+- Add small interactive touches only where they help UX
+
+## Why document publicly
+
+Writing this series holds me accountable and gives visitors a timeline of progress. If you are rebuilding your own site, I hope the takeaway is simple: define routes and content shape first, then iterate on craft. Week one is structure, not perfection.

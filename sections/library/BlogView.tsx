@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { posts } from "@/data/posts";
-import { getFeaturedPost } from "@/data/helpers";
-import type { PostCategory } from "@/types/content";
+import type { PostCategory, Post } from "@/lib/blog/types";
 import { Container } from "@/components/ui/Container";
 import { BlogCard } from "@/components/cards/BlogCard";
 import { Badge } from "@/components/ui/Badge";
@@ -18,18 +16,17 @@ const categories: (PostCategory | "All")[] = [
   "Personal Thoughts",
 ];
 
-export function BlogView() {
+export function BlogView({ posts, featured }: { posts: Post[], featured?: Post }) {
   const [active, setActive] = useState<(typeof categories)[number]>("All");
-  const featured = getFeaturedPost();
 
   const filtered =
-    active === "All" ? posts : posts.filter((p) => p.category === active);
+    active === "All" ? posts : posts.filter((p) => p.meta.category === active);
 
   const sorted = [...filtered].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    (a, b) => new Date(b.meta.date).getTime() - new Date(a.meta.date).getTime()
   );
 
-  const rest = sorted.filter((p) => p.slug !== featured?.slug);
+  const rest = sorted.filter((p) => p.meta.slug !== featured?.meta.slug);
 
   return (
     <Container>
@@ -40,17 +37,17 @@ export function BlogView() {
           </Badge>
           <h2 className="text-2xl font-bold text-[var(--color-primary)] md:text-3xl">
             <Link
-              href={`/blog/${featured.slug}`}
+              href={`/blog/${featured.meta.slug}`}
               className="hover:text-[var(--color-accent)]"
             >
-              {featured.title}
+              {featured.meta.title}
             </Link>
           </h2>
           <p className="mt-3 max-w-2xl text-[var(--color-text-secondary)]">
-            {featured.description}
+            {featured.meta.description}
           </p>
           <Link
-            href={`/blog/${featured.slug}`}
+            href={`/blog/${featured.meta.slug}`}
             className="mt-4 inline-block text-sm font-medium text-[var(--color-accent)]"
           >
             Read featured article →
@@ -78,7 +75,7 @@ export function BlogView() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {(active === "All" ? rest : sorted).map((post) => (
-          <BlogCard key={post.slug} post={post} />
+          <BlogCard key={post.meta.slug} post={post} />
         ))}
       </div>
     </Container>

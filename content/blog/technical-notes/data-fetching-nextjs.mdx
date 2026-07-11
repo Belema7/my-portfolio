@@ -1,0 +1,60 @@
+---
+title: How I Think About Data Fetching in Next.js
+description: >-
+  A practical breakdown of when to fetch on the server, when to use client
+  hooks, and how I structure data flow in App Router projects.
+slug: data-fetching-nextjs
+date: '2026-04-28'
+category: Technical Notes
+readingTime: 8 min read
+published: true
+featured: true
+---
+When I first moved to the App Router, I treated data fetching like a checklist: use fetch in a server component, or use useEffect on the client. That worked until pages grew more complex and I started mixing loading states, duplicate requests, and hydration issues.
+
+Now I think about data fetching as a layering problem. Each piece of data has a home—server, client, or cache—and picking the wrong layer creates friction you feel weeks later.
+
+## Start on the server by default
+
+Server Components can await data directly in the component tree. For a blog listing, a project detail page, or static marketing content, that means the HTML arrives with real data. Users see content immediately instead of a skeleton that resolves a second later.
+
+In my portfolio, blog posts and project case studies are loaded on the server from local data files. There is no client fetch for the initial view, which keeps the page simple and fast. The pattern looks like an async page component that reads data and passes it to presentational children.
+
+The benefits go beyond perceived speed. Sensitive tokens stay on the server, bundle size stays smaller because data-fetching libraries do not ship to the browser, and SEO gets real content in the first response.
+
+## Move to the client when interactivity demands it
+
+Client fetching still has a clear role. I reach for it when user actions change what data I need: search-as-you-type, filters, pagination tied to UI state, or forms that refetch after submission.
+
+On DevMeet, event search and filters depend on what the user selects. That state lives on the client, so fetching in response to user input belongs there too. The mistake is not using the client—it is fetching on the client for data that never needed interactivity in the first place.
+
+When I do client fetch, I prefer a small, explicit hook or a library like TanStack Query if the app has many dependent requests, caching, and invalidation rules. For a single filter on one page, a focused useEffect or event handler is enough.
+
+## Server Actions and mutations
+
+Reads often belong on the server; writes can too. Server Actions let me handle form submissions and mutations without building a separate API route for every form. I validate on the server, update the database, and revalidate the paths that need fresh data.
+
+That pattern clicked for me on full-stack projects where I was over-building REST endpoints for simple create/update flows. A Server Action plus revalidatePath is often the right size.
+
+## Caching and freshness
+
+Next.js extends fetch with caching semantics. For content that changes rarely—like this blog's static posts—I lean on defaults that favor static generation. For dashboards or user-specific data, I set cache: 'no-store' or use dynamic rendering so I do not show stale private data.
+
+I also pay attention to where deduplication happens. Multiple server components requesting the same resource in one tree should share work; understanding default fetch caching prevents surprise duplicate queries during development.
+
+## A simple decision checklist
+
+Before I add a fetch anywhere, I ask:
+
+- Does this data need to be in the first HTML response?
+- Does it depend on browser-only state or user input?
+- Is it user-specific or public?
+- How fresh does it need to be?
+
+If the answers point to stable, public, initial-render data, the server wins. If they point to reactive UI, the client wins. If they point to a form submission, a Server Action is often the cleanest path.
+
+## What changed in my projects
+
+After applying this consistently, my pages got flatter: fewer loading spinners on first paint, fewer "client" pages that were only client because I did not want to split components. I extract small client islands—filters, theme toggles, mobile menus—and leave the page shell on the server.
+
+Data fetching in Next.js is not one API to memorize. It is choosing the right layer for each piece of data, then letting the framework do the heavy lifting.

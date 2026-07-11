@@ -1,0 +1,1 @@
+export { getAdjacentPosts } from "./api";

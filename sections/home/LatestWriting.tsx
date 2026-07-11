@@ -1,4 +1,4 @@
-import { getLatestPosts } from "@/data/helpers";
+import { getLatestPosts } from "@/lib/blog/get-all-posts";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { BlogCard } from "@/components/cards/BlogCard";
@@ -17,7 +17,7 @@ export function LatestWriting() {
         />
         <div className="grid gap-px border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">
           {posts.map((post) => (
-            <div key={post.slug} className="bg-[var(--color-bg)]">
+            <div key={post.meta.slug} className="bg-[var(--color-bg)]">
               <BlogCard post={post} />
             </div>
           ))}

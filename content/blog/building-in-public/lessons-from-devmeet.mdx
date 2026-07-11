@@ -1,0 +1,60 @@
+---
+title: What I Learned Building DevMeet
+description: >-
+  Reflections on full-stack event platform development—from Prisma models to
+  responsive UI patterns.
+slug: lessons-from-devmeet
+date: '2026-03-10'
+category: Building in Public
+readingTime: 9 min read
+published: true
+---
+DevMeet is a full-stack platform for discovering and creating developer events—meetups, workshops, and online sessions. Building it was my most complete pass through authentication, database modeling, search, and deployment in one product. These are the lessons that stuck.
+
+## The product is really a data model
+
+Event platforms look like UI problems on the surface: cards, maps, calendars. Underneath, they are about consistent entities and relationships. An event has a title, description, date, location or URL, organizer, and maybe capacity. Users create events; visitors browse and filter.
+
+Getting the Prisma schema right early saved the most pain. I thought about which fields need indexes for search, which relations cascade on delete, and how optional fields (online vs in-person) should be represented. Refactoring a live schema later is possible but expensive emotionally.
+
+I modeled users and events with clear ownership: every event belongs to someone who created it. That single decision shaped authorization rules for edit and delete flows.
+
+## Search and filters need planning
+
+Users expect to filter by date, location, or keywords and see results quickly. That meant thoughtful queries—not loading every event to the client and filtering in JavaScript.
+
+I used database-level filtering with Prisma where clauses, combined with pagination so lists stayed fast as seed data grew. Fields used in search and sort got indexes. It is a small step in development that matters a lot in production.
+
+On the UI side, filter state lived in client components, but the actual fetch could still go through server actions or API routes that validate input before hitting the database.
+
+## Authentication touches everything
+
+Once users can create events, every write path needs to know who is calling. I integrated auth early enough that protected routes and server-side checks were part of the design, not a bolt-on.
+
+The lesson: do not build the entire create-event flow as anonymous and "add auth later." Later always means revisiting every mutation and wondering if someone else can edit another user's event.
+
+## UI consistency through reuse
+
+Event listing and event detail share visual language: badges for date, typography for titles, muted text for location. I reused card patterns and layout primitives instead of one-off markup per page.
+
+That sped development and made the app feel cohesive. When I changed spacing or border radius in one card component, the listing and detail pages improved together.
+
+## Forms, validation, and errors
+
+Event creation is a form-heavy flow. I paired React Hook Form with Zod so client-side feedback was immediate and server-side validation matched the same rules. Duplicated validation messages are frustrating; shared schemas fix that.
+
+I also learned to show server errors in the UI visibly—generic "something went wrong" toasts are better than silent failures, but specific messages ("end date must be after start date") are better still.
+
+## Deployment and environment discipline
+
+DevMeet runs on Vercel with a hosted PostgreSQL database. Environment variables for database URL and auth secrets were non-negotiable. I document which vars are required locally and in production so I am not guessing when a deploy fails.
+
+Migrations run as part of the workflow I trust before shipping schema changes. A broken migration on deploy is a bad day; rehearsing locally prevents most of that.
+
+## What I would do differently
+
+I would ship a thinner vertical slice even sooner: browse events, view one event, create one event—with auth—before adding nice-to-have features. I would also add basic analytics or logging earlier to see which flows fail in production.
+
+## Why I am glad I built it
+
+DevMeet connected patterns I had learned in isolation: Next.js App Router, Prisma, auth, forms, deployment. It is a reference project I can point to when discussing how I think about full-stack work—not because it is perfect, but because it is real, shipped, and maintained.

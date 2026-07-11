@@ -1,0 +1,66 @@
+---
+title: Mistakes I Made While Building My First Full-stack App
+description: >-
+  Honest notes on over-engineering, skipping validation, and learning to ship
+  incrementally.
+slug: first-fullstack-mistakes
+date: '2026-01-30'
+category: Learning Journey
+readingTime: 8 min read
+published: true
+---
+My first full-stack app was ambitious, messy, and incredibly educational. I am glad I shipped it—but I would not repeat every choice. These mistakes shaped how I build DevMeet, DevLink, and this portfolio.
+
+## Planning every feature before shipping one
+
+I had a long list: auth, profiles, posts, comments, notifications, admin dashboards. I built foundations for all of them instead of delivering one complete user journey.
+
+The cost was months of partial UI and no single flow that felt done. Users (and reviewers) cannot experience "almost auth plus almost posts." They experience one working path or nothing.
+
+Now I define the thinnest slice that proves the stack: sign up, create one resource, view it in a list. Ship that, then add the next layer.
+
+## Treating validation as optional
+
+Early forms accepted anything. Empty titles, broken dates, strings where numbers belonged. The database or Prisma sometimes caught issues; sometimes bad data slipped through and broke the UI later.
+
+Adding Zod schemas shared between client and server felt tedious until I saw how many bugs disappeared. Validation is not bureaucracy—it is UX that fails fast with clear messages.
+
+## Hiding errors from users and myself
+
+When something failed, I logged to the console and showed a generic alert—or nothing at all. Debugging in production became guesswork.
+
+I learned to return structured errors from server actions and API routes and to map them to form fields or toasts users can understand. Logging on the server stays, but the UI has to communicate failure too.
+
+## One giant client page
+
+I put "use client" on large pages because hooks felt convenient. Bundle size grew, data fetching moved to useEffect, and loading spinners appeared everywhere.
+
+The portfolio and later projects use server pages with small client islands. That mistake alone is worth avoiding early in App Router work.
+
+## Schema changes without a migration habit
+
+I tweaked models manually in dev and forgot to migrate consistently. Deployments and local databases diverged. I lost time fixing drift that a disciplined migrate workflow would have prevented.
+
+Now migrations are part of the definition of done for any schema change.
+
+## Skipping basic security thinking
+
+I assumed "nobody will hit this route." Unprotected API handlers and missing ownership checks are fine until they are not. Auth is not only login UI—it is verifying the user on every mutation.
+
+I am not a security expert, but I ask on every write: who is allowed to do this, and does the server enforce it?
+
+## Perfection before deployment
+
+I delayed deploys because the app did not feel ready. Ready never came. The first deploy taught me more than another week of local polish—environment variables, build errors, database connectivity in production.
+
+Shipping early is not shipping junk. It is exposing real constraints sooner.
+
+## What improved on the next projects
+
+DevMeet and DevLink used smaller milestones, shared validation, server-first pages, and earlier deploys. This portfolio uses the same habits: typed content, thin routes, real posts and case studies over time.
+
+## If you are on your first full-stack app
+
+You will make your own list. The point is not shame—it is to convert mistakes into defaults for the next repo: one vertical slice, validate everything, show errors, protect writes, deploy before you feel ready.
+
+Those defaults are how my second and third projects shipped faster and broke less.

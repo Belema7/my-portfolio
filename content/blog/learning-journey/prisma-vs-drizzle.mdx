@@ -1,0 +1,60 @@
+---
+title: 'Prisma vs Drizzle: My Notes'
+description: >-
+  A comparison based on my experience with Prisma in production projects and
+  exploring Drizzle for learning.
+slug: prisma-vs-drizzle
+date: '2026-02-18'
+category: Learning Journey
+readingTime: 7 min read
+published: true
+---
+I have shipped multiple projects with Prisma. Drizzle keeps appearing in discussions, tutorials, and repos I admire—so I spent time with both to understand the tradeoffs honestly, not from hype.
+
+This is not a verdict that one tool wins forever. It is how they fit my goals today: learning quickly, shipping full-stack apps, and building SQL intuition.
+
+## Why Prisma became my default
+
+Prisma's schema file is readable. Models, relations, and enums map closely to how I think about the domain. Migrations are integrated; the client is generated with types that match the schema. For DevMeet, DevLink, and other learning projects, that meant less time wiring raw SQL and more time on product flows.
+
+The developer experience is polished: good docs, clear errors in many cases, and a studio to inspect data when debugging. When I was newer to databases, that guardrails feeling mattered.
+
+Prisma Client's API is chainable and expressive for common CRUD and relation includes. I rarely write raw SQL in day-to-day feature work, which is a pro for velocity and a con for SQL depth.
+
+## What draws me to Drizzle
+
+Drizzle stays closer to SQL. Schemas are defined in TypeScript; queries look like SQL composed in code. People describe it as "lighter"—smaller runtime, less magic between you and the database.
+
+That appeals to me as a learning tool. Reading Drizzle examples forces me to think in tables, joins, and indexes explicitly. If my long-term goal includes strong backend fluency, time in Drizzle is probably well spent.
+
+Drizzle also fits teams that want SQL-native control without abandoning type safety. Migrations and schema live in the same ecosystem as the queries.
+
+## Tradeoffs I actually feel
+
+**Learning curve:** Prisma is gentler upfront. Drizzle assumes you are comfortable with SQL concepts earlier.
+
+**Bundle and runtime:** Drizzle is often cited as leaner. For my projects so far, Prisma's weight has not been the bottleneck; feature delivery and query shape mattered more.
+
+**Complex queries:** Prisma handles typical app queries well. Very complex reporting or database-specific features sometimes push you toward raw SQL or workarounds. Drizzle's model can shine when queries are inherently SQL-shaped.
+
+**Ecosystem and hiring:** Prisma is widely used in Next.js tutorials and production apps. Drizzle is growing but smaller. That affects copy-paste answers and community examples.
+
+## How I use them in practice today
+
+Prisma remains what I reach for when I want to ship a full-stack MVP and learn product development end to end. I know the migration workflow, relation patterns, and how to deploy with a hosted Postgres provider.
+
+Drizzle is what I reach for when the goal is deliberately educational: reproducing a schema by hand, writing queries that mirror SQL exercises, or comparing how the same feature looks in both tools.
+
+## What I am building toward
+
+I do not want to depend on ORM magic without understanding what gets executed. My plan is to keep shipping with Prisma while doing side exercises in Drizzle and occasional raw SQL—explaining query plans, indexes, and constraints in my own words.
+
+If a future project needs maximum control or edge deployment constraints, I will re-evaluate. For now, the best ORM is the one that matches the project's learning and delivery goals.
+
+## Short summary
+
+- Prisma: fast to learn, great DX, strong fit for Next.js full-stack apps I have built
+- Drizzle: SQL-forward, lighter feel, strong fit for deepening database skills
+- Me today: Prisma for shipping, Drizzle for stretching
+
+That split might change as I get more production experience. Documenting the reasoning now helps me notice when it is time to switch defaults.

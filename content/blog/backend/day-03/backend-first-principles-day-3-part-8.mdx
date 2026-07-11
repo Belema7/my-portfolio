@@ -1,0 +1,427 @@
+---
+title: Day 3 — Learning Backend from First Principles (Part 8)
+description: >-
+  Catch-All Routes: Handling Everything That Doesn't Match. Learn about API
+  error responses, SPA routing, and the difference between 404 and 405.
+slug: backend-first-principles-day-3-part-8
+date: '2026-07-17'
+category: Learning Journey
+readingTime: 15 min read
+day: 3
+part: 8
+series: Learning Backend from First Principles
+order: 308
+published: true
+---
+# Backend from First Principles — Day 3 (Part 8)
+
+# Catch-All Routes: Handling Everything That Doesn't Match
+
+> *"Throughout this routing series, I've learned how routers match incoming requests using static routes, dynamic routes, nested routes, and versioned APIs. Every request travels through the routing table until it finds a matching endpoint. But then I started wondering: What happens if no route matches at all? What happens when a user visits `/banana` on my website, or when an API client requests `/api/v1/unknown`? Does the server crash? Does it ignore the request? Today's lesson introduces another important routing concept that answers those questions: Catch-All Routes."*
+
+---
+
+## Introduction
+
+Imagine I'm building a backend application with routes like `/users`, `/products`, `/orders`, and `/login`. Everything works perfectly. But then someone types `GET /elephants`. I never created that route. Who handles that request?
+
+---
+
+### What Happens When No Route Matches?
+```text id="flow"
+Incoming Request → Compare Against Route Table → Found? → YES → Execute Handler
+                                                         ↓ NO → Continue Searching → No More Routes → Return Error
+```
+If no route matches, the router needs a final fallback called a:
+> **Catch-All Route**
+
+---
+
+### What Is a Catch-All Route?
+
+A **catch-all route** is a special route that handles requests that don't match any other route. Think of it as:
+> **The router's last option.**
+
+Instead of letting unmatched requests disappear, the server responds with something meaningful — like `404 Not Found` or a custom error page.
+
+---
+
+### Think About Customer Service
+
+Imagine calling customer support. Press 1 for Sales, 2 for Billing, 3 for Technical Support. But if you press 9, instead of hanging up, the system transfers you to a general operator. That operator is the catch-all. Routers work the same way.
+
+### Think About a Lost-and-Found Desk
+
+Most luggage reaches the correct baggage carousel. But sometimes a suitcase doesn't belong anywhere. Instead of throwing it away, airport staff send it to the Lost and Found. A catch-all route serves the same purpose.
+
+---
+
+### Why Catch-All Routes Matter
+
+Without a catch-all route, users might see blank pages, generic server errors, or confusing browser messages. With one, the application can return a friendly 404 page, helpful API error messages, suggestions for the correct endpoint, or links back to the homepage. Good user experience continues even when a route isn't found.
+
+---
+
+### Catch-All in Different Frameworks
+
+**Express.js** — placed after every other route:
+```javascript id="express"
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route not found"
+  });
+});
+```
+Express checks routes in order. If the catch-all appeared first, every request would stop there.
+
+**NestJS** — automatically returns `404 Not Found` when no controller matches. Developers can create global exception filters to customize the response.
+
+**Spring Boot** — also returns `404 Not Found` by default. Developers can customize error responses using Spring's error handling features.
+
+---
+
+### One Important Rule
+
+> **The catch-all route must come last.**
+
+Correct order:
+```text id="correct-order"
+/users → /products → /orders → Catch-All
+```
+Only requests that fail every previous match reach the catch-all.
+
+---
+
+### Normal Routes vs Catch-All Routes
+
+| Normal Route            | Catch-All Route                   |
+| ----------------------- | --------------------------------- |
+| Handles known paths     | Handles unknown paths             |
+| Specific endpoint       | Final fallback                    |
+| Runs first when matched | Runs only if nothing else matches |
+
+---
+
+## Topic 8.2 — API Catch-All Routes: Returning Meaningful Errors
+
+### APIs Don't Return Web Pages
+
+A website may show a beautiful 404 page with navigation links and search bars — that's perfect for humans. But a mobile app cannot click buttons or read paragraphs. It needs structured data instead.
+
+### APIs Communicate Using JSON
+
+Modern REST APIs almost always return errors as JSON:
+```http id="response"
+HTTP/1.1 404 Not Found
+```
+```json id="json"
+{
+  "status": 404,
+  "error": "Not Found",
+  "message": "Route not found"
+}
+```
+The response is designed for computers. Applications can easily parse it and decide what to do next.
+
+---
+
+### A Consistent Error Format
+
+Professional APIs return errors in a consistent structure — every error has the same fields for status, error type, and message. Consistency makes APIs much easier to consume.
+
+Inconsistency looks like this: one endpoint returns `{ "message": "Not Found" }`, another returns `{ "error": "Unknown Route" }`, and another returns `{ "reason": "Missing Endpoint" }`. Frontend developers must then handle three different formats. A single consistent structure eliminates that problem.
+
+---
+
+### Catch-All Routes in Different Frameworks
+
+**Express.js:**
+```javascript id="express-api"
+app.use((req, res) => {
+  res.status(404).json({
+    status: 404,
+    error: "Not Found",
+    message: "Route not found"
+  });
+});
+```
+
+**NestJS** default response:
+```json id="nestjs-json"
+{ "statusCode": 404, "message": "Cannot GET /unknown", "error": "Not Found" }
+```
+
+**Spring Boot** default response:
+```json id="spring-json"
+{ "timestamp": "...", "status": 404, "error": "Not Found", "path": "/unknown" }
+```
+
+---
+
+### What Information Should an Error Include?
+
+A good API error includes:
+* HTTP Status (e.g., `404`)
+* Error name (e.g., `Not Found`)
+* Human-readable message (e.g., `Route not found.`)
+* Optional: timestamp, request path, error code, documentation link
+
+---
+
+### Avoid Revealing Internal Details
+
+Never expose database queries, stack traces, passwords, or internal configuration in API responses. Those belong in server logs. Instead return:
+```json id="safe"
+{ "status": 500, "message": "Internal Server Error" }
+```
+
+---
+
+### Website vs API Catch-All
+
+| Website             | API                     |
+| ------------------- | ----------------------- |
+| HTML page           | JSON response           |
+| Designed for humans | Designed for software   |
+| Navigation links    | Structured error fields |
+
+---
+
+### Common Beginner Mistakes
+
+* **Returning HTML from an API** — API clients expect JSON, not web pages.
+* **Inconsistent error formats** — clients shouldn't have to guess where the message is stored.
+* **Returning status 200** for missing routes — always return `404 Not Found`, not `200 OK`.
+* **Exposing internal information** — stack traces and passwords belong in logs, not responses.
+
+---
+
+## Topic 8.3 — SPA Catch-All Routes: Why Refreshing a Page Sometimes Breaks
+
+### The Refresh Problem
+
+I've built React apps where visiting `/dashboard` worked perfectly, but refreshing the page returned `404 Not Found`. The page clearly existed — why did refreshing break it?
+
+### What Is an SPA?
+
+An SPA (Single Page Application — React, Vue, Angular, Svelte) downloads one main HTML file and then JavaScript updates the visible content without full page reloads.
+
+**Traditional website:**
+```text id="traditional"
+Browser → GET /about → Server → about.html
+```
+
+**React SPA:**
+```text id="spa"
+Browser → GET / → Server → index.html → React Router → /about
+```
+The server only serves `index.html`. React handles the rest.
+
+---
+
+### Client-Side Routing
+
+In SPAs, routing happens inside the browser. React Router watches the URL and renders different components when it changes — no new HTML page is requested. That's called **client-side routing**.
+
+---
+
+### Why the Refresh Problem Happens
+
+Clicking a React link stays inside the React application. But pressing F5 sends a brand-new HTTP request to the server:
+```http id="request"
+GET /dashboard
+```
+The backend only knows about `index.html`. There is no physical `/dashboard.html` file. So the server responds `404 Not Found`, even though the page exists inside React.
+
+---
+
+### The SPA Catch-All Solution
+
+Instead of returning 404, the server returns `index.html` for every unknown frontend route. React then loads, React Router reads `/dashboard`, and displays the correct page.
+
+Without SPA catch-all:
+```text id="without"
+Browser → GET /dashboard → Server → 404 Not Found
+```
+With SPA catch-all:
+```text id="with"
+Browser → GET /dashboard → Server → index.html → React Loads → React Router → Dashboard Page
+```
+
+---
+
+### Express.js SPA Catch-All
+
+```javascript id="express-spa"
+app.use(express.static("dist"));
+
+app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+```
+The wildcard route comes **after** all API routes and static files.
+
+### React Router Client-Side Catch-All
+
+```jsx id="react-router"
+<Route path="*" element={<NotFound />} />
+```
+This catches URLs that don't match any React route. This is **client-side** — it runs after React has already loaded.
+
+---
+
+### Backend vs SPA Catch-All
+
+| Backend Catch-All      | SPA Catch-All                |
+| ---------------------- | ---------------------------- |
+| Unknown API routes     | Unknown frontend routes      |
+| Returns 404            | Returns `index.html`         |
+| Server handles request | React Router handles request |
+| API focused            | Frontend focused             |
+
+---
+
+### Order Matters
+
+Placing the SPA catch-all before API routes means every request — including API requests — returns `index.html` instead of JSON. Everything breaks. The correct order:
+```text id="order"
+API Routes → Static Assets → SPA Catch-All
+```
+
+---
+
+### Common Beginner Mistakes
+
+* Returning 404 for SPA pages — the server should return `index.html` and let React decide
+* Catching API requests with the SPA fallback — API routes must be handled first
+* Confusing server routes with React routes — they are two different routing systems working together
+
+---
+
+## Topic 8.4 — 404 Not Found vs 405 Method Not Allowed: Understanding the Difference
+
+### What Does 404 Mean?
+
+**404 Not Found** means: the requested resource or route does not exist. The server searched its routing table but found no matching endpoint.
+
+### What Does 405 Mean?
+
+**405 Method Not Allowed** means something different. The route **does exist**. The problem is the **HTTP method**.
+
+Example: my API has `GET /users`. A client sends `DELETE /users`. The route `/users` exists, but it doesn't support `DELETE`. Response: `405 Method Not Allowed`.
+
+---
+
+### The Key Difference
+
+404 asks: **Does the route exist?**
+
+405 asks: **Does this route allow this HTTP method?**
+
+One checks the URL. The other checks the HTTP method.
+
+---
+
+### Think About a House
+
+House 25 doesn't exist → `404 Not Found`. House 25 exists but visitors must use the back entrance, not the front door → `405 Method Not Allowed`.
+
+### Think About a Restaurant
+
+"We don't serve Dinosaur Burger" → `404 Not Found` (item doesn't exist). "Customers can't cook their own meals" → `405 Method Not Allowed` (action isn't allowed).
+
+---
+
+### Practical Examples
+
+`GET /products` → 200 OK (route and method valid)
+
+`POST /products` (when only GET is defined) → 405 Method Not Allowed (route exists, method unsupported)
+
+`GET /cats` (no such route) → 404 Not Found (route doesn't exist)
+
+---
+
+### Framework Behavior
+
+**Express.js** — doesn't distinguish automatically. If you want explicit 405 responses for unsupported methods, you typically need additional middleware or manual handling.
+
+**NestJS** — for routes with no matching controller, returns 404. Unsupported methods may also result in a 404 unless explicitly handled.
+
+**Spring Boot** — commonly returns 405 automatically when a route exists but the HTTP method isn't supported:
+```java id="spring"
+@GetMapping("/users")
+// DELETE /users → 405 Method Not Allowed
+```
+
+---
+
+### Why 405 Is Useful
+
+If the API responds `405 Method Not Allowed`, I immediately know: the URL is correct, my HTTP method is wrong. That makes debugging much faster than a generic 404.
+
+---
+
+### 404 vs 405
+
+| 404 Not Found       | 405 Method Not Allowed                              |
+| ------------------- | --------------------------------------------------- |
+| Route doesn't exist | Route exists                                        |
+| URL is incorrect    | Method is incorrect                                 |
+| Check the endpoint  | Check the HTTP method                               |
+| Example: `/cats`    | Example: `DELETE /users` when only `GET` is allowed |
+
+---
+
+### Common Beginner Mistakes
+
+* **Returning 404 for everything** — using the correct status makes APIs easier to debug.
+* **Ignoring HTTP methods** — a route is identified by both URL and method.
+* **Assuming every framework behaves identically** — Spring Boot often returns 405 automatically; Express requires additional logic.
+
+---
+
+## Part 8 Complete!
+## Final Summary
+
+Routing isn't only about handling successful requests — it's also about handling unsuccessful ones gracefully.
+
+**1. Every Router Needs a Fallback**
+Catch-all routes ensure unmatched requests are handled gracefully instead of failing silently.
+
+**2. APIs and Websites Handle Missing Routes Differently**
+APIs return JSON. Traditional websites return HTML. SPAs return `index.html` so the frontend router can take over.
+
+**3. SPA Refreshes Work Differently From Client Navigation**
+Clicking a React link stays inside the application. Refreshing sends a new request to the server. SPA catch-all routes solve the refresh problem.
+
+**4. 404 and 405 Mean Different Things**
+404 = route doesn't exist. 405 = route exists, HTTP method isn't supported.
+
+**5. Order Always Matters**
+Catch-all routes should always be registered after every normal route.
+
+### Checkpoint Questions
+
+**What is a catch-all route?**
+A fallback route that handles requests which don't match any previously defined route.
+
+**Why do APIs use catch-all routes?**
+To return consistent, machine-readable JSON error responses when clients request unknown endpoints.
+
+**Why do SPAs return `index.html` instead of a 404?**
+Because frontend frameworks like React Router manage routing inside the browser. Returning `index.html` allows the application to load and display the correct page.
+
+**What is the difference between 404 and 405?**
+404 = the requested route doesn't exist. 405 = the route exists but the requested HTTP method isn't supported.
+
+**Where should a catch-all route be placed?**
+At the end of the routing table, after all normal routes.
+
+**Should APIs return HTML error pages?**
+No. REST APIs should return structured JSON error responses that clients can parse programmatically.
+
+---
+
+### Preview — Day 3 (Part 9)
+In Part 9, I'll walk through the complete lifecycle of a request — how routers match requests, route matching order, middleware and route execution, designing scalable route structures, and the routing mindset used by senior backend engineers.

@@ -1,0 +1,183 @@
+---
+title: Day 1 — Learning Backend from First Principles
+description: >-
+  Today I started a backend series called Backend from First Principles, and
+  within the first video I realized something: what actually is a backend?
+slug: backend-first-principles-day-1
+date: '2026-07-03'
+category: Learning Journey
+readingTime: 5 min read
+day: 1
+part: 1
+series: Learning Backend from First Principles
+order: 101
+published: true
+---
+Today I started a backend series called Backend from First Principles, and within the first video I realized something...
+
+## I thought I knew what a backend was...
+
+Before today, if someone asked me "What's a backend?", my answer would've been NestJS 😎 or Node.js.
+
+Turns out... that's not the backend. 😂 They're just technologies we use to build one.
+
+## So... what actually is a backend?
+
+The instructor explained something that completely changed my perspective. A backend is simply **another computer** connected to the internet.
+
+Not magic. Not some mysterious cloud. Just another computer whose full-time job is:
+
+```
+📥 Receive Requests
+
+🧠 Process Them
+
+📤 Send Responses
+
+🔁 Repeat Forever
+```
+
+Basically the hardest-working employee in the company. 😂
+
+## Then a bigger question came...
+
+When I type google.com, how does my computer even know where Google is? My browser doesn't magically know Google's location. That's where **DNS** comes in.
+
+## DNS = The Internet's Contact List
+
+Imagine trying to call your friend. Do you memorize their phone number? Probably not. You simply search: John 📱. Your phone finds the number.
+
+DNS does exactly the same thing. Instead of:
+
+```
+John
+↓
+0912345678
+```
+
+It does:
+
+```
+google.com
+↓
+142.xxx.xxx.xxx
+```
+
+Humans love names. Computers love numbers. DNS is the translator. Pretty cool.
+
+## The request begins its journey...
+
+Now my browser finally knows where Google lives. So the request travels through the internet...
+
+🏃💨 🏃💨 🏃💨
+
+until it reaches another computer.
+
+## The Cloud Isn't Magic 😂
+
+One thing I loved from today's lesson: people say "It's in the cloud." Sounds mysterious.
+
+Reality? It's literally... **someone else's computer.** 😂 Companies like AWS, Google Cloud and Azure simply rent powerful computers. Our backend lives there instead of on our laptop.
+
+## But wait...
+
+The request still doesn't reach my application. First... there's a security guard. 👮 The Firewall.
+
+Its job is basically: "Who are you? Which port are you trying to use?"
+
+Allowed? ✅ Come in.
+Not allowed? ❌ Go home.
+
+## Then comes Nginx...
+
+I finally understood why people keep talking about Nginx. It's basically the receptionist of the server. Instead of visitors walking directly into the CEO's office, they first talk to reception.
+
+Nginx does the same thing:
+
+```
+Internet
+↓
+Nginx 👩💼
+↓
+Backend
+```
+
+It receives requests first and then forwards them to the backend application.
+
+## Finally... My Code!
+
+Only after all of that... the request finally reaches the backend application. This is where frameworks like NestJS, Express, Django, or Spring Boot actually do their work.
+
+This is where we write business logic. Things like:
+- Is the user logged in?
+- Is the password correct?
+- Are seats still available?
+- Should this booking be accepted?
+
+This is the part backend developers actually build.
+
+## Need data?
+
+The backend doesn't magically know everything. It asks the database.
+
+Browser: "Show me all tours."
+Backend: "Database... can I borrow the tours?"
+Database: "Sure 😎"
+
+Returns the data. Backend sends it back to the browser. Done.
+
+## Biggest Lesson Today
+
+One thing became very clear. The frontend **cannot replace the backend.**
+
+Why? Because browsers are intentionally limited. They cannot:
+- Access databases directly
+- Read all files on your computer
+- Ignore security rules
+- Be trusted with sensitive information
+
+Everything important belongs on the backend.
+
+## The Entire Journey
+
+```
+👤 User
+      ↓
+🌐 Browser
+      ↓
+📖 DNS
+      ↓
+🌍 Internet
+      ↓
+☁️ Cloud Server
+      ↓
+🛡️ Firewall
+      ↓
+🚪 Nginx
+      ↓
+🧠 Backend Application
+      ↓
+🗄️ Database
+      ↑
+🧠 Backend
+      ↑
+🚪 Nginx
+      ↑
+🌍 Internet
+      ↑
+🌐 Browser
+      ↓
+👤 User 🎉
+```
+
+## My Thoughts
+
+I used to think backend development started when I wrote @Controller() or app.get(...). Now I realize... my code is only **one small part** of a much larger system.
+
+Before my code even runs, the request has already traveled through DNS, the internet, a cloud server, a firewall, and Nginx. Understanding that flow makes backend feel much less like "magic" and much more like a beautifully organized system.
+
+## What's Next?
+
+Today's lesson was all about **how a request reaches the backend**. In the next lessons, I'll dive deeper into what happens **inside** the backend and how it communicates with databases, APIs, and other services.
+
+One video in, and I've already changed how I think about the web. 🙌

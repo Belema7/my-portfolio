@@ -1,0 +1,955 @@
+---
+title: Day 2 — Learning Backend from First Principles (Part 4)
+description: >-
+  CORS, Security Headers, and Same-Origin Policy. Why browsers block
+  cross-origin requests and how to configure them safely.
+slug: backend-first-principles-day-2-part-4
+date: '2026-07-07'
+category: Learning Journey
+readingTime: 12 min read
+day: 2
+part: 4
+series: Learning Backend from First Principles
+order: 204
+published: true
+---
+# Backend from First Principles — Day 2 (Part 4)
+
+# Security, Browsers & CORS
+
+> *"For a long time, CORS felt like one of those mysterious browser errors that appeared out of nowhere. Today's lesson completely changed that. I finally realized that CORS isn't the problem—it's actually part of the solution."*
+
+---
+
+## Introduction
+
+Over the past few days, I've been slowly building my mental model of how the web works.
+
+On **Day 1**, I learned how a request travels across the internet:
+
+```text
+Browser → DNS → Internet → Cloud Server → Firewall → Nginx → Backend → Database
+```
+
+Then, in **Day 2**, I went much deeper.
+
+I learned:
+- Different networking protocols.
+- The OSI Model.
+- TCP vs UDP.
+- HTTP/3 and QUIC.
+
+Then I explored HTTP itself.
+I learned:
+- HTTP Requests
+- HTTP Responses
+- Headers
+- Methods
+- Status Codes
+- Statelessness
+- Idempotency
+
+At that point, I felt pretty confident.
+Then... Reality hit me.
+
+---
+
+## The Error Every Web Developer Has Seen
+
+If you've built even a small frontend project, you've probably seen something like this:
+
+```text
+Access to fetch at 'https://api.example.com' from origin 'http://localhost:3000' has been blocked by CORS policy.
+```
+
+The first time I saw this... I had absolutely no idea what it meant.
+My reaction was probably the same as many beginners:
+> "The backend is broken."
+
+Or:
+> "Fetch is broken."
+
+Or my favorite:
+> "Let me disable browser security somehow."
+
+As it turns out...
+The browser wasn't trying to make my life difficult.
+It was actually trying to protect me.
+That completely changed how I think about CORS.
+
+---
+
+## Before Learning CORS... We Need to Answer One Question
+
+Imagine this.
+You log into your online banking website.
+Everything is working normally.
+Without logging out... you open another tab.
+This time you visit:
+
+```text
+https://totally-not-suspicious.com
+```
+
+Should that website be able to secretly send requests to your bank?
+Imagine it doing this:
+
+```http
+POST /transfer-money
+{
+   "amount": 10000,
+   "receiver": "attacker"
+}
+```
+
+Without you knowing.
+Pretty scary.
+If browsers allowed websites to do that... the internet would be a dangerous place.
+Fortunately... browsers are much smarter.
+
+---
+
+## Browsers Don't Trust Websites
+
+This was one of today's biggest lessons.
+We usually think of the browser as something that simply displays webpages.
+But modern browsers have another job.
+They're also **security guards**.
+
+Every time a website wants to:
+- access another website
+- send requests
+- load resources
+- run JavaScript
+
+The browser asks:
+> "Is this actually safe?"
+
+If the answer is: "No."
+The browser blocks it.
+Not because the browser hates developers... because it's protecting users.
+
+---
+
+## Imagine Every Website Is a House
+
+This analogy made everything click for me.
+Imagine every website is a house.
+
+```text
+google.com, facebook.com, github.com, my-bank.com
+```
+
+Each house contains valuable information.
+Now imagine someone standing outside your house shouting:
+> "Hey! Can I come inside and read all your documents?"
+
+Would you immediately let them in? Probably not.
+Websites behave the same way.
+By default... one website cannot simply enter another website's "house."
+
+---
+
+## What Is an Origin?
+
+Before understanding CORS... the instructor introduced another important concept:
+> **Origin**
+
+At first I thought: Origin = Domain.
+Not quite. An origin is made of **three things**.
+
+```text
+Protocol + Domain + Port
+```
+
+All three together identify where a webpage comes from.
+Example:
+
+```text
+https://example.com:443
+```
+
+Let's break it apart.
+
+```text
+https → example.com → 443
+```
+
+Change **any one** of these... and you have a different origin.
+
+### Example 1
+`https://example.com` compared with `https://example.com`
+Everything matches. Same origin. (Allowed)
+
+### Example 2
+`http://example.com` compared with `https://example.com`
+Different protocol. Different origin. (Blocked)
+
+### Example 3
+`https://api.example.com` compared with `https://example.com`
+Different domain. Different origin. (Blocked)
+
+### Example 4
+`http://localhost:3000` compared with `http://localhost:8080`
+Different port. Still a different origin. (Blocked)
+
+This last example immediately explained why frontend developers constantly see CORS during local development.
+
+---
+
+## The Same-Origin Policy
+
+Now we finally arrive at one of the browser's most important security rules.
+> **Same-Origin Policy (SOP)**
+
+The rule is surprisingly simple.
+By default... a webpage can freely interact with resources that come from the **same origin**.
+
+Example:
+```text
+Frontend (https://my-app.com) → Backend (https://my-app.com)
+```
+Same origin. Everything works.
+
+Now imagine:
+```text
+Frontend (http://localhost:3000) → Backend (http://localhost:8080)
+```
+Different ports. Different origin.
+Now the browser becomes suspicious.
+It doesn't immediately allow the request.
+Instead... it asks:
+> "Does the backend actually allow this?"
+
+That question eventually leads us to CORS. But we'll get there in the next section.
+
+---
+
+## Why Does the Browser Care?
+
+This was probably my biggest realization today.
+The browser isn't protecting the server. The server can protect itself.
+The browser is protecting **me**.
+
+Imagine I log into `https://my-bank.com`. My browser stores authentication cookies.
+Now I accidentally visit `https://evil-site.com`.
+
+Without the Same-Origin Policy... that malicious website could silently send authenticated requests to my bank using my existing login session.
+The browser says:
+> "Absolutely not."
+
+And blocks it. That's brilliant.
+
+---
+
+## The Browser Plays the Role of a Security Guard
+
+I now imagine the browser standing at the entrance of every request.
+
+**Browser:** "Where are you coming from?"
+**Client:** "localhost:3000."
+**Browser:** "Where are you trying to go?"
+**Client:** "localhost:8080."
+**Browser:** "Hmm... Different origin. I'm going to ask the server whether that's allowed."
+
+That simple conversation is the foundation of CORS.
+
+---
+
+## My Biggest Realization
+
+Before today... whenever I saw a CORS error... I thought:
+> "Something is broken."
+
+Now I understand something much more important.
+The browser is doing exactly what it was designed to do.
+It's enforcing the Same-Origin Policy to prevent malicious websites from accessing data they shouldn't.
+
+CORS isn't an annoying obstacle.
+It's a carefully designed mechanism that allows exceptions to this security rule **only when the server explicitly says it's okay.**
+Suddenly... CORS errors don't seem mysterious anymore. They're just the browser asking for permission.
+
+---
+
+## Topic 4.1 (Part B) — The OPTIONS Method & CORS (The Preflight Scout)
+
+In the previous section, I learned something that completely changed my perspective.
+The browser isn't trying to make my life difficult. It's trying to **protect me**.
+
+The Same-Origin Policy is the browser's default security rule.
+By default:
+Website A Cannot freely access Website B.
+
+That makes perfect sense. But then another question came to mind.
+What if two websites actually **want** to communicate?
+
+For example:
+My frontend: `http://localhost:3000`
+My backend: `http://localhost:8080`
+
+Different origins. Different ports. But... they're both my applications.
+Surely they should be allowed to communicate.
+Exactly. That's why **CORS** exists.
+
+---
+
+### What is CORS?
+
+CORS stands for:
+> **Cross-Origin Resource Sharing**
+
+Notice something important. It does **not** remove browser security.
+Instead... it allows the server to say:
+> "Yes. I trust this other origin. You may allow the request."
+
+That's a huge difference.
+Without CORS... the browser blocks by default.
+With CORS... the browser asks permission first.
+
+---
+
+### Think of CORS as a Security Guard Asking for Permission
+
+Imagine visiting a private office building.
+You arrive at the entrance. The security guard says:
+> "Do you have permission to enter?"
+
+You reply:
+> "I'm here from Company A."
+
+The security guard calls upstairs.
+Manager:
+> "Yes. Let them in."
+
+Only then... the door opens.
+That's almost exactly what CORS does.
+
+---
+
+### Browser vs Server
+
+One thing the instructor emphasized is something I had misunderstood for a long time.
+CORS is **not** enforced by the server. It's enforced by the **browser**.
+
+Imagine this.
+```text
+Frontend → Backend
+```
+
+The backend happily sends a response.
+But before giving it to JavaScript... the browser checks:
+> "Was this origin allowed?"
+
+If not... the browser throws the famous CORS error.
+Even though the server may have already processed the request.
+
+---
+
+### Simple Requests vs Preflight Requests
+
+This was another concept that finally clicked.
+Not every cross-origin request behaves the same.
+Some requests are considered **safe enough**. Others are considered **potentially dangerous**.
+HTTP divides them into two categories.
+
+```text
+Simple Request → No preflight
+Preflight Request → OPTIONS first
+```
+
+---
+
+### Simple Requests
+
+A simple request goes directly to the server.
+Example:
+
+```http
+GET /products
+```
+
+The browser simply sends it.
+When the response returns... the browser checks the CORS headers.
+If allowed: JavaScript receives the response.
+Otherwise: CORS error.
+
+---
+
+### Preflight Requests
+
+Now imagine something more sensitive.
+Example:
+
+```http
+POST /login
+Authorization: Bearer ...
+Content-Type: application/json
+```
+
+The browser becomes more cautious.
+Instead of immediately sending the POST request... it sends another request first.
+That request uses the `OPTIONS` method.
+
+---
+
+### Why Is It Called a Preflight?
+
+Think about airplanes.
+Before a plane takes off... pilots perform a preflight inspection.
+They check fuel, weather, systems. Only then... the plane departs.
+
+OPTIONS works exactly the same way.
+The browser asks:
+> "Can I send this request?"
+
+Only after receiving permission... it sends the real request.
+
+---
+
+### What Does the OPTIONS Request Look Like?
+
+Suppose our frontend wants to send: `POST /login`
+Before that happens... the browser automatically sends:
+
+```http
+OPTIONS /login
+Origin: http://localhost:3000
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Authorization, Content-Type
+```
+
+Notice something. There is no JSON body. No login data.
+The browser is simply asking:
+> "If I wanted to send a POST request with these headers... Would you allow it?"
+
+---
+
+### The Server Replies
+
+Now the backend answers.
+Example:
+
+```http
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: http://localhost:3000
+Access-Control-Allow-Methods: POST
+Access-Control-Allow-Headers: Authorization, Content-Type
+```
+
+Translation:
+> "Yes. That origin is allowed. POST is allowed. Those headers are allowed."
+
+Now the browser is satisfied. Only then... it sends the real POST request.
+
+---
+
+### The Complete Flow
+
+I finally understood why DevTools sometimes shows **two requests**.
+Here's the complete flow.
+
+```text
+Frontend → OPTIONS → Backend → CORS Headers → Browser approves → POST → Backend → Response → Browser
+```
+
+At first I thought:
+> "Why is my browser making two requests?"
+
+Now I know. The first one is simply asking permission.
+
+---
+
+### Why Doesn't Postman Have CORS Problems?
+
+This was one of my biggest questions.
+I can call my API perfectly in Postman. But the browser blocks it. Why?
+Because Postman is **not a browser**.
+
+Remember: CORS is enforced by browsers.
+Not by HTTP itself. Not by Node.js. Not by NestJS. Not by Express.
+Only browsers perform these security checks.
+That's why backend developers often say:
+> "It works in Postman."
+
+---
+
+### Fixing CORS
+
+Suppose our frontend lives at `http://localhost:3000` and our backend at `http://localhost:8080`.
+The backend needs to explicitly allow that origin.
+
+Example in Express:
+```javascript
+app.use(cors({ origin: "http://localhost:3000" }));
+```
+
+Example in NestJS:
+```typescript
+app.enableCors({ origin: "http://localhost:3000" });
+```
+
+Now the backend includes the appropriate CORS headers.
+The browser sees them. The request succeeds.
+
+---
+
+### Never Use "*"
+
+One thing the instructor strongly warned about.
+Many beginners simply write:
+
+```http
+Access-Control-Allow-Origin: *
+```
+
+Problem solved? Not exactly.
+This allows **every website** to access your API.
+That's usually a bad idea for authenticated applications.
+It's much safer to explicitly list the trusted origins instead of allowing the entire internet.
+
+---
+
+## Topic 4.2 — Security Headers (The Bouncers)
+
+After finally understanding CORS, I thought:
+> "Okay... browsers protect users by controlling who can talk to whom."
+
+Then I realized something.
+What if the request is **already allowed**?
+What if the browser successfully loads a webpage... but that webpage itself contains malicious code?
+Or another website tries to trick users into clicking invisible buttons?
+Or the browser incorrectly guesses a file's content type?
+
+It turns out... the browser doesn't stop protecting users after CORS.
+It has another line of defense. And that defense is powered by **Security Headers**.
+
+---
+
+### Think of Security Headers as Club Bouncers
+
+Imagine entering an exclusive event.
+At the entrance stand several security guards. Each guard has a different responsibility.
+One checks your invitation. Another checks your identity. Another makes sure you aren't bringing dangerous items inside.
+Together... they keep the event safe.
+
+Security headers work the same way.
+Each header protects against a different type of attack.
+Instead of guarding a building... they're guarding your website.
+
+---
+
+### Why Do We Need Security Headers?
+
+Imagine you own a beautiful house. You install strong doors, windows, and locks.
+Would you leave every window open? Probably not.
+
+Modern web applications are similar.
+Even if your backend is secure... the browser still needs rules about what is allowed.
+Security headers provide those rules. They tell the browser:
+> "Here's how I want you to behave while displaying my website."
+
+---
+
+### Meet the Four Heavy Hitters
+
+The instructor focused on four headers that every backend developer should know:
+- `Content-Security-Policy` (CSP)
+- `Strict-Transport-Security` (HSTS)
+- `X-Frame-Options`
+- `X-Content-Type-Options`
+
+Each solves a different security problem.
+
+---
+
+### Content-Security-Policy (CSP)
+
+This was probably the most important header in today's lesson.
+Example:
+
+```http
+Content-Security-Policy: default-src 'self'
+```
+
+At first... this looked like random text. Then I learned what it actually means.
+Translation:
+> "Browser... Only load resources from this website itself."
+
+That simple rule prevents one of the web's most dangerous attacks.
+
+---
+
+### What Is XSS?
+
+XSS stands for **Cross-Site Scripting**.
+Imagine a comment section. A normal user writes: "Amazing website!"
+But an attacker writes:
+
+```html
+<script>stealCookies()</script>
+```
+
+If your browser executes that script... the attacker could potentially steal cookies, read sensitive information, redirect users, or modify the page. That's terrifying.
+
+---
+
+### How CSP Helps
+
+With a proper Content Security Policy, the browser checks:
+> "Is this script allowed?"
+
+If not... it simply refuses to execute it.
+The malicious script never runs. That's incredibly powerful.
+
+---
+
+### Strict-Transport-Security (HSTS)
+
+Another important header. Example:
+
+```http
+Strict-Transport-Security: max-age=31536000
+```
+
+Translation:
+> "Browser... Always use HTTPS."
+
+Imagine a user types `http://mywebsite.com`.
+Instead of making an insecure HTTP request... the browser immediately upgrades it to `https://mywebsite.com`.
+No redirection required. No insecure communication. Just secure HTTPS.
+
+Why does this matter?
+Imagine you're using public Wi-Fi at an airport. Without HTTPS... someone on the same network might try to intercept your traffic.
+HSTS reduces the chance of users accidentally connecting over insecure HTTP.
+
+---
+
+### X-Frame-Options
+
+This header protects against something called **Clickjacking**.
+Imagine an attacker creates a fake webpage. Inside that page... they secretly embed your banking website inside an invisible `<iframe>`.
+
+The user thinks they're clicking "Claim Prize" but they're actually clicking "Transfer Money" on the invisible banking page underneath. That's Clickjacking.
+
+Example:
+```http
+X-Frame-Options: DENY
+```
+
+Translation:
+> "My website must never be displayed inside another website's frame."
+
+If an attacker tries to embed it... the browser refuses. Attack prevented.
+
+---
+
+### X-Content-Type-Options
+
+This header is less famous, but still very useful. Example:
+
+```http
+X-Content-Type-Options: nosniff
+```
+
+The name sounds strange. "nosniff"?
+It simply means:
+> "Browser... Don't guess."
+
+Imagine the server says `Content-Type: application/pdf`. The browser should treat the response as a PDF.
+Without this header... some browsers might try to "sniff" the content and guess: "Maybe this is actually JavaScript."
+That guessing can create security risks. With `nosniff`, the browser obeys the declared content type exactly. No guessing. No surprises.
+
+---
+
+### Putting Everything Together
+
+Imagine a response from your backend:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Security-Policy: default-src 'self'
+Strict-Transport-Security: max-age=31536000
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+```
+
+Notice something. The JSON body hasn't changed. Your API hasn't changed.
+But the browser now has clear security instructions. It knows:
+- Which scripts may run.
+- Always use HTTPS.
+- Don't allow framing.
+- Don't guess content types.
+
+That's a huge improvement in security.
+
+---
+
+### Modern Frameworks Help
+
+One thing I found reassuring is that many backend frameworks make these protections easier.
+For example, Express often uses **Helmet** middleware. NestJS can also integrate Helmet. Reverse proxies like Nginx can add security headers before responses reach the browser.
+This means we don't always have to configure every header manually. Understanding **why** they exist is still important.
+
+---
+
+## Checkpoint Questions
+
+### Why does your browser block a request from `localhost:3000` to `localhost:8080`?
+
+Because they are **different origins**. Although the hostname is the same (`localhost`), the ports are different (`3000` vs `8080`), making them separate origins under the Same-Origin Policy. The browser blocks the response unless the backend explicitly allows that origin through CORS.
+
+---
+
+### What is the difference between a Simple Request and a Preflight Request?
+
+A **Simple Request** is sent directly to the server. The browser checks the CORS headers only after receiving the response.
+
+A **Preflight Request** is used for requests that may have greater security implications, such as those using methods like `PUT`, `PATCH`, or `DELETE`, or custom headers like `Authorization`. Before sending the real request, the browser automatically sends an `OPTIONS` request to ask whether the cross-origin request is permitted.
+
+---
+
+### What three headers must a server send in response to an OPTIONS preflight request for a cross-origin POST request with an Authorization header?
+
+At minimum, the server typically needs to return:
+
+```http
+Access-Control-Allow-Origin: http://localhost:3000
+Access-Control-Allow-Methods: POST
+Access-Control-Allow-Headers: Authorization, Content-Type
+```
+
+These headers tell the browser which origin is allowed, which HTTP methods are permitted, and which request headers may be used. Without them, the browser will refuse to send the actual POST request.
+
+---
+
+### How does Content-Security-Policy help prevent Cross-Site Scripting (XSS)?
+
+A **Content-Security-Policy (CSP)** tells the browser which sources are trusted for loading scripts and other resources. If an attacker manages to inject malicious JavaScript into a page, the browser checks the policy before executing it. If the script comes from an untrusted source or violates the policy, the browser blocks it. This significantly reduces the risk of successful XSS attacks.
+
+---
+
+### If you want your website to always use HTTPS, which header should you configure?
+
+You should configure the **Strict-Transport-Security (HSTS)** header.
+
+```http
+Strict-Transport-Security: max-age=31536000
+```
+
+This tells compatible browsers to automatically use HTTPS for future visits, helping protect users from accidentally making insecure HTTP requests.
+
+---
+
+## Part 4 Complete!
+
+## Final Summary
+
+When I first started learning backend development, I thought browsers had one primary job:
+> Render HTML, CSS, and JavaScript.
+
+After today's lesson, I realized that's only part of the story.
+Modern browsers are much more than rendering engines. They're also **security systems**.
+
+Every time we visit a website, the browser is constantly making security decisions behind the scenes.
+Questions like:
+- Should this request be allowed?
+- Is this script trustworthy?
+- Can this website communicate with another website?
+- Should this page be loaded over HTTP or HTTPS?
+- Is someone trying to trick the user?
+
+These checks happen in milliseconds. Most users never notice them. But without them, the modern web would be far less secure.
+Today's lesson completely changed how I think about browsers.
+Instead of seeing them as passive tools... I now see them as active participants in protecting users.
+
+---
+
+### Same-Origin Policy — Security by Default
+
+The first concept I learned was the **Same-Origin Policy (SOP)**.
+At first, it felt restrictive. Why should my frontend at `http://localhost:3000` be blocked from talking to my backend at `http://localhost:8080`?
+
+Then I understood the reason.
+Browsers don't know whether a website is trustworthy. Their safest assumption is:
+> "Unless the server explicitly says otherwise, don't allow cross-origin access."
+
+That simple rule prevents countless malicious websites from silently interacting with other websites on behalf of users.
+What initially felt like an obstacle turned out to be one of the browser's strongest security features.
+
+---
+
+### CORS — Permission, Not a Problem
+
+Before today, I viewed CORS as an error.
+Now I understand that CORS is actually a **permission system**.
+It doesn't weaken browser security. It provides a controlled way for servers to say:
+> "Yes, I trust this origin."
+
+One of the biggest mindset shifts I had was realizing this:
+> **CORS protects users, not servers.**
+
+The browser enforces CORS because browsers run untrusted JavaScript from many different websites.
+Servers can still receive requests from tools like Postman, curl, backend services, or mobile applications. CORS only affects browser-based JavaScript.
+That answered one of the questions that had confused me for a long time:
+> "Why does it work in Postman but not in Chrome?"
+
+Now I know why.
+
+---
+
+### OPTIONS — The Browser's Scout
+
+I also learned why browsers sometimes send **two HTTP requests**.
+For a long time, I thought that behavior was strange. Now it makes perfect sense.
+
+The first request is simply the browser asking:
+> "If I send the real request, will you allow it?"
+
+That **OPTIONS** request is called the **Preflight Request**.
+Only after receiving permission does the browser send the real request.
+The browser isn't wasting time. It's verifying that the request is safe before allowing JavaScript to access the response.
+
+---
+
+### Security Headers — The Browser's Instructions
+
+Another major takeaway was that security doesn't stop after CORS.
+Servers can provide additional instructions through **Security Headers**.
+Instead of simply sending JSON or HTML... the backend also tells the browser:
+- Which scripts may execute.
+- Whether HTTPS is required.
+- Whether the page can be embedded inside another site.
+- Whether the browser should trust the declared content type.
+
+These instructions help defend against common attacks like Cross-Site Scripting (XSS), Clickjacking, Protocol downgrade attacks, and Content-type confusion.
+I found it fascinating that many security features are implemented through simple HTTP headers.
+
+---
+
+### How Everything Fits Together
+
+After finishing Part 4, this is the mental model I now have.
+
+```text
+User → Browser → Same-Origin Policy → CORS Check → OPTIONS (if required) → Backend → Security Headers → Browser Enforces Security → JavaScript Receives Response
+```
+
+Every component has its own responsibility.
+The backend defines the rules. The browser enforces many of them.
+Together, they create a safer web.
+
+---
+
+## What I Learned Today
+
+If I had to summarize today's lesson in a few key ideas, it would be these:
+
+### 1. Browsers Are Security Guards
+Before today... I thought browsers simply displayed webpages.
+Now I understand they actively protect users by enforcing security rules like the Same-Origin Policy, CORS, and Security Headers.
+
+### 2. CORS Is a Feature, Not a Bug
+Whenever I saw a CORS error before, I assumed something was broken.
+Now I know the browser is simply asking the backend: "Do you trust this origin?"
+The backend answers. The browser enforces the answer. That simple interaction powers secure cross-origin communication.
+
+### 3. Security Is Layered
+There isn't one magic security feature. Instead, the web uses many layers:
+```text
+HTTPS → Authentication → Authorization → Same-Origin Policy → CORS → Security Headers
+```
+Each layer protects against different threats. If one layer fails... others are still there to reduce risk.
+
+### 4. Understanding Beats Memorizing
+One thing I've noticed throughout this learning journey is that understanding **why** something exists makes it much easier to remember.
+Instead of memorizing `Access-Control-Allow-Origin`, I now understand why it exists, who reads it, who enforces it, and when it's needed. That understanding feels much more valuable than memorizing syntax.
+
+---
+
+## My Learning Journey So Far
+
+Looking back over everything I've learned, I can see my understanding growing step by step.
+
+### Day 1
+I learned how requests travel across the internet. DNS, Cloud servers, Firewalls, Reverse proxies, Backend applications, Databases.
+I understood **where requests go**.
+
+### Day 2 — Part 1
+I learned networking protocols. The OSI Model, TCP vs UDP, HTTP/3 and QUIC.
+I understood **how computers communicate**.
+
+### Day 2 — Part 2
+I learned HTTP Requests and Responses. Headers, Methods, Status Codes.
+I understood **how HTTP messages are structured**.
+
+### Day 2 — Part 3
+I learned Extensibility, Statelessness, Idempotency.
+I understood **why HTTP is designed the way it is**.
+
+### Day 2 — Part 4
+I learned Same-Origin Policy, CORS, OPTIONS requests, Security Headers.
+I understood **how browsers protect users while communicating with servers**.
+
+Every lesson feels like another layer of the web being uncovered.
+Instead of seeing isolated technologies, I'm beginning to see how everything connects into one complete system.
+
+---
+
+## References
+
+These resources helped reinforce today's concepts and are worth exploring further.
+
+**MDN Web Docs**
+- [HTTP Overview](https://developer.mozilla.org/en-US/docs/Web/HTTP)
+- [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+- [Same-Origin Policy](https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy)
+- [OPTIONS Method](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS)
+- [HTTP Headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers)
+
+**OWASP**
+- [Cross-Site Scripting (XSS) Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [HTTP Security Response Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)
+
+**Google Web Fundamentals**
+- [HTTPS and Web Security](https://web.dev/learn/privacy/)
+
+**Node.js Frameworks**
+- [NestJS Security (CORS)](https://docs.nestjs.com/security/cors)
+- [Express CORS Middleware](https://expressjs.com/en/resources/middleware/cors.html)
+- [Helmet Middleware](https://helmetjs.github.io/)
+
+---
+
+## Preview — Day 2 (Part 5)
+
+So far, I've studied every major piece of the puzzle separately.
+Now it's time to connect everything.
+
+In the final part of Day 2, I'll walk through a **complete request lifecycle** from beginning to end.
+I'll follow a single user action:
+1. A user clicks **"Login"**.
+2. The browser performs a CORS preflight (if needed).
+3. The backend validates the request.
+4. The database is queried.
+5. A response is returned.
+6. The browser processes the result.
+
+By tracing one request from start to finish, I hope to see how all the concepts I've learned—HTTP, TCP, CORS, headers, authentication, and status codes—work together in a real-world backend application.
+
+---
+
+## Final Thoughts
+
+One lesson keeps repeating throughout this journey.
+Great software isn't built by accident.
+
+Every protocol. Every header. Every browser rule. Every status code. Every security mechanism.
+Exists because someone encountered a real problem and designed a thoughtful solution.
+
+As I continue learning backend engineering, I'm realizing that understanding these design decisions is just as important as learning a framework or writing code.
+Frameworks will evolve. Libraries will come and go.
+But the principles behind how the web works are timeless.
+And that's exactly the kind of knowledge I want to build.
+
+See you in **Day 2 – Part 5**.

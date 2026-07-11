@@ -1,0 +1,267 @@
+---
+title: Day 3 — Learning Backend from First Principles (Part 3)
+description: >-
+  Static Routes: The Simplest Form of Routing. Discover how backend frameworks
+  recognize URLs and match fixed paths to handlers.
+slug: backend-first-principles-day-3-part-3
+date: '2026-07-16'
+category: Learning Journey
+readingTime: 11 min read
+day: 3
+part: 3
+series: Learning Backend from First Principles
+order: 303
+published: true
+---
+# Backend from First Principles — Day 3 (Part 3)
+
+# Static Routes: The Simplest Form of Routing
+
+> *"In the previous parts, I learned what routing is, why it matters, and how HTTP methods work together with routes to create endpoints. But I still had one important question. How does a backend framework actually know that `/about` should open the About page or that `/login` should execute the login function? Today's lesson answers that question by introducing the simplest type of route you'll ever work with: the static route."*
+
+---
+
+## Introduction
+
+So far in this series, I've learned that routing is responsible for directing incoming requests to the correct part of a backend application.
+For example, when a client sends:
+```http id="get-users"
+GET /users
+```
+the router knows exactly which function should execute.
+
+But how does the router actually recognize:
+```text id="paths"
+/users
+/about
+/contact
+/login
+```
+How does it know that each of these URLs belongs to a different piece of code?
+The answer begins with one of the simplest routing concepts:
+> **Static Routes**
+
+Almost every backend application starts with static routes before introducing more advanced routing features.
+
+---
+
+## What Is a Static Route?
+
+A static route is a route whose path is **fixed**.
+In other words... The URL never changes.
+For example:
+```text id="static-examples"
+/about
+/contact
+/login
+/register
+/privacy
+/terms
+```
+Every time someone visits one of these URLs, the router always sends the request to the same handler. There are no variables. No placeholders. No dynamic values. The path is always identical.
+
+### Why Are They Called "Static"?
+
+The word **static** simply means:
+> **Fixed or unchanging.**
+
+Imagine writing your home address on a piece of paper. It always stays the same. Static routes work exactly like that. Their URL is fixed.
+
+### Think About Rooms in a House
+
+Imagine walking into a house. You already know where certain rooms are: Kitchen, Bedroom, Bathroom, Living Room. These rooms don't move around every day. Whenever someone requests `/about`, the backend always responds using the same handler.
+
+### A Library Analogy
+
+Imagine entering a library. Some sections are permanent: Fiction, Science, Mathematics, History. Those sections don't change based on who's visiting. Static routes follow the same principle.
+
+### Real Examples of Static Routes
+
+Almost every website has several static routes. Examples include:
+```text id="real-static"
+/home
+/about
+/contact
+/login
+/register
+/privacy
+/terms
+/faq
+```
+These pages don't depend on an ID or a username. They're fixed destinations.
+
+### What Happens When a Request Arrives?
+
+Suppose the browser sends:
+```http id="request"
+GET /about
+```
+The router checks its registered routes. It finds:
+```text id="route-table"
+/about → About Handler
+```
+The request is immediately forwarded. Nothing needs to be extracted from the URL. Nothing needs to be calculated. The router simply matches the path.
+
+### Static Routes Are Exact Matches
+
+Static routes rely on **exact matching**.
+If someone visits `/about`, everything works. But if they visit `/about-us`, that's a different route. The router won't guess. Routing depends on exact matching. If the requested path doesn't exist, the server usually returns:
+```http id="404"
+404 Not Found
+```
+
+### A Simple Route Table
+
+I like to imagine the router maintaining a table like this:
+
+| Incoming Request | Destination         |
+| ---------------- | ------------------- |
+| `/`              | Home Controller     |
+| `/about`         | About Controller    |
+| `/contact`       | Contact Controller  |
+| `/login`         | Login Controller    |
+| `/register`      | Register Controller |
+
+Whenever a request arrives, the router simply checks the table.
+
+### Why Static Routes Are Fast
+
+Static routes are the easiest routes for the router to process because there's nothing to interpret. The router doesn't need to ask if there's an ID or a variable. It simply checks if the path exists. This makes static routes simple, predictable, and efficient.
+
+### When Should I Use Static Routes?
+
+Static routes are perfect whenever the destination never changes. Examples include company pages, authentication pages, legal pages, and support pages. Their URLs don't need variables.
+
+### Static Routes Can't Handle Everything
+
+Imagine building an e-commerce website with 10,000 products. Creating routes like `/product1`, `/product2`, etc., would quickly become impossible to maintain. This is where static routes reach their limit.
+
+---
+
+## Topic 3.2 — Static Routes in Practice: Express.js, NestJS & Spring Boot
+
+How do we actually create these routes in code? We'll implement the same static routes using three popular backend frameworks.
+
+### Every Framework Needs a Router
+
+Whether building an API with Express.js, NestJS, Spring Boot, Django, Laravel, or FastAPI... they all need a routing system to answer one question: "Which function should handle this request?"
+
+### Static Routes in Express.js
+
+Creating a static route in Express looks like this:
+```javascript id="express-about"
+app.get("/about", (req, res) => {
+  res.send("About Page");
+});
+```
+
+Let's break it down:
+| Part         | Meaning                      |
+| ------------ | ---------------------------- |
+| `app`        | The Express application      |
+| `.get()`     | Handle GET requests          |
+| `"/about"`   | Static route path            |
+| `(req, res)` | Request and Response objects |
+| `res.send()` | Send a response              |
+
+### Static Routes in NestJS
+
+NestJS organizes routes inside **controllers**.
+```typescript id="nestjs"
+@Controller("about")
+export class AboutController {
+  @Get()
+  getAbout() {
+    return "About Page";
+  }
+}
+```
+`@Controller("about")` defines the base route, and `@Get()` defines the HTTP method. Together they produce `GET /about`. Exactly the same endpoint we built in Express.
+
+### Static Routes in Spring Boot
+
+Spring Boot uses annotations instead of decorators.
+```java id="spring"
+@RestController
+public class HomeController {
+    @GetMapping("/about")
+    public String about() {
+        return "About Page";
+    }
+}
+```
+`@GetMapping("/about")` means `GET + /about`. Exactly like Express and NestJS.
+
+### Same Idea, Different Syntax
+
+| Framework   | Route Definition                  |
+| ----------- | --------------------------------- |
+| Express     | `app.get("/about")`               |
+| NestJS      | `@Controller("about")` + `@Get()` |
+| Spring Boot | `@GetMapping("/about")`           |
+
+Different syntax. Same routing principle.
+
+### What Happens Behind the Scenes?
+
+```text id="flow"
+Browser → GET /about → Router → Matches Route → Calls Handler → Returns Response
+```
+The framework hides many implementation details. But the routing workflow stays the same.
+
+### What Happens If No Route Matches?
+
+If someone visits `/pricing` and it doesn't exist, the framework automatically responds with `404 Not Found`. The router can only send requests to routes that actually exist.
+
+### Express vs NestJS vs Spring Boot
+
+| Feature           | Express.js     | NestJS           | Spring Boot              |
+| ----------------- | -------------- | ---------------- | ------------------------ |
+| Style             | Function-based | Decorator-based  | Annotation-based         |
+| Beginner Friendly | Very easy      | Easy             | Slightly more verbose    |
+| Organization      | Manual         | Controller-based | Controller-based         |
+| Static Routes     | Yes            | Yes              | Yes                      |
+
+---
+
+## Part 3 Complete!
+## Final Summary
+
+A **static route** is a route whose path is **fixed**. It never changes. No matter who visits these URLs, the router always forwards the request to the exact same handler.
+
+**1. Static Routes Have Fixed URLs**
+The path never changes. Every request always matches the same URL.
+
+**2. Routers Perform Exact Matching**
+The router doesn't guess. If the registered route is `/about`, then `/about-us` is an entirely different route.
+
+**3. Routing Is the Same Across Frameworks**
+Express.js, NestJS, and Spring Boot have different syntax but the same routing principles. Understanding the concept is far more valuable than memorizing framework-specific code.
+
+**4. Static Routes Keep APIs Organized**
+Static routes make applications easy to understand because every URL has one clear purpose.
+
+**5. Static Routes Are Only the Beginning**
+Real-world applications often need URLs that change based on data. That's where dynamic routes come in.
+
+### Checkpoint Questions
+
+**What is a static route?**
+A static route is a route with a fixed URL path. Every request to that URL is handled by the same backend function.
+
+**Why are they called static?**
+They're called static because the URL never changes. Unlike dynamic routes, they don't contain variables or parameters.
+
+**How does the router match a static route?**
+The router performs an exact comparison between the incoming URL and its registered routes.
+
+**Do Express.js, NestJS, and Spring Boot handle static routes differently?**
+Their syntax is different, but the routing concept is exactly the same. Each framework registers a route, matches incoming requests, executes the handler, and returns a response.
+
+**When should I use static routes?**
+Static routes are best for pages whose URLs never change (e.g., `/about`, `/contact`, `/login`).
+
+---
+
+### Preview — Day 3 (Part 4)
+In Part 4, I'll explore **Dynamic Routes**, including Route Parameters, Dynamic URL Segments, Path Parameters vs Query Parameters, and Wildcards.

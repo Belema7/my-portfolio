@@ -1,4 +1,4 @@
-import type { Movie } from "@/types/content";
+import type { Movie } from "@/lib/library/types";
 
 export function MovieCard({ movie }: { movie: Movie }) {
   return (

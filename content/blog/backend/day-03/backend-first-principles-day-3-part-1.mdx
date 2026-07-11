@@ -1,0 +1,337 @@
+---
+title: Day 3 — Learning Backend from First Principles (Part 1)
+description: >-
+  Routing Mastery: The Architectural Blueprint of Your API. Understanding how
+  requests are mapped to code, RESTful principles, and why routes should use
+  nouns instead of verbs.
+slug: backend-first-principles-day-3-part-1
+date: '2026-07-16'
+category: Learning Journey
+readingTime: 12 min read
+day: 3
+part: 1
+series: Learning Backend from First Principles
+order: 301
+published: true
+---
+# Backend from First Principles — Day 3 (Part 1)
+
+# Routing Mastery: The Architectural Blueprint of Your API
+
+> *"Until now, I've spent a lot of time learning how HTTP works—how requests travel across the internet, how servers respond, and how browsers communicate with backend applications. But one important question still remained. Once a request finally reaches my server... how does the server know **which piece of code** should handle it? Today's lesson begins answering that question. Welcome to the world of routing."*
+
+---
+
+## Introduction
+
+Over the past two days, I've learned a lot about how the web works.
+By the end of Day 2, I could follow a request from the moment a user clicked a button until the response appeared back on the screen.
+
+But there was still one missing piece. Imagine I send this request:
+```http
+GET /users
+```
+The request successfully reaches my backend server. Now what? How does the server know which function should execute? How does it know whether to return:
+* A list of users?
+* A single user?
+* A login page?
+* A product list?
+
+Who makes that decision?
+The answer is:
+> **Routing.**
+
+---
+
+## What Is Routing?
+
+Routing is the mechanism that decides **what code should run when a request arrives.**
+Every time a client sends a request to a server, the server must answer one question:
+> **"Which function is responsible for handling this request?"**
+
+---
+
+### Imagine a Receptionist
+
+Imagine entering a large company. Inside the building are many departments.
+You walk in and say:
+> "I'm here for the Engineering team."
+
+The receptionist doesn't solve your problem. They simply direct you to the correct department.
+Routing works exactly the same way. The router isn't responsible for processing your request. Its job is simply to send the request to the correct handler.
+
+---
+
+### Another Analogy: GPS Navigation
+
+Suppose I open Google Maps and enter a destination. The GPS doesn't drive the car. It simply determines the correct route. Once the route is known... The journey begins.
+Routing in backend development works the same way. The router doesn't execute business logic. It simply determines:
+> **"This request should go here."**
+
+---
+
+### Every Backend Uses Routing
+
+Every backend framework has a routing system. Whether I'm using Express.js, NestJS, Spring Boot, Django, FastAPI, Laravel, or ASP.NET... they all need a way to answer one question:
+> **Which code handles this request?**
+
+---
+
+### A Request Without Routing
+
+Imagine a backend application with these features: Login, Register, Products, Orders, Users.
+Now imagine every incoming request arrives here:
+```text
+Incoming Request → Server → ???
+```
+Without routing... The server wouldn't know whether the request wants to create a user, delete a product, or log someone in. Every request would look identical.
+
+---
+
+### A Request With Routing
+
+Now imagine the same application using a router.
+```text
+Incoming Request → Router → Login Controller (or) Products Controller (or) Orders Controller (or) Users Controller
+```
+Everything suddenly becomes organized. The router examines the request... Then forwards it to the correct handler.
+
+---
+
+### Routing Connects the Client and the Backend
+
+The communication actually looks more like this:
+```text
+User → Browser → HTTP Request → Router → Controller → Service → Database → Response → Browser
+```
+The router acts like the bridge between incoming requests and backend logic.
+
+---
+
+### My Biggest Realization
+
+Routing is the **architectural blueprint** of an API. It's the map that tells every incoming request where it belongs. Without routing, a backend application wouldn't know how to respond to users.
+
+---
+
+## Topic 1.2 — Why Routing Matters: More Than Just Matching URLs
+
+Routing isn't just about making requests work. It's about making an API **easy to understand, easy to maintain, and easy to scale**. Good routing is one of the first signs of a well-designed backend.
+
+### Your API Is Like a Map
+
+> **Your routes are the public interface of your backend.**
+
+Most frontend developers never see your database, your services, your business logic, or your internal architecture. The only thing they interact with is your API.
+Your routes are the "front door" of your backend. They create the first impression.
+
+### Good Routes Explain Themselves
+
+Imagine you see this endpoint:
+```text id="good-route"
+GET /users
+```
+Without reading any documentation... You can already guess what it does. It probably returns a list of users.
+
+Now look at this one:
+```text id="bad-route"
+GET /doStuff
+```
+What does it do? Nobody knows. A good route should almost explain itself.
+
+### APIs Should Be Predictable
+
+A good API shouldn't surprise its users.
+Suppose I already know `GET /products` returns products. If I need categories, I naturally expect `GET /categories`. Not `GET /fetchAllCategoryItemsNow`.
+Consistency makes APIs predictable. Predictability makes developers productive.
+
+### Routes Become Documentation
+
+Sometimes... Your routes become documentation.
+Imagine opening an API and seeing:
+```text id="docs"
+GET /users
+GET /products
+GET /orders
+GET /payments
+```
+Even without reading any documentation... You already understand the system. That's a sign of good API design.
+
+### Poor Routing Creates Technical Debt
+
+Imagine these endpoints:
+```text id="messy"
+GET /getAllUsers
+POST /createNewUser
+POST /updateUser
+GET /deleteUser
+```
+Technically they work. But they violate common conventions. As the project grows... Every inconsistency makes the API harder to learn, maintain, and extend.
+
+### Good vs Bad Routing
+
+| Good Routing          | Poor Routing                          |
+| --------------------- | ------------------------------------- |
+| Clear and descriptive | Vague or confusing                    |
+| Consistent naming     | Mixed naming styles                   |
+| Easy to predict       | Requires documentation for everything |
+| Resource-focused      | Action-focused without structure      |
+| Easy to scale         | Becomes messy as the project grows    |
+
+---
+
+## Topic 1.3 — HTTP Methods vs Routes: Why Both Matter
+
+These two endpoints look almost identical:
+```http id="get-users"
+GET /users
+```
+```http id="post-users"
+POST /users
+```
+They both use the same path `/users`. But they do completely different things. One retrieves users. The other creates a new user.
+A complete route is made of **two parts**:
+* The **HTTP Method**
+* The **URL Path**
+
+### What Is an HTTP Method?
+HTTP methods describe **the intention of a request**. They tell the server what kind of operation the client wants to perform.
+```http id="methods"
+GET → Read | POST → Create | PUT → Replace | PATCH → Update | DELETE → Remove
+```
+The method answers the question: **"What do you want to do?"**
+
+### What Is a Route?
+The route answers: **"What resource are you talking about?"**
+Examples: `/users`, `/products`. The route identifies where the request should go.
+
+### Putting Them Together
+Only when we combine the two do we get a complete endpoint.
+```text id="sentence"
+GET + /users
+```
+means: "Read users."
+
+```text id="sentence2"
+POST + /users
+```
+means: "Create a user."
+
+### The Formula Every Backend Developer Should Remember
+```text id="formula"
+HTTP Method + Route = Endpoint
+```
+
+```text id="formula2"
+GET + /users → One Endpoint | POST + /users → Another Endpoint | DELETE + /users/15 → Another Endpoint
+```
+Even if the path stays the same, changing the method creates a completely different endpoint. This is one of the foundations of RESTful API design.
+
+### Why Not Create Different URLs?
+When I first started backend development, I often saw APIs like:
+```text id="old-style"
+/getUsers
+/createUser
+/updateUser
+/deleteUser
+```
+They work. But they're not ideal. Why? Because the action is already represented by the HTTP method.
+Modern APIs prefer: `POST /users`. The URL identifies the resource. The method identifies the action.
+
+---
+
+## Topic 1.4 — The RESTful Principle: Why Routes Should Use Nouns, Not Verbs
+
+If the HTTP method already tells us the action, why do so many beginners create routes like `/getUsers` or `/createUser`?
+One of the core principles of RESTful API design is:
+> **Use nouns for your routes, and let HTTP methods describe the actions.**
+
+### What Is REST?
+REST stands for Representational State Transfer. It is simply a **set of architectural principles** for designing web APIs.
+One of its biggest ideas is:
+> **Think in terms of resources, not actions.**
+
+### What Is a Resource?
+A resource is simply **something your application manages**. Examples: Users, Products, Orders, Books. These are all nouns.
+
+### The Beginner Approach
+```text id="bad-routes"
+/getUsers
+/createUser
+/updateUser
+/deleteUser
+```
+The problem is that the HTTP method is already describing the action.
+```http id="post-create"
+POST /createUser
+```
+The word "create" appears twice. That's unnecessary duplication.
+
+### The RESTful Approach
+REST separates responsibilities. The route identifies what we're working with. The HTTP method identifies what we're doing.
+```text id="translation"
+POST → Create | /users → User Resource
+```
+Together they read naturally: **Create a user.**
+
+### One Resource, Many Actions
+Let's take a simple resource: `/books`.
+* `GET /books` (Get every book)
+* `POST /books` (Create a new book)
+* `PATCH /books/15` (Update book 15)
+* `DELETE /books/15` (Delete book 15)
+The URL hardly changes. The HTTP method changes. That's the REST philosophy.
+
+### Verbs vs Nouns
+| Verb-Based Routes | Resource-Based Routes |
+| ----------------- | --------------------- |
+| `/getUsers`       | `/users`              |
+| `/createProduct`  | `/products`           |
+| `/updateOrder`    | `/orders/{id}`        |
+| `/deleteComment`  | `/comments/{id}`      |
+
+---
+
+## Part 1 Complete!
+## Final Summary
+
+Routing is the **foundation of every backend application**. It's the system that decides where every incoming request should go.
+
+**1. Routing Is Navigation**
+Routing doesn't perform business logic. It simply determines which code should handle this request.
+
+**2. Routes Should Be Easy to Read**
+An API should almost explain itself. Clear routes reduce confusion and make collaboration easier.
+
+**3. An Endpoint Has Two Parts**
+```text id="endpoint-formula"
+HTTP Method + Route
+```
+is what uniquely identifies an endpoint.
+
+**4. REST Encourages Resources, Not Actions**
+Routes should describe what the application manages. HTTP methods describe what happens to those resources.
+
+**5. Good Routing Is Good API Design**
+Well-designed routes make an API easier to learn, document, extend, and maintain.
+
+---
+
+### Checkpoint Questions
+
+**What is routing?**
+Routing is the process of matching an incoming HTTP request to the correct handler in a backend application.
+
+**Why is routing important?**
+Routing organizes an application by directing requests to the correct place, making the API clean and predictable.
+
+**What makes a complete endpoint?**
+A complete endpoint is the combination of an **HTTP Method** and a **Route**.
+
+**Why does REST recommend nouns instead of verbs?**
+REST encourages routes to represent resources (nouns), while HTTP methods represent actions (verbs).
+
+---
+
+### Preview — Day 3 (Part 2)
+In the next part, I'll take a much deeper look at HTTP Methods—exploring not just the "Big Five" (GET, POST, PUT, PATCH, DELETE), but also less common methods like HEAD, OPTIONS, TRACE, and CONNECT.

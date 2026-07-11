@@ -1,0 +1,865 @@
+---
+title: Day 2 — Learning Backend from First Principles (Part 3)
+description: >-
+  Extensibility, Statelessness, and Idempotency: The three hidden superpowers
+  that make HTTP scalable, flexible, and robust.
+slug: backend-first-principles-day-2-part-3
+date: '2026-07-06'
+category: Learning Journey
+readingTime: 11 min read
+day: 2
+part: 3
+series: Learning Backend from First Principles
+order: 203
+published: true
+---
+# Backend from First Principles — Day 2 (Part 3)
+
+# HTTP's Hidden Superpowers
+
+> *"The more I learn about HTTP, the more I realize it isn't just a protocol—it's a beautifully designed system. Some of its greatest strengths aren't immediately obvious, and today I discovered three ideas that explain why HTTP has remained the foundation of the web for decades."*
+
+---
+
+## Introduction
+
+In **Part 1**, I learned how clients and servers communicate.
+
+I discovered that:
+- HTTP is only one protocol in a much larger networking ecosystem.
+- Backend engineers mainly work at Layer 7 of the OSI Model.
+- TCP and UDP solve different problems.
+- HTTP/3 introduced QUIC to improve web performance.
+
+Then, in **Part 2**, I opened up an HTTP message and looked inside.
+
+I learned:
+- Every request and response follows a well-defined structure.
+- Headers provide instructions and metadata.
+- HTTP methods describe what action we want to perform.
+- Status codes tell us how the request ended.
+
+At that point, I thought:
+> "Great... I finally understand HTTP."
+
+Then today's lesson made me realize something.
+
+Understanding **how** HTTP works is only half of the story.
+The other half is understanding **why HTTP was designed this way**.
+
+Why has a protocol invented decades ago survived enormous changes in technology?
+How can browsers from today still communicate with servers written years ago?
+Why doesn't the web break every time a new feature is introduced?
+
+The answer lies in a few brilliant design principles.
+Today's lesson focuses on three of them:
+- Extensibility
+- Statelessness
+- Idempotency
+
+These ideas don't immediately appear in code.
+Instead... they shape how modern backend systems are designed.
+
+---
+
+## Topic 3.1 — HTTP Extensibility (HTTP as a Lego Set)
+
+One sentence from today's lesson stayed in my mind:
+
+> **HTTP was designed to be extended, not constantly redesigned.**
+
+At first, I didn't fully understand what that meant.
+Then the instructor used an idea that completely changed my perspective.
+Think about **Lego**.
+
+### Why Lego Has Survived for Generations
+
+Lego has existed for decades.
+Every year... new sets appear.
+Spaceships, Castles, Police stations, Formula 1 cars, Dinosaurs.
+
+Yet... a Lego brick from many years ago still connects perfectly with a brand-new Lego brick.
+Why?
+Because Lego didn't redesign every brick whenever they wanted to build something new.
+Instead... they kept the foundation stable.
+They simply added new pieces.
+That's exactly how HTTP evolved.
+
+---
+
+### Imagine If HTTP Changed Every Year...
+
+Suppose the creators of HTTP decided:
+> "Every new feature deserves a brand-new protocol."
+
+Version after version... everything changes.
+Old browsers stop working. Old servers become useless.
+Developers rewrite millions of applications. The internet would become chaotic.
+
+Instead... HTTP chose a different philosophy.
+Keep the foundation simple. Extend it when needed.
+
+---
+
+### The Secret Ingredient: Headers
+
+One of HTTP's greatest strengths is that it allows us to attach extra information without changing the protocol itself.
+Where does that extra information live?
+**Headers.**
+
+Imagine an HTTP request like a shipping box.
+Inside the box is the product. Outside the box, you attach labels.
+
+Examples:
+```http
+Authorization: Bearer eyJhbGc...
+Content-Type: application/json
+Accept: application/json
+Cache-Control: no-cache
+```
+
+Years later... developers invent a completely new feature.
+Do they redesign HTTP? No. They simply add another label.
+
+Example:
+```http
+X-Request-ID: 9a8b7c6d
+```
+
+The protocol stays exactly the same. Only the attached information grows.
+That's extensibility.
+
+---
+
+### But What Happens to Old Servers?
+
+This was one of my favorite moments in the lesson.
+Imagine a web server built in **1995**.
+One day it receives this request:
+
+```http
+GET /users HTTP/1.1
+X-Super-New-Feature: enabled
+```
+
+The server has never heard of `X-Super-New-Feature`.
+Does it crash? No.
+Does the internet break? No.
+
+The server simply ignores what it doesn't understand.
+It continues processing the request normally.
+This simple idea is incredibly powerful.
+Because of it... old software can continue working while new software keeps evolving.
+
+---
+
+### Backward Compatibility
+
+The instructor introduced another important concept:
+> **Backward Compatibility**
+
+This means:
+> **New features shouldn't break old systems.**
+
+Think about your smartphone.
+Every year... new apps appear.
+Yet your phone can still open old websites.
+The web evolves because new capabilities are usually added in ways that don't destroy what already exists.
+HTTP follows this philosophy beautifully.
+
+---
+
+### Real Example — Authentication
+
+Imagine the early days of HTTP.
+There was no JWT. No OAuth. No Bearer Tokens.
+
+Years later... developers needed secure authentication.
+Did they invent HTTP 9.0 just for authentication? No.
+Instead... they introduced another header.
+
+```http
+Authorization: Bearer eyJhbGc...
+```
+
+Problem solved.
+HTTP remained exactly the same. Only its capabilities expanded.
+
+---
+
+### Another Example — Request Tracking
+
+Imagine a company receives millions of requests every day.
+A bug appears. One request fails.
+How do engineers identify it? Simple.
+Every request receives a unique identifier.
+
+```http
+X-Request-ID: a7f6b2c1
+```
+
+Now logs become much easier to search.
+Again... no changes to HTTP itself. Just another header.
+
+---
+
+### Why This Matters for Backend Developers
+
+As backend developers, we'll spend a lot of time reading and writing headers.
+Sometimes we'll read them: `Authorization`.
+Sometimes we'll create our own: `X-Trace-ID`, `X-Request-ID`, `X-Client-Version`.
+
+The beautiful thing is... HTTP doesn't complain. It was designed to be flexible.
+As long as both the client and server agree on the meaning of a header... the protocol continues working perfectly.
+
+---
+
+### HTTP Evolves Without Breaking the Web
+
+This was probably my biggest realization today.
+I used to think protocols needed to change every time new features appeared.
+Now I understand why HTTP has remained relevant for so long.
+
+It isn't because HTTP never changes. It's because HTTP changes **carefully**.
+Instead of replacing the foundation... it extends it.
+Just like adding another Lego brick.
+
+---
+
+## Topic 3.2 — Statelessness (The Secret Behind Scalable Servers)
+
+After learning that HTTP is incredibly extensible, another question immediately came to my mind.
+
+Every time I log into a website... it remembers me.
+I can browse my profile, add items to my cart, update my settings, make purchases.
+It feels like the server knows exactly who I am.
+
+So I naturally assumed:
+> "The server must remember every user."
+
+Then today's lesson completely flipped that assumption.
+The instructor said something that sounded almost impossible.
+> **HTTP is stateless.**
+
+Wait... What?
+If HTTP forgets everything... then how does a website remember me after I log in?
+That question became today's biggest lesson.
+
+---
+
+### What Does "Stateless" Mean?
+
+The word sounds complicated. But it's actually very simple.
+Stateless means:
+> **Every HTTP request is independent.**
+
+Or even more simply:
+> **The server treats every request like it's meeting you for the first time.**
+
+Imagine meeting someone at a conference.
+You introduce yourself. Five minutes later... you meet them again.
+If they completely forgot your name and asked you to introduce yourself again... they would be acting **stateless**.
+That's exactly how HTTP behaves.
+
+---
+
+### Every Request Starts Fresh
+
+Imagine making two requests.
+First request: `GET /profile`
+The server processes it. Sends the response. Conversation finished.
+
+Now you immediately send another request: `GET /orders`
+Does the server automatically remember the previous request? No.
+From HTTP's perspective... this is a completely new conversation.
+The previous request is over. Gone. Forgotten.
+
+---
+
+### Think About Ordering Food
+
+Imagine visiting your favorite restaurant.
+You order a Burger. The waiter serves it. Conversation finished.
+
+Five minutes later... you wave the waiter over again.
+Instead of assuming what you want... the waiter asks:
+> "What would you like to order?"
+
+Again. Every order is independent.
+That's basically HTTP.
+Each request contains everything the server needs to process it. Nothing is assumed.
+
+---
+
+### Why Doesn't the Server Just Remember Everything?
+
+This was my next question. Wouldn't it be easier?
+Apparently... No.
+
+Imagine a huge social media platform with 10 Million Users.
+If every server had to remember every user's previous request, every login, every open page, every temporary action...
+Memory usage would explode. Servers would become slower. Scaling would become much harder.
+
+Instead... HTTP keeps things simple.
+Process the request. Send the response. Forget everything. Move on.
+
+---
+
+### Every Request Carries Its Own Information
+
+Since the server doesn't remember previous requests... the client has to provide the necessary context every single time.
+
+Example:
+Request #1
+```http
+POST /login
+```
+
+Server responds:
+```json
+{
+   "token": "eyJhbGc..."
+}
+```
+
+The client stores the token.
+Now... every future request includes it.
+
+```http
+GET /profile
+Authorization: Bearer eyJhbGc...
+```
+
+Notice something. The server didn't remember the user. The **client reminded the server**.
+Every request says:
+> "Hi, it's me again. Here's my authentication token."
+
+That's how stateless systems work.
+
+---
+
+### Imagine Carrying Your Own ID Card
+
+The instructor gave an idea that really stuck with me.
+Imagine entering an office building.
+Instead of the receptionist memorizing every visitor... everyone carries an ID card.
+Whenever someone enters... they simply show it.
+
+```text
+Visitor → Shows ID → Receptionist verifies it → Entry allowed
+```
+
+The receptionist doesn't need to remember yesterday's visitors.
+Every visitor proves their identity each time.
+JWT tokens work almost exactly like this.
+
+---
+
+### Why Statelessness Makes Scaling Easy
+
+This was probably the biggest takeaway of the lesson.
+Imagine one backend server.
+
+```text
+Client → Server A
+```
+
+Easy. Now imagine one million users. One server isn't enough. So we add more.
+
+```text
+Load Balancer → Server A, Server B, Server C, Server D
+```
+
+Now here's the beautiful part.
+Since every request contains everything needed... it doesn't matter which server receives it.
+One request can go to Server A. The next to Server C. The next to Server B.
+Everything still works. Because none of the servers rely on remembering previous requests.
+Every request is self-contained.
+
+---
+
+### Load Balancers Love Stateless Applications
+
+Imagine a load balancer standing in front of multiple servers.
+Its job is simple:
+> "Who should handle this request?"
+
+If the application is stateless... the answer is:
+> "Anyone."
+
+```text
+Request 1 → Server A
+Request 2 → Server C
+Request 3 → Server B
+```
+
+No problem. Every server can process every request.
+That's one of the biggest reasons modern web applications scale so well.
+
+---
+
+### What If the Server Stored Everything?
+
+Let's imagine the opposite.
+Suppose Server A remembers my session.
+
+```text
+Login → Server A remembers me
+```
+
+Now my next request accidentally goes to Server C.
+Server C says:
+> "Who are you?"
+
+It has never seen me before. Now the system breaks.
+To fix this... servers would constantly need to synchronize their memory. That adds complexity.
+Statelessness avoids this entire problem.
+
+---
+
+### Real Example
+
+Imagine I'm using the Ethio Origins Tour website.
+First request: `GET /tours`
+Second request: `GET /destinations`
+Third request: `POST /bookings`
+
+Each request contains everything needed. The backend doesn't rely on remembering what happened five seconds ago.
+Instead... it processes each request independently.
+
+---
+
+### Stateless Doesn't Mean "No Memory"
+
+This was another misunderstanding I had.
+Stateless doesn't mean the application forgets everything forever. Data is still stored.
+Just not inside the HTTP conversation.
+
+Permanent information lives in:
+- Databases
+- Caches
+- Storage
+
+The HTTP server simply doesn't rely on remembering previous requests in its own memory.
+That's an important distinction.
+
+---
+
+## Topic 3.3 — Idempotency (The Double-Click Shield)
+
+After learning that HTTP is both **extensible** and **stateless**, I thought I had finally uncovered its biggest secrets.
+Then the instructor introduced one final concept.
+
+> **Idempotency**
+
+Honestly... the first time I heard that word, I thought:
+> "That sounds like something from a university mathematics course."
+
+But after today's lesson, I realized something.
+This concept quietly protects millions of online transactions every single day.
+Without it...
+People could accidentally pay twice. Order the same product multiple times. Book the same flight twice. Create duplicate records.
+
+It turns out idempotency isn't just another technical buzzword.
+It's one of the most practical ideas in backend engineering.
+
+---
+
+### What Does Idempotent Mean?
+
+The formal definition sounds something like this:
+> **Performing the same operation multiple times produces the same result as performing it once.**
+
+Sounds complicated. Let's simplify it.
+Imagine a light switch.
+You press OFF. Nothing changes.
+Press it again. Still OFF.
+Whether you press the OFF switch once... or ten times... the final state remains OFF.
+That's idempotent. The result doesn't keep changing.
+
+Another example:
+Imagine painting a wall. You paint it white. Later... you paint it white again.
+The wall is still white. Painting it the same color multiple times doesn't produce new walls.
+It simply leaves the wall in the same final state.
+That's another idempotent action.
+
+---
+
+### The Double-Click Problem
+
+Now imagine something much more serious.
+You're shopping online.
+You click **Pay Now**.
+Nothing happens for two seconds. You think:
+> "Maybe the button didn't work."
+
+So you click again. And again. And again.
+Oops... Four payments were processed.
+Who wants that? Nobody.
+This is exactly the type of problem idempotency is designed to prevent.
+
+---
+
+### Not Every Operation Should Repeat
+
+Let's compare two actions.
+
+**Turning on Wi-Fi**
+You press Turn Wi-Fi ON. Press it again. Nothing changes. Still ON.
+Idempotent.
+
+**Sending Money**
+Now imagine sending 100 USD.
+Click once. Balance decreases by 100.
+Click again. Another 100.
+Click again. Another 100.
+Now you've accidentally sent 300 USD.
+Definitely **not** idempotent.
+
+---
+
+### HTTP Methods and Idempotency
+
+One of the things I liked most was how the instructor connected idempotency to HTTP methods.
+Let's look at each one.
+
+**GET**
+`GET /users`
+You request users. Again. Again. Again.
+The server simply returns the same information. No new users are created. No data changes.
+GET is naturally idempotent.
+
+**PUT**
+Suppose a user's name becomes Bella.
+`PUT /users/1`
+Again. Again. Again.
+The final state remains Bella. Nothing changes after the first successful update.
+PUT is idempotent.
+
+**DELETE**
+Imagine deleting User #15.
+First request: User deleted.
+Second request. There is no user anymore. The server might return `404 Not Found`.
+But notice something. The final state hasn't changed. The user is still gone.
+DELETE is considered idempotent.
+
+**POST**
+POST behaves differently. Suppose we create a new user.
+`POST /users`
+Request 1: Creates User #101.
+Request 2: Creates User #102.
+Request 3: Creates User #103.
+Each request creates something new.
+POST is **not idempotent.** This is why duplicate submissions become dangerous.
+
+**PATCH**
+PATCH is interesting. Sometimes it's idempotent. Sometimes it isn't.
+
+Current age: 22
+PATCH: `{"age": 23}`
+Run it once. Age becomes 23. Run it again. Still 23. Idempotent.
+
+Now another PATCH: `{"incrementAge": 1}`
+First request: 23.
+Second: 24.
+Third: 25.
+Completely different outcome. Not idempotent.
+So PATCH depends on **what the operation actually does**.
+
+---
+
+### Idempotency Isn't About Responses
+
+This part surprised me.
+Many people think:
+> "If I receive the same response twice... then it's idempotent."
+
+Not necessarily. Idempotency is about the **final state of the server**.
+Responses may differ.
+
+Example DELETE:
+First request: `204 No Content`
+Second request: `404 Not Found`
+
+Different responses. Same final state. The user is gone. Still idempotent.
+
+---
+
+### The Hero: Idempotency Keys
+
+Now comes the clever solution.
+Imagine every payment request includes:
+
+```http
+Idempotency-Key: f73e91d2...
+```
+
+When the backend receives it... it stores the key.
+If another request arrives with the same key:
+
+```http
+Idempotency-Key: f73e91d2...
+```
+
+The backend says:
+> "I've already processed this."
+
+Instead of charging the customer again... it simply returns the previous response.
+One payment. One order. One booking.
+Problem solved.
+
+---
+
+### Real Payment Example
+
+Imagine Stripe.
+You press Pay $50. Network becomes slow. You press again.
+
+Without idempotency:
+```text
+$50 → $50 → $50
+```
+Three payments. Disaster.
+
+With an Idempotency Key:
+```text
+Request → Unique Key → Already Processed → Return Previous Result
+```
+Still only one payment. That's brilliant.
+
+---
+
+### Real Example
+
+Suppose I'm building the backend for **Ethio Origins Tour**.
+A tourist books: 7-Day Lalibela Tour.
+Network freezes. The user refreshes. Clicks again.
+
+Without protection... the database might create Booking #81, Booking #82, Booking #83 for the same customer.
+With an Idempotency Key: Only one booking exists.
+The backend recognizes the duplicate request and safely ignores it. Exactly what users expect.
+
+---
+
+## Checkpoint Questions
+
+### If a user clicks **"Submit Payment"** twice, how does an Idempotency Key save them?
+
+Each payment request includes a unique **Idempotency Key**. When the backend processes the request, it stores that key along with the result. If the same request arrives again with the same key, the backend recognizes it as a duplicate and returns the original response instead of processing the payment a second time. This prevents duplicate charges even if the user refreshes the page or clicks the button multiple times.
+
+---
+
+### Why is **PUT** idempotent but **POST** is not?
+
+`PUT` replaces a resource with the same representation every time it is called. Repeating the same request leaves the resource in the same final state.
+
+`POST`, on the other hand, usually creates a new resource with every request. Sending the same POST request multiple times often results in multiple records, making it non-idempotent.
+
+---
+
+### Can a **PATCH** request be idempotent?
+
+Yes—but it depends on the operation.
+
+An idempotent PATCH:
+```json
+{
+  "status": "completed"
+}
+```
+Sending this request multiple times still leaves the resource with the status `"completed"`.
+
+A non-idempotent PATCH:
+```json
+{
+  "incrementBalance": 100
+}
+```
+Every request increases the balance again, so repeating the request changes the final state each time.
+This is why PATCH **can be idempotent**, but it is **not guaranteed to be**.
+
+---
+
+## Final Summary
+
+When I started today's lesson, I thought HTTP was simply a protocol that sends requests and receives responses.
+After finishing this part, I realized that HTTP is much more than that.
+It isn't just a communication protocol.
+It's a protocol designed with principles that have allowed it to power the web for more than three decades while continuously evolving.
+
+Today, I explored three ideas that completely changed how I think about backend engineering:
+- **Extensibility**
+- **Statelessness**
+- **Idempotency**
+
+Each one solves a different problem, but together they explain why HTTP is still one of the most successful protocols ever created.
+
+---
+
+### Extensibility — Built to Grow
+
+The first lesson taught me that HTTP wasn't designed to stay frozen forever.
+Instead, it was designed to evolve.
+Rather than inventing a brand-new protocol every time developers needed a new feature, HTTP allows us to extend it through mechanisms like headers.
+
+That's why modern applications can support features such as Authentication, Caching, Request tracing, Compression, and Security policies without changing the foundation of HTTP itself.
+The Lego analogy made this idea incredibly easy to understand.
+Instead of replacing every brick... we simply add new ones.
+
+---
+
+### Statelessness — The Secret Behind Scalability
+
+This was probably the biggest mindset shift for me.
+Before today, I assumed servers remembered every user.
+Now I understand that HTTP deliberately avoids remembering previous requests.
+Every request must carry enough information for the server to process it independently.
+
+This simple design makes it possible to distribute traffic across many backend servers without worrying about which server handled the previous request.
+Suddenly... load balancers, cloud servers, and horizontal scaling all started making much more sense.
+
+---
+
+### Idempotency — Preventing Expensive Mistakes
+
+This concept felt incredibly practical.
+It answered a real-world question:
+> "What happens if the same request is accidentally sent twice?"
+
+Instead of relying on luck... good backend systems are designed to safely handle duplicate requests.
+Whether it's online payments, booking systems, order creation, or financial transactions, Idempotency helps prevent duplicate operations that could otherwise cost users money or create inconsistent data.
+It's one of those backend concepts that users rarely notice... until it's missing.
+
+---
+
+### How These Three Concepts Work Together
+
+One thing I love about backend engineering is that concepts rarely exist in isolation.
+Today's three topics connect beautifully.
+
+```text
+HTTP
+├── Extensible (Easily grows without breaking old systems)
+├── Stateless (Every request is independent)
+└── Idempotent (Safe handling of repeated requests)
+```
+
+Together, they create applications that are:
+- Flexible
+- Scalable
+- Reliable
+
+Exactly what modern backend systems need.
+
+---
+
+## What I Learned Today
+
+If I had to summarize today's lesson in a few sentences, it would be this:
+
+### 1. Great software is designed to evolve.
+HTTP has survived for decades because it was built with extensibility in mind.
+Instead of replacing the protocol every few years... developers simply extend it.
+That philosophy is something I hope to apply in my own projects.
+
+### 2. Simplicity often leads to scalability.
+At first, statelessness sounded like a limitation. Now I see it as one of HTTP's greatest strengths.
+By refusing to remember previous requests, servers become much easier to scale.
+Sometimes... doing less is actually the smarter design.
+
+### 3. Backend development isn't only about writing code.
+It's also about designing systems that behave correctly under real-world conditions.
+Network failures happen. Users double-click buttons. Browsers retry requests.
+Good backend engineers anticipate these situations instead of reacting to them later.
+
+### 4. Every design decision has a reason.
+One thing I appreciate about this series is that it doesn't just explain **what** technologies do.
+It explains **why** they exist.
+Understanding the reasoning behind these decisions makes everything much easier to remember.
+
+---
+
+## My Backend Journey So Far
+
+Looking back at the past few days, it's amazing how much my mental model has changed.
+
+### Day 1
+I learned how requests travel across the internet. DNS, Cloud servers, Firewalls, Reverse proxies, Backend applications, Databases.
+I understood **where requests go.**
+
+### Day 2 — Part 1
+I learned the networking protocols behind modern applications. The OSI Model, TCP vs UDP, HTTP/3 and QUIC.
+I understood **how computers communicate.**
+
+### Day 2 — Part 2
+I learned HTTP message structure. Headers, HTTP methods, Status codes.
+I understood **how HTTP conversations are organized.**
+
+### Day 2 — Part 3
+I learned Extensibility, Statelessness, Idempotency.
+I understood **why HTTP was designed the way it is.**
+
+Every lesson feels like adding another piece to a giant puzzle.
+The more pieces I place... the clearer the overall picture becomes.
+
+---
+
+## References
+
+These are the resources I used (and plan to revisit) to deepen my understanding of today's topics.
+
+**MDN Web Docs**
+- [HTTP Overview](https://developer.mozilla.org/en-US/docs/Web/HTTP)
+- [HTTP Headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers)
+- [HTTP Methods](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods)
+- [HTTP Status Codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)
+
+**Official HTTP Specification**
+- [RFC 9110 — HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110)
+
+**Cloudflare Learning Center**
+- [What is HTTP?](https://www.cloudflare.com/learning/ddos/glossary/hypertext-transfer-protocol-http/)
+- [What is HTTP/3?](https://www.cloudflare.com/learning/performance/what-is-http3/)
+- [What is QUIC?](https://www.cloudflare.com/learning/performance/what-is-quic/)
+
+**Node.js & NestJS**
+- [Node.js Learn Documentation](https://nodejs.org/en/learn)
+- [NestJS Official Documentation](https://docs.nestjs.com)
+
+---
+
+## Preview — Day 2 (Part 4)
+
+I've spent the last three articles understanding how HTTP works.
+Now it's time to explore something every frontend and backend developer eventually encounters:
+
+> **CORS.**
+
+If you've ever seen an error like:
+```text
+Access to fetch at 'https://api.example.com' has been blocked by CORS policy.
+```
+you're not alone.
+
+In **Part 4**, I'll dive into:
+- Same-Origin Policy
+- Cross-Origin Resource Sharing (CORS)
+- OPTIONS Requests
+- Preflight Requests
+- Security Headers
+- Why browsers block requests—and why that's actually a good thing.
+
+By the end of Part 4, I hope to finally understand one of the most confusing topics in web development and stop treating CORS errors like mysterious bugs.
+
+---
+
+## Final Thoughts
+
+One thing has become clear throughout this journey:
+Backend engineering isn't about memorizing frameworks.
+Frameworks change. Libraries change. Even programming languages evolve.
+But the fundamental ideas behind networking, HTTP, scalability, and system design remain valuable regardless of the tools we use.
+
+The more I study these fundamentals, the more confident I feel that I'm building knowledge that will stay relevant for years to come.
+And honestly... that's one of the most exciting parts of this journey.
+See you in **Part 4**.

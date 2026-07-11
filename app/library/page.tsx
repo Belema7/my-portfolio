@@ -4,6 +4,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { LibraryTabs } from "@/components/library/LibraryTabs";
 import { BlogView } from "@/sections/library/BlogView";
 import { LibraryView } from "@/sections/library/LibraryView";
+import { getAllPosts, getFeaturedPost } from "@/lib/blog/api";
 
 export const metadata: Metadata = {
   title: "Library | Belema Girma",
@@ -21,6 +22,9 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const { view = "blog" } = await searchParams;
   const activeTab = view === "library" ? "library" : "blog";
 
+  const posts = getAllPosts();
+  const featured = getFeaturedPost();
+
   return (
     <div className="section">
       <Container>
@@ -30,7 +34,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
 
       <div className="mt-16">
         {activeTab === "blog" ? (
-          <BlogView />
+          <BlogView posts={posts} featured={featured} />
         ) : (
           <LibraryView />
         )}

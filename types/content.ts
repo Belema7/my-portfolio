@@ -1,9 +1,3 @@
-export type PostCategory =
-  | "Technical Notes"
-  | "Learning Journey"
-  | "Building in Public"
-  | "Personal Thoughts";
-
 export type ProjectType =
   | "Full-stack web application"
   | "Client website"
@@ -29,37 +23,6 @@ export type Project = {
   lessons: string[];
   architectureNotes?: string;
   screenshots: string[];
-};
-
-export type Post = {
-  title: string;
-  slug: string;
-  description: string;
-  category: PostCategory;
-  date: string;
-  readingTime: string;
-  content: string;
-  featured?: boolean;
-};
-
-export type Book = {
-  title: string;
-  author: string;
-  status: "Reading" | "Finished" | "Want to Read";
-  note: string;
-  favoriteIdea: string;
-};
-
-export type Quote = {
-  quote: string;
-  source: string;
-  note: string;
-};
-
-export type Movie = {
-  title: string;
-  note: string;
-  lesson: string;
 };
 
 export type TimelineItem = {

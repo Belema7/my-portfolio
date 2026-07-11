@@ -1,0 +1,60 @@
+---
+title: Client Components vs Server Components
+description: >-
+  Notes from building real projects on where I draw the line between server and
+  client components.
+slug: client-vs-server-components
+date: '2026-04-15'
+category: Technical Notes
+readingTime: 7 min read
+published: true
+---
+Server Components are the default in the App Router, and that default is intentional. They run on the server, ship no component JavaScript to the browser for their own logic, and compose naturally with async data fetching. Client Components are the exception you opt into with "use client"—and that exception is powerful when you need it.
+
+The hard part is not learning the syntax. It is drawing a boundary that keeps bundles small without fighting the framework.
+
+## What Server Components are good at
+
+I use Server Components for layouts, pages, static sections, and anything that renders the same way for every user until data changes on the server. They can import server-only modules, read from the filesystem, talk to a database directly, and keep secrets off the client.
+
+In practice, that means my blog post page, project case study shell, and most marketing sections never need "use client". They receive data, render HTML, and pass only the interactive pieces down as children.
+
+## When I add "use client"
+
+I reach for Client Components when I need one or more of these:
+
+- Event handlers (onClick, onChange, onSubmit)
+- React state (useState, useReducer)
+- Browser APIs (localStorage, matchMedia, geolocation)
+- Effects that depend on the window or document
+- Third-party libraries that assume a browser environment
+
+My theme toggle, mobile navigation, and contact form all live in client components. They are small leaf nodes at the edge of the tree, not wrappers around entire pages.
+
+## The mistake I made early
+
+My first App Router pages were marked "use client" at the top because one button needed state. That pulled the entire page—and every import beneath it—into the client bundle. Data fetching moved to useEffect, loading states multiplied, and I lost most of the benefits I had switched for.
+
+The fix was mechanical but mindset-shifting: keep the page as a Server Component, identify the interactive island, and move only that subtree to a client file. Children of a Client Component can still be Server Components if they are passed as children props from a parent server tree—a pattern the docs call the "composition" approach.
+
+## Composition over conversion
+
+A pattern I use often looks like this mentally: the server page fetches data and renders structure; it passes server-rendered content into a client shell only where needed. For example, a client tabs component might receive pre-rendered tab panels as children from the server.
+
+That way interactivity does not force data fetching to the client. The server still owns the expensive work.
+
+## Boundaries and mental overhead
+
+Every "use client" file creates a boundary. Imports below that boundary must be client-safe. That is why I avoid sprinkling "use client" in shared utility files unless they are truly client-only.
+
+I also watch for accidental chains: a client card component imported by a client layout is fine; a client hook imported into a server component is not. The compiler error is clear, but the habit of checking the top of the file saves debugging time.
+
+## How I decide in real features
+
+For DevLink and DevMeet, listing pages are server-rendered with data from Prisma. Interactive pieces—dropdowns, modals, optimistic UI on a button—are isolated client components colocated next to the feature they serve, not in a generic "components/client" dumping ground.
+
+If I am unsure, I default to server and wait for a concrete need: a handler, state, or browser API. That default has been right more often than wrong.
+
+## Summary
+
+Server Components are not a restriction—they are the baseline that keeps apps fast. Client Components are the tool for interactivity at the leaves. The skill is drawing that line early, composing server and client trees intentionally, and refusing to convert a whole page just because one corner needs state.
