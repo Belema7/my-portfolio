@@ -1,12 +1,12 @@
 ---
 title: Day 4 — Learning Backend from First Principles (Part 2)
 description: >-
-  Serialization vs Deserialization: Understanding the core differences and the
-  complete request and response lifecycle in a web application.
+  Following one profile update through serialization, HTTP, backend validation,
+  business logic, response serialization, and frontend deserialization.
 slug: backend-first-principles-day-4-part-2
 date: '2026-07-19'
 category: Learning Journey
-readingTime: 12 min read
+readingTime: 10 min read
 day: 4
 part: 2
 series: Learning Backend from First Principles
@@ -15,194 +15,383 @@ published: true
 ---
 # Backend from First Principles — Day 4 (Part 2)
 
-# Serialization vs Deserialization & The Request Lifecycle
+# Following Data Through a Complete Request and Response
 
-> *"Serialization and deserialization are two opposite processes used whenever data moves between systems. They are essential in frontend-backend communication, REST APIs, mobile applications, microservices, message queues, caching, file storage, databases, and distributed systems. Today's lesson explores these concepts in detail and walks through the complete request and response lifecycle."*
+> *"In Part 1, I learned that objects do not cross the network. Applications serialize their data into a shared representation and reconstruct new values on the other side. Today I want to stop looking at serialization as an isolated definition and follow it through a real request from beginning to end."*
 
 ---
 
-## What Is Serialization?
+## Introduction
 
-Serialization is the process of converting an in-memory value into a standardized representation that can be transmitted or stored.
+Learning the definitions of serialization and deserialization was useful:
 
-For example, a JavaScript application may have this object:
+```text
+Serialization   → Data becomes transferable
+Deserialization → Transferable data becomes usable again
+```
+
+But I still wanted to know where these operations happen during a real application request.
+
+Does the frontend serialize the data manually? Does the backend call `JSON.parse()` inside every controller? When does validation happen? When is the response serialized?
+
+To answer those questions, I followed one scenario through the whole system.
+
+---
+
+## The Scenario — Updating a User Profile
+
+Imagine a logged-in user changes their display name and biography.
+
+The frontend needs to send:
+
+```http
+PATCH /api/profile
+```
+
+The backend must validate the input, update the database, and return the updated profile.
+
+What looks like one simple button click actually crosses several boundaries:
+
+```text
+Form → Frontend object → HTTP request → Backend value
+     → Database → Backend response → Frontend value → UI
+```
+
+Let's follow it one step at a time.
+
+---
+
+## Topic 2.1 — The Request Begins in Browser Memory
+
+### Step 1 — The User Submits the Form
+
+The frontend collects the form values:
 
 ```ts
-const user = {
-  id: 1,
-  name: "Belema",
-  isActive: true,
+const formData = {
+  displayName: "Belema Girma",
+  bio: "Frontend developer learning backend from first principles.",
 };
 ```
 
-This object exists only inside the application's memory. To send it through an HTTP request, it can be serialized into JSON:
+At this moment, `formData` is an ordinary JavaScript object in browser memory. Nothing has crossed the network.
+
+### Step 2 — Frontend Validation Improves the Experience
+
+The frontend may check whether the display name is empty or the biography is too long.
 
 ```ts
-const json = JSON.stringify(user);
+if (!formData.displayName.trim()) {
+  showError("Display name is required");
+}
 ```
 
-The original object is now represented as text that can be sent through a network, stored in a file, placed in browser storage, saved in a cache, or published to a message queue.
+This gives the user quick feedback, but it is not a security boundary. Someone can skip the form and send a request directly with another tool.
+
+> **Frontend validation helps the user. Backend validation protects the application.**
+
+### Step 3 — The Data Is Serialized
+
+Before the request body can be transmitted, the object becomes JSON text:
+
+```ts
+const body = JSON.stringify(formData);
+```
+
+Conceptually, the result looks like this:
+
+```json
+{
+  "displayName": "Belema Girma",
+  "bio": "Frontend developer learning backend from first principles."
+}
+```
+
+This is the first serialization point.
 
 ---
 
-## What Is Deserialization?
+## Topic 2.2 — Building and Sending the HTTP Request
 
-Deserialization is the reverse process. It converts serialized data back into a usable in-memory value.
+### Step 4 — The Frontend Creates the Request
 
-Suppose an application receives this JSON string:
-
-```ts
-const json = '{"id":1,"name":"Belema","isActive":true}';
-```
-
-It can deserialize the string using:
+The frontend sends the serialized body with instructions for the backend:
 
 ```ts
-const user = JSON.parse(json);
+await fetch("/api/profile", {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(formData),
+});
 ```
 
-The result is a JavaScript object that the application can access normally.
+The request contains different kinds of information:
 
----
+| Request part | Purpose |
+| --- | --- |
+| Method | Describes the operation |
+| Path | Identifies the resource |
+| Headers | Provide metadata and instructions |
+| Body | Carries the serialized profile data |
 
-## The Two Processes Are Opposites
+### Step 5 — Text Becomes Bytes
 
-Serialization and deserialization are reverse operations:
+Serialization and encoding are related, but they are not the same operation.
+
+Serialization creates a structured representation such as JSON text. Text encoding converts that text into bytes, commonly using UTF-8.
 
 ```text
-Program object → Serialization → Serialized representation → Deserialization → New program object
+JavaScript object
+      ↓ serialization
+JSON text
+      ↓ UTF-8 encoding
+Bytes
+      ↓ network
 ```
 
-The data completes a round trip, but the final object is not the exact same object in memory. The two objects may contain equivalent data, but they are separate values. Serialization does not physically move an object from one program into another; it creates a representation of the object's data.
+HTTPS then protects those bytes during transmission. Encryption does not replace serialization; it protects the serialized data while it travels.
 
-### A Blueprint Analogy
-
-Imagine sending a table to someone in another country. You cannot send the physical table through email. Instead, you create a blueprint. Creating the blueprint is similar to serialization. The receiver reads the blueprint and builds a new table. That reconstruction is similar to deserialization. The receiver gets a new table created from the shared representation.
+This distinction was important for me because I previously treated serialization, encoding, and encryption as if they meant the same thing.
 
 ---
 
-## Serialization and Deserialization in Both Directions
+## Topic 2.3 — The Request Enters the Backend
 
-A complete request-response cycle uses both operations twice:
+### Step 6 — Infrastructure Receives the Request
 
-**Request direction:**
-Frontend object → Frontend serialization → JSON request → Backend deserialization → Backend object
+The request may pass through a firewall, load balancer, or reverse proxy before reaching the backend application.
 
-**Response direction:**
-Backend object → Backend serialization → JSON response → Frontend deserialization → Frontend object
+The server reads the HTTP message and identifies:
 
----
+```text
+Method: PATCH
+Path: /api/profile
+Content-Type: application/json
+Body: JSON data
+```
 
-## JSON Parsing and Stringifying
+### Step 7 — Routing Finds the Correct Handler
 
-### JSON.stringify()
+This connects directly to Day 3.
 
-`JSON.stringify()` converts a JavaScript value into JSON text. A useful mental model is: Object → String.
+The router matches the method and path:
 
-### JSON.parse()
+```text
+PATCH + /api/profile → Profile controller
+```
 
-`JSON.parse()` converts valid JSON text into a JavaScript value. A useful mental model is: String → Object. 
+Routing decides which code should handle the request. It does not make the incoming data trustworthy.
 
-Parsing can produce more than objects; it can return arrays, strings, numbers, booleans, or `null`.
+### Step 8 — The Body Is Deserialized
 
----
+The backend converts the JSON request body into a value the application can use.
 
-## What Serialization Does Not Preserve
+In a low-level example, this might involve:
 
-JSON supports a limited set of values. JavaScript supports many additional values that may be removed, changed, or cause errors during serialization.
+```ts
+const data = JSON.parse(rawBody);
+```
 
-* **Functions are not serialized**: The function is removed.
-* **undefined is not a JSON value**: Properties set to `undefined` are omitted.
-* **Dates become strings**: Serialization preserves the date representation as a string, not the original JavaScript `Date` instance.
-* **Class instances become plain objects**: Class identity, prototypes, and methods are not preserved.
-* **Map and Set need conversion**: They serialize to empty objects unless converted to arrays first.
-* **BigInt is not supported directly**: It usually throws an error unless converted to a string.
-* **Circular references cause errors**: Standard JSON cannot represent circular references and will throw an error.
+Frameworks usually do this automatically. Express commonly uses JSON middleware, and NestJS builds on that request-processing pipeline.
 
----
+By the time the controller reads the body, deserialization may already be complete.
 
-## Crucial Distinctions
-
-### Deserialization Is Not Validation
-
-Valid JSON can still contain invalid application data. Deserialization asks: *Can this serialized representation be converted into a program value?* Validation asks: *Does the resulting value satisfy the application's required rules?*
-
-Parsed data is still untrusted.
-
-### Deserialization Is Not Transformation
-
-Deserialization reconstructs a value. Transformation changes that value into another type (e.g., converting a string age "22" to a number 22).
-
-### Serialization Is Not Encoding, Encryption, or Compression
-
-* **Encoding** converts text into network bytes.
-* **Encryption** protects data confidentiality (e.g., HTTPS).
-* **Compression** reduces the size of the data.
-
-Serialization simply prepares data for transport or storage.
+That explains why I rarely write `JSON.parse()` inside a controller even though deserialization still happens.
 
 ---
 
-## The Complete Request & Response Lifecycle
+## Topic 2.4 — Deserialized Does Not Mean Trusted
 
-Serialization and deserialization do not happen in isolation. They are part of a larger lifecycle. Suppose a user updates their profile.
+### Step 9 — Authentication and Authorization
 
-### The Frontend Creates an In-Memory Value
-The frontend collects form values and constructs a JavaScript object. This object exists only in browser memory.
+Before updating the profile, the backend needs to know:
 
-### Frontend Validation
-The frontend may validate the input (e.g., ensuring the name is not empty). Frontend validation improves usability but is not a security boundary.
+1. Who is making this request?
+2. Is that user allowed to update this profile?
 
-### Request Serialization
-The frontend converts the JavaScript object into JSON text using `JSON.stringify()`. This is the first serialization point.
+Authentication establishes identity. Authorization checks permission.
 
-### The Frontend Constructs the HTTP Request
-The frontend sends the request with the serialized JSON body, specifying headers like `Content-Type: application/json`. 
+Successfully parsing JSON answers neither question.
 
-### Text Encoding and Network Transmission
-The JSON text is encoded into bytes and sent over the network, traversing routers, ISPs, and cloud infrastructure. DNS resolves the domain name, and HTTPS encrypts the traffic.
+### Step 10 — Transformation and Validation
 
-### Infrastructure and HTTP Parsing
-The request reaches load balancers and reverse proxies before hitting the backend. The backend server decodes the bytes and parses the raw HTTP request, identifying the method, path, and headers.
+Consider this valid JSON:
 
-### Route Matching and Middleware
-The router finds the matching endpoint (e.g., `PATCH /profile`). The request passes through middleware (logging, CORS, rate limiting).
+```json
+{
+  "displayName": "",
+  "bio": 9000,
+  "isAdmin": true
+}
+```
 
-### Request Deserialization
-The backend reads the JSON text body and deserializes it into a usable backend value using `JSON.parse()` (often handled automatically by framework middleware like `express.json()`).
+The syntax is valid, so it can be deserialized. But the application data is invalid and potentially dangerous.
 
-### Authentication and Authorization
-The backend verifies the user's identity (Authentication) and ensures they have permission to perform the action (Authorization).
+The backend may need to:
 
-### Transformation and Validation
-The deserialized payload is transformed (e.g., strings to numbers) and validated against the API schema (e.g., using a NestJS DTO and ValidationPipe). Unknown fields may be stripped out.
+* Require a non-empty display name.
+* Ensure the biography is a string.
+* Enforce a maximum length.
+* Reject or remove unknown fields such as `isAdmin`.
+* Apply business-specific rules.
 
-### Controller Execution and Business Logic
-The controller coordinates the request, passing data to a service where business rules are applied (e.g., checking if the profile exists).
+| Process | Question it answers |
+| --- | --- |
+| Deserialization | Can I reconstruct a program value? |
+| Transformation | Should any values change type or shape? |
+| Validation | Does this value follow the rules? |
+| Authorization | May this user perform the operation? |
 
-### Database Interaction
-The backend service communicates with the database to update the profile. The database query is executed, and the updated record is returned to the service.
+This was one of my biggest lessons:
 
-### Response Creation
-The backend creates a response object containing the updated profile or a success message. This is still an in-memory backend object.
-
-### Response Serialization
-The backend serializes the response object into JSON text. Frameworks like Express or NestJS usually handle this automatically when returning an object from a controller.
-
-### Network Transmission (Return)
-The serialized JSON response is encoded into bytes and sent back over the network to the client.
-
-### Frontend Deserialization
-The frontend receives the HTTP response and reads the JSON body. It uses `response.json()` to deserialize the text back into a usable JavaScript object.
-
-### Frontend Usage
-The frontend uses the deserialized data to update the UI, completing the full round-trip lifecycle!
+> **Valid JSON is not the same as valid application data.**
 
 ---
+
+## Topic 2.5 — Business Logic and the Database
+
+### Step 11 — The Controller Coordinates the Request
+
+After the request passes the necessary checks, the controller calls the appropriate service.
+
+The service applies business rules and asks the database to update the profile.
+
+```text
+Controller → Profile service → Database
+```
+
+The database returns a record to the backend. That record is now an in-memory value inside the server application.
+
+It still cannot be sent directly to the browser.
+
+---
+
+## Topic 2.6 — The Response Makes the Return Journey
+
+### Step 12 — The Backend Creates a Response Value
+
+The backend prepares a safe response:
+
+```ts
+const response = {
+  id: 15,
+  displayName: "Belema Girma",
+  bio: "Frontend developer learning backend from first principles.",
+};
+```
+
+Sensitive internal fields should not be included simply because they exist in the database record.
+
+### Step 13 — The Response Is Serialized
+
+The backend converts the response value into JSON. Frameworks commonly perform this automatically when a controller returns an object.
+
+This is the second serialization point in the full cycle.
+
+```text
+Backend object → JSON response → Network
+```
+
+### Step 14 — The Frontend Deserializes the Response
+
+The browser receives the response and reconstructs a JavaScript value:
+
+```ts
+const updatedProfile = await response.json();
+```
+
+Despite its convenient name, `response.json()` does not return raw JSON text. It reads the response body and parses it into a JavaScript value.
+
+### Step 15 — The UI Updates
+
+The frontend uses the new object to update the screen.
+
+```text
+JSON response → JavaScript object → Updated profile UI
+```
+
+The round trip is complete.
+
+---
+
+## The Complete Lifecycle
+
+```text
+User submits form
+      ↓
+Frontend creates object
+      ↓
+Frontend validates for usability
+      ↓
+Object is serialized into JSON
+      ↓
+JSON is encoded, encrypted, and transmitted
+      ↓
+Backend parses HTTP and matches the route
+      ↓
+Request body is deserialized
+      ↓
+Backend authenticates, authorizes, transforms, and validates
+      ↓
+Business logic updates the database
+      ↓
+Backend creates and serializes a response
+      ↓
+Frontend deserializes the response
+      ↓
+UI updates
+```
+
+What looked like “send an object to the backend” is actually a carefully coordinated sequence of conversions and checks.
+
+---
+
+## Part 2 Complete!
 
 ## Final Summary
 
-The most important rule is:
-> Serialization creates a transferable representation of data. Deserialization reconstructs a new in-memory value from that representation.
+**1. Serialization happens in both directions**
 
-The original object does not cross the network, types do not travel with it, and parsed data must still be validated before it can be trusted. Understanding this lifecycle is critical for debugging, security, and building robust APIs.
+The frontend serializes the request, and the backend serializes the response.
+
+**2. Deserialization also happens in both directions**
+
+The backend deserializes the request, and the frontend deserializes the response.
+
+**3. Framework automation does not remove the process**
+
+Express, NestJS, and browser APIs often hide the low-level work, but serialization still happens.
+
+**4. Parsing, validation, and authorization solve different problems**
+
+A request can contain valid JSON while still being invalid, unsafe, or forbidden.
+
+**5. The original object never crosses the network**
+
+Each side constructs new in-memory values from the transferred representation.
+
+### Checkpoint Questions
+
+**How many serialization points are in a normal request-response cycle?**
+
+Usually two: the client serializes the request, and the server serializes the response.
+
+**Why don't controllers normally call `JSON.parse()` manually?**
+
+Backend frameworks or middleware commonly deserialize JSON bodies before controller code runs.
+
+**Is successfully parsed JSON safe to use immediately?**
+
+No. It must still pass validation, authorization, and any required business rules.
+
+**What does `response.json()` return?**
+
+It reads and parses the JSON response body, returning a JavaScript value.
+
+---
+
+### Preview — Day 4 (Part 3)
+
+JSON works well for modern web APIs, but it is not the only serialization format. In Part 3, I will compare JSON, XML, and YAML, explore why all three exist, and learn how to choose the right format for a particular problem.
