@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Container } from "@/components/ui/Container";
-import { SectionHeader } from "@/components/ui/SectionHeader";
 import { LibraryTabs } from "@/components/library/LibraryTabs";
 import { BlogView } from "@/sections/library/BlogView";
 import { LibraryView } from "@/sections/library/LibraryView";
@@ -9,7 +8,7 @@ import { getAllPosts, getFeaturedPost } from "@/lib/blog/api";
 export const metadata: Metadata = {
   title: "Library | Belema Girma",
   description:
-    "A collection of my writing, learning notes, books, quotes, and media reflections.",
+    "A collection of my writing, finished books, films, series, and documentaries.",
 };
 
 type SearchParams = Promise<{ view?: string }>;

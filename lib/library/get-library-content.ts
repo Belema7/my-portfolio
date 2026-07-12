@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import type { Book, BookStatus, LibraryContent, LibraryEntry, Movie, Quote } from "./types";
+import type { Book, LibraryContent, LibraryEntry, Media, MediaCategory } from "./types";
 
 const CONTENT_DIR = path.join(process.cwd(), "content", "library");
-const BOOK_STATUSES = new Set<BookStatus>(["Reading", "Finished", "Want to Read"]);
+const MEDIA_CATEGORIES = new Set<MediaCategory>(["Movie", "Series", "Documentary"]);
 
 function getMdxFiles(directory: string): string[] {
   if (!fs.existsSync(directory)) return [];
@@ -24,17 +24,18 @@ function orderOf(data: Record<string, unknown>): number {
 }
 
 function parseEntry(data: Record<string, unknown>, filePath: string): LibraryEntry | undefined {
-  const common = ["type", "slug", "note"];
+  const common = ["type", "slug"];
   if (!hasStrings(data, common)) return invalid(filePath);
 
-  if (data.type === "book" && hasStrings(data, ["title", "author", "status", "favoriteIdea"]) && BOOK_STATUSES.has(data.status as BookStatus)) {
+  if (data.type === "book" && hasStrings(data, ["title", "author"])) {
     return { ...data, type: "book", order: orderOf(data) } as Book;
   }
-  if (data.type === "quote" && hasStrings(data, ["quote", "source"])) {
-    return { ...data, type: "quote", order: orderOf(data) } as Quote;
-  }
-  if (data.type === "movie" && hasStrings(data, ["title", "lesson"])) {
-    return { ...data, type: "movie", order: orderOf(data) } as Movie;
+  if (
+    data.type === "media" &&
+    hasStrings(data, ["title", "category"]) &&
+    MEDIA_CATEGORIES.has(data.category as MediaCategory)
+  ) {
+    return { ...data, type: "media", order: orderOf(data) } as Media;
   }
   return invalid(filePath);
 }
@@ -59,11 +60,8 @@ export function getAllLibraryEntries(): LibraryEntry[] {
 
 export function getLibraryContent(): LibraryContent {
   const entries = getAllLibraryEntries();
-  const books = entries.filter((entry): entry is Book => entry.type === "book");
   return {
-    booksReading: books.filter(({ status }) => status === "Reading"),
-    booksFinished: books.filter(({ status }) => status === "Finished"),
-    quotes: entries.filter((entry): entry is Quote => entry.type === "quote"),
-    movies: entries.filter((entry): entry is Movie => entry.type === "movie"),
+    booksFinished: entries.filter((entry): entry is Book => entry.type === "book"),
+    media: entries.filter((entry): entry is Media => entry.type === "media"),
   };
 }

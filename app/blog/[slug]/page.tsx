@@ -8,6 +8,7 @@ import { getPostsByDay } from "@/lib/blog/get-posts-by-category";
 import { Container } from "@/components/ui/Container";
 import { Badge } from "@/components/ui/Badge";
 import { MDXRemote } from "next-mdx-remote/rsc";
+import remarkGfm from "remark-gfm";
 import { MDXComponents } from "@/components/mdx/MDXComponents";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -80,7 +81,11 @@ export default async function BlogPostPage({ params }: Props) {
           {post.meta.description}
         </p>
         <div className="mt-10 border-t border-[var(--color-border)] pt-10 prose-custom">
-          <MDXRemote source={post.content} components={MDXComponents} />
+          <MDXRemote
+            source={post.content}
+            components={MDXComponents}
+            options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
+          />
         </div>
         {sameDay.length > 1 && (
           <nav aria-label="Other parts from this day" className="mt-12 border-t border-[var(--color-border)] pt-8">
