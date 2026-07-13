@@ -1,0 +1,467 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 4)
+description: >-
+  Binary Serialization: why it exists, how Protocol Buffers, MessagePack, and
+  Apache Thrift work, and when binary formats are worth the trade-offs.
+slug: backend-first-principles-day-4-part-4
+date: '2026-07-21'
+category: Learning Journey
+readingTime: 12 min read
+day: 4
+part: 4
+series: Learning Backend from First Principles
+order: 404
+published: true
+---
+# Backend from First Principles — Day 4 (Part 4)
+
+# Binary Serialization: When Text Is Not Enough
+
+> *"In Part 3, I learned why JSON, XML, and YAML exist. They are easy for humans to read, which makes them great for APIs, configuration, and debugging. But today I learned an uncomfortable truth: human readability is not always the most important requirement. Sometimes systems care more about speed, size, contracts, and performance. That is where binary serialization enters the picture."*
+
+---
+
+## Introduction
+
+So far, serialization felt friendly because I could see the data.
+
+JSON looks like this:
+
+```json
+{
+  "id": 15,
+  "name": "Belema",
+  "isActive": true
+}
+```
+
+Even if I do not know the full application, I can read that and understand the shape of the message.
+
+But then I asked myself:
+
+> **If JSON is so readable and widely supported, why do companies still use binary formats?**
+
+At first, binary serialization sounded like an advanced optimization that only huge companies care about. But the more I looked at it, the more I realized it solves a very real problem:
+
+```text
+Readable for humans does not always mean efficient for machines.
+```
+
+Text formats are excellent when developers need to inspect and edit data. Binary formats become useful when services need to send lots of data quickly, repeatedly, and with strong structure.
+
+---
+
+## Topic 4.1 — Why Binary Serialization Exists
+
+Text-based formats represent data using readable characters.
+
+That is helpful, but it has costs.
+
+In JSON, the field names are repeated every time:
+
+```json
+{
+  "id": 15,
+  "name": "Belema",
+  "email": "belema@example.com"
+}
+```
+
+The receiver sees `id`, `name`, and `email` as text. That makes the message easy to inspect, but it also means the message contains extra characters that machines may not need if both sides already agreed on the structure.
+
+### A Form Template Analogy
+
+Imagine two offices send the same form to each other thousands of times per second.
+
+One option is to write the full labels every time:
+
+```text
+Name: Belema
+Email: belema@example.com
+Age: 22
+```
+
+Another option is to agree on a form template first:
+
+```text
+Field 1 = Name
+Field 2 = Email
+Field 3 = Age
+```
+
+Then each message only needs to send the values:
+
+```text
+1: Belema
+2: belema@example.com
+3: 22
+```
+
+The second version is not as friendly to a random human reader, but it can be smaller and faster for machines that already know the template.
+
+That is one of the main ideas behind many binary formats.
+
+### What Binary Serialization Optimizes For
+
+Binary serialization usually tries to improve one or more of these things:
+
+| Goal | Meaning |
+| --- | --- |
+| Smaller payloads | Send fewer bytes over the network |
+| Faster parsing | Spend less CPU converting data |
+| Stronger contracts | Define message shapes clearly ahead of time |
+| Cross-language support | Allow services in different languages to communicate |
+| Efficient service-to-service traffic | Improve internal communication at scale |
+
+The trade-off is that binary messages are not naturally readable.
+
+If I open a binary message in a normal text editor, I should not expect to understand it directly. I usually need a schema, a decoder, or a tool.
+
+---
+
+## Topic 4.2 — Protocol Buffers (Protobuf)
+
+Protocol Buffers, often called **Protobuf**, is a binary serialization format created by Google.
+
+The main idea is simple:
+
+> Define the structure of the message first, then generate code that can serialize and deserialize that message efficiently.
+
+Instead of inventing the data shape inside each application, I write a `.proto` file.
+
+```proto
+syntax = "proto3";
+
+message User {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+  bool is_active = 4;
+}
+```
+
+This file is the contract.
+
+It says:
+
+* A `User` has an `id`.
+* A `User` has a `name`.
+* A `User` has an `email`.
+* A `User` has an `is_active` field.
+* Each field has a number.
+
+Those field numbers are important. In the binary message, Protobuf can use the numbers instead of repeatedly writing full field names like `"email"` or `"is_active"`.
+
+### How Protobuf Feels in Practice
+
+The workflow usually looks like this:
+
+```text
+Write .proto schema
+      ↓
+Generate code for the language
+      ↓
+Create normal objects in the application
+      ↓
+Serialize to compact binary data
+      ↓
+Deserialize on the receiving side
+```
+
+If one service is written in Go and another in JavaScript, both can use the same `.proto` contract and generate language-specific code.
+
+That is powerful because the message contract becomes explicit.
+
+### Protobuf and gRPC
+
+Protobuf is commonly used with **gRPC**, a framework for service-to-service communication.
+
+In many REST APIs, the browser sends JSON over HTTP. In many gRPC systems, services send Protobuf messages over HTTP/2.
+
+The mental model looks like this:
+
+```text
+REST API
+Client → JSON over HTTP → Server
+
+gRPC
+Service A → Protobuf over HTTP/2 → Service B
+```
+
+This does not mean gRPC replaces REST everywhere. It solves a different kind of problem, especially internal communication between backend services.
+
+### Why Protobuf Is Useful
+
+Protobuf is useful when:
+
+* Multiple services need a shared contract.
+* Messages are sent very frequently.
+* Payload size matters.
+* Different programming languages need to communicate.
+* Internal APIs need stronger structure than loose JSON.
+
+### The Trade-Off
+
+Protobuf adds a build step and extra tooling. Developers need to manage `.proto` files, generated code, and schema evolution carefully.
+
+JSON lets me quickly inspect a payload. Protobuf asks me to respect the contract and use the proper tooling.
+
+That is the trade:
+
+```text
+Less human-readable
+More machine-efficient and contract-driven
+```
+
+---
+
+## Topic 4.3 — MessagePack and Apache Thrift
+
+Protobuf is not the only binary serialization option.
+
+Two other important names are **MessagePack** and **Apache Thrift**.
+
+### MessagePack
+
+MessagePack is often described as a binary format that feels similar to JSON.
+
+It can represent familiar structures:
+
+```json
+{
+  "id": 15,
+  "name": "Belema",
+  "roles": ["user", "writer"]
+}
+```
+
+But instead of storing the data as readable JSON text, MessagePack stores it in a compact binary representation.
+
+One reason MessagePack is interesting is that it does not always require the same schema-first workflow as Protobuf. It can feel more flexible, because the data model is closer to JSON.
+
+### When MessagePack Is Useful
+
+MessagePack can be useful when:
+
+* I want something JSON-like but smaller.
+* I do not want a heavy schema workflow.
+* I need efficient data storage or network transfer.
+* I control both the sender and receiver.
+
+The trade-off is similar to other binary formats: the payload is not naturally readable in a text editor.
+
+### Apache Thrift
+
+Apache Thrift is more than just a serialization format. It is also an interface definition and remote procedure call system originally developed at Facebook.
+
+With Thrift, I can define data structures and services in an interface file:
+
+```thrift
+struct User {
+  1: i32 id,
+  2: string name,
+  3: string email
+}
+
+service UserService {
+  User getUser(1: i32 id)
+}
+```
+
+This describes both data and service operations.
+
+That means Thrift can help generate code for multiple languages, allowing services to communicate using an agreed contract.
+
+### Protobuf vs MessagePack vs Thrift
+
+| Tool | Main idea |
+| --- | --- |
+| Protobuf | Schema-first binary messages, often used with gRPC |
+| MessagePack | JSON-like data represented in compact binary form |
+| Apache Thrift | Interface definition plus serialization and service communication |
+
+These tools overlap, but they do not feel identical.
+
+Protobuf emphasizes compact schema-based messages. MessagePack emphasizes JSON-like flexibility with binary efficiency. Thrift combines data contracts with service definitions.
+
+---
+
+## Topic 4.4 — Binary vs Text-Based Serialization
+
+At this point, the big question becomes:
+
+> **Should I use text or binary serialization?**
+
+The answer depends on what I am optimizing for.
+
+### Text-Based Formats Are Easier to Work With
+
+Text formats like JSON, XML, and YAML are easier to inspect.
+
+That matters a lot during development.
+
+If an API returns JSON, I can open the browser devtools and read the response immediately. I can copy it, paste it into documentation, log it, and debug it quickly.
+
+That is why JSON is still such a strong default for public web APIs.
+
+### Binary Formats Are Better for Machine Efficiency
+
+Binary formats can reduce payload size and parsing overhead, especially when messages are frequent or large.
+
+They are common in:
+
+* Microservice communication.
+* High-throughput backend systems.
+* Mobile or bandwidth-sensitive environments.
+* Internal APIs where both sides are controlled by the same organization.
+* Systems that benefit from strict schemas and generated clients.
+
+### A Practical Comparison
+
+| Question | Text-based formats | Binary formats |
+| --- | --- | --- |
+| Can humans read it directly? | Usually yes | Usually no |
+| Is it easy to debug manually? | Yes | Requires tools |
+| Is it compact? | Sometimes, but often larger | Usually more compact |
+| Does it require schema tooling? | Not always | Often yes |
+| Is it good for public web APIs? | Usually yes | Sometimes, but less common |
+| Is it good for internal service traffic? | Sometimes | Often yes |
+
+This comparison helped me see something important:
+
+> **Binary serialization is not automatically better. It is better for specific constraints.**
+
+For a portfolio website, JSON is perfectly reasonable. For thousands of backend services exchanging millions of messages, binary formats may become much more attractive.
+
+---
+
+## Topic 4.5 — Performance Trade-Offs and Checklist
+
+Binary serialization is often discussed as a performance improvement, but performance is not one thing.
+
+It can mean:
+
+* Smaller network payloads.
+* Faster serialization.
+* Faster deserialization.
+* Lower memory usage.
+* Lower CPU usage.
+* Stronger compatibility across services.
+
+But every improvement has a cost.
+
+### The Costs to Remember
+
+Binary formats can introduce:
+
+* More tooling.
+* Schema files.
+* Generated code.
+* Harder manual debugging.
+* More careful versioning rules.
+* A steeper learning curve for new team members.
+
+That means I should not choose binary serialization just because it sounds more advanced.
+
+### My Decision Checklist
+
+Before choosing binary serialization, I would ask:
+
+| Question | Why it matters |
+| --- | --- |
+| Is JSON actually causing a problem? | Avoid solving an imaginary bottleneck |
+| Are payloads large or frequent? | Binary helps most when volume matters |
+| Do both sides control the contract? | Binary formats often need coordination |
+| Do multiple languages need support? | Schema-based tools can help |
+| Is manual debugging important? | Text formats are easier to inspect |
+| Do we need strict schema evolution? | Protobuf or Thrift may help |
+| Is this a public browser API? | JSON may still be the better default |
+
+### A Simple Rule of Thumb
+
+```text
+Use JSON by default for public web APIs.
+Consider binary serialization when scale, payload size, strict contracts, or service-to-service performance become real concerns.
+```
+
+This is not a law, but it is a practical starting point.
+
+---
+
+## My Biggest Realization
+
+Before this lesson, I saw binary serialization as something advanced engineers use because it is faster.
+
+Now I see it more clearly:
+
+> **Binary serialization is about trade-offs, not status.**
+
+It gives up direct human readability in exchange for machine efficiency, stronger contracts, and better performance in certain systems.
+
+That means the question is not:
+
+```text
+Which format is the best?
+```
+
+The better question is:
+
+```text
+What does this system need most right now?
+```
+
+If the system needs simple debugging and broad browser support, JSON is probably the right answer. If the system needs compact, high-volume service communication with strict contracts, Protobuf or another binary format may be worth the extra complexity.
+
+---
+
+## Part 4 Complete!
+
+## Final Summary
+
+**1. Binary serialization exists because text is not always efficient enough**
+
+Text formats are readable, but they may include extra characters and require more parsing work.
+
+**2. Protobuf uses schemas and field numbers**
+
+It defines message contracts in `.proto` files and creates compact binary representations.
+
+**3. MessagePack feels closer to binary JSON**
+
+It represents familiar JSON-like data structures in a more compact binary form.
+
+**4. Apache Thrift combines data contracts and service definitions**
+
+It can define structures and service methods, then generate code for multiple languages.
+
+**5. Binary formats are not automatically better**
+
+They improve certain performance and contract problems, but they add tooling, complexity, and harder debugging.
+
+### Checkpoint Questions
+
+**Why do binary formats exist if JSON already works?**
+
+Because some systems need smaller payloads, faster parsing, stronger contracts, or more efficient service-to-service communication.
+
+**What is the main idea behind Protobuf?**
+
+Define the message structure in a `.proto` schema, then serialize data into a compact binary format using that contract.
+
+**How is MessagePack different from Protobuf?**
+
+MessagePack feels more JSON-like and can be used without the same schema-first workflow, while Protobuf is strongly schema-driven.
+
+**Why might a team choose Thrift?**
+
+Because it can define both data structures and service operations for cross-language service communication.
+
+**Should every API use binary serialization?**
+
+No. Public web APIs often benefit from JSON's readability and tooling. Binary formats are most useful when their performance and contract benefits justify the extra complexity.
+
+---
+
+### Preview — Day 4 (Part 5)
+
+Now that I understand text and binary serialization formats, the next question is how APIs decide what they are sending and receiving. In Part 5, I will explore content negotiation, `Content-Type`, `Accept`, and how clients and servers agree on the representation of data.
