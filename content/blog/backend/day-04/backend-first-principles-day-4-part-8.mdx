@@ -1,0 +1,469 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 8)
+description: >-
+  Why deserialization is not validation, what API inputs must prove, and how
+  validation libraries like Zod, Pydantic, Bean Validation, and Rust validator
+  protect backend boundaries.
+slug: backend-first-principles-day-4-part-8
+date: '2026-07-25'
+category: Learning Journey
+readingTime: 12 min read
+day: 4
+part: 8
+series: Learning Backend from First Principles
+order: 408
+published: true
+---
+# Backend from First Principles — Day 4 (Part 8)
+
+# Validation: Deserialization Is Not Enough
+
+> *"Deserialization answers one question: can this JSON be turned into an object? Validation asks a better question: should my application trust and use this object?"*
+
+---
+
+## Introduction
+
+At this point in Day 4, serialization and deserialization make much more sense to me.
+
+Serialization turns native values into JSON.
+
+Deserialization turns JSON into native values.
+
+But Part 7 made something obvious:
+
+```text
+Parsed does not mean valid.
+```
+
+An API can receive JSON that is perfectly valid syntax but still wrong for the application.
+
+For example:
+
+```json
+{
+  "name": "",
+  "age": -500,
+  "email": "not-an-email"
+}
+```
+
+This is valid JSON.
+
+But it is not a valid user.
+
+That is where validation comes in.
+
+---
+
+## Topic 8.1 — Deserialization Only Converts
+
+Deserialization is about conversion.
+
+It answers:
+
+```text
+Can this JSON text become a native value?
+```
+
+Validation is about correctness.
+
+It answers:
+
+```text
+Does this value obey the rules my application requires?
+```
+
+Those are different questions.
+
+### Example
+
+This JSON can be deserialized:
+
+```json
+{
+  "name": "",
+  "age": -3,
+  "email": "hello"
+}
+```
+
+In JavaScript, it becomes an object:
+
+```js
+{
+  name: "",
+  age: -3,
+  email: "hello"
+}
+```
+
+But the backend still needs to ask:
+
+| Field | Rule |
+| --- | --- |
+| `name` | Must not be empty |
+| `age` | Must be a realistic positive number |
+| `email` | Must be a valid email address |
+
+Deserialization gave me an object.
+
+Validation tells me whether the object is acceptable.
+
+---
+
+## Topic 8.2 — What Backend Validation Checks
+
+Validation usually checks several layers.
+
+### Required Fields
+
+Some fields must exist.
+
+```json
+{
+  "email": "belema@example.com"
+}
+```
+
+If the API requires `name`, this payload is incomplete.
+
+### Data Types
+
+Fields must have the expected type.
+
+```json
+{
+  "name": "Belema",
+  "age": "twenty two"
+}
+```
+
+The value `"twenty two"` is a string, not a number.
+
+### Constraints
+
+Some values must stay inside a valid range.
+
+```json
+{
+  "age": 999
+}
+```
+
+That may be a valid JSON number, but not a valid human age for a user profile.
+
+### Formats
+
+Some strings must follow a specific format.
+
+```json
+{
+  "email": "not-an-email"
+}
+```
+
+The type is right. It is a string.
+
+The format is wrong.
+
+### Custom Rules
+
+Some rules come from the product itself.
+
+```text
+Password must be at least 8 characters.
+Username must be unique.
+Start date must be before end date.
+Role must be one of the allowed values.
+```
+
+This is where validation becomes business logic.
+
+The API is not just checking syntax. It is protecting the meaning of the system.
+
+---
+
+## Topic 8.3 — Validation Libraries
+
+Most production applications use validation libraries instead of writing every check manually.
+
+| Language | Common libraries |
+| --- | --- |
+| JavaScript / TypeScript | Zod, Joi, Yup, class-validator |
+| Python | Pydantic, Marshmallow, Django validators |
+| Java | Bean Validation, Hibernate Validator, Jakarta Validation |
+| Rust | validator crate, serde validation patterns |
+
+The library names change, but the purpose is similar:
+
+```text
+Define the expected shape.
+Reject data that does not match.
+Return useful errors.
+```
+
+### Why This Matters at API Boundaries
+
+The API boundary is where outside data enters my application.
+
+That makes it one of the most important places to be strict.
+
+```text
+Request body → Deserialize → Validate → Business logic
+```
+
+If invalid data reaches business logic, the rest of the code has to defend itself constantly.
+
+Validation near the boundary keeps the inside of the app cleaner.
+
+---
+
+## Topic 8.4 — JavaScript Validation with Zod
+
+Zod is popular in TypeScript and JavaScript because it lets me define a schema in code.
+
+```js
+import { z } from "zod";
+
+const userSchema = z.object({
+  name: z.string().min(1),
+  age: z.number().int().min(0).max(150),
+  email: z.string().email(),
+});
+```
+
+This schema says:
+
+| Field | Rule |
+| --- | --- |
+| `name` | Must be a non-empty string |
+| `age` | Must be an integer between 0 and 150 |
+| `email` | Must be an email string |
+
+Then an Express route can validate `req.body` before using it:
+
+```js
+app.post("/users", (req, res) => {
+  const result = userSchema.safeParse(req.body);
+
+  if (!result.success) {
+    return res.status(400).json({
+      errors: result.error.issues,
+    });
+  }
+
+  const user = result.data;
+
+  return res.status(201).json({
+    id: 1,
+    name: user.name,
+  });
+});
+```
+
+I like `safeParse()` here because it does not throw. It returns a result I can handle clearly.
+
+```text
+Invalid input → 400 Bad Request
+Valid input → continue
+```
+
+That is the kind of flow I want at an API boundary.
+
+---
+
+## Topic 8.5 — Python Validation with Pydantic
+
+Python often uses Pydantic for data validation, especially with FastAPI.
+
+```python
+from pydantic import BaseModel, EmailStr, field_validator
+
+class UserSchema(BaseModel):
+    name: str
+    age: int
+    email: EmailStr
+
+    @field_validator("age")
+    @classmethod
+    def validate_age(cls, value):
+        if value < 0 or value > 150:
+            raise ValueError("Age must be between 0 and 150")
+        return value
+```
+
+The schema describes the data the API expects.
+
+In a FastAPI route, the framework can validate automatically:
+
+```python
+@app.post("/users")
+async def create_user(user: UserSchema):
+    return {
+        "id": 1,
+        "name": user.name,
+    }
+```
+
+If the request body does not match `UserSchema`, the framework can reject it before the route logic runs.
+
+That is powerful because the route can focus on the use case instead of manually checking every field.
+
+---
+
+## Topic 8.6 — Validation in Java and Rust
+
+Java often uses annotations for validation.
+
+```java
+public class CreateUserRequest {
+    @NotBlank
+    private String name;
+
+    @Min(0)
+    @Max(150)
+    private int age;
+
+    @Email
+    private String email;
+}
+```
+
+Then a Spring Boot controller can ask Spring to validate the request:
+
+```java
+@PostMapping("/users")
+public User createUser(@Valid @RequestBody CreateUserRequest request) {
+    return userService.create(request);
+}
+```
+
+Rust can combine typed structs with validation crates:
+
+```rust
+use serde::Deserialize;
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate)]
+struct CreateUserRequest {
+    #[validate(length(min = 1))]
+    name: String,
+
+    #[validate(range(min = 0, max = 150))]
+    age: i32,
+
+    #[validate(email)]
+    email: String,
+}
+```
+
+Rust's type system helps, but types alone still do not express every rule.
+
+An `i32` can hold `-500`.
+
+Validation explains whether that number makes sense for the API.
+
+---
+
+## Topic 8.7 — Good Validation Errors
+
+A backend should not just say:
+
+```json
+{
+  "error": "Invalid input"
+}
+```
+
+That message may be true, but it is not very helpful.
+
+A better response tells the client what failed:
+
+```json
+{
+  "errors": [
+    {
+      "field": "email",
+      "message": "Email must be valid"
+    },
+    {
+      "field": "age",
+      "message": "Age must be between 0 and 150"
+    }
+  ]
+}
+```
+
+Good validation errors help frontend developers, API users, and future me.
+
+The goal is not to expose internal system details. The goal is to explain the contract clearly.
+
+---
+
+## My Biggest Realization
+
+I used to think deserialization was the moment data became usable.
+
+Now I think of it differently:
+
+```text
+Deserialization makes data accessible.
+Validation makes data acceptable.
+```
+
+That is a much better mental model.
+
+After deserialization, I have an object. After validation, I have an object that my application can safely reason about.
+
+That distinction is small, but it changes how I think about API design.
+
+---
+
+## Part 8 Complete!
+
+## Final Summary
+
+**1. Deserialization is not validation**
+
+Deserialization converts JSON into a native value. Validation checks whether that value obeys the app's rules.
+
+**2. Valid JSON can still be invalid input**
+
+An empty name, negative age, or malformed email can still be valid JSON syntax.
+
+**3. Validate at the API boundary**
+
+The best place to reject bad request data is before it enters business logic.
+
+**4. Libraries make validation consistent**
+
+Zod, Pydantic, Bean Validation, and Rust validation crates help define expected shapes and rules.
+
+**5. Helpful errors are part of the API contract**
+
+Good validation responses tell clients which fields failed and why.
+
+### Checkpoint Questions
+
+**Why is deserialization alone not enough?**
+
+Because it only converts data. It does not prove the data is correct for the application.
+
+**What should a backend validate?**
+
+Required fields, types, constraints, formats, and custom business rules.
+
+**Why is Zod popular in TypeScript projects?**
+
+It defines runtime validation schemas in code and can infer useful TypeScript types.
+
+**What status code should invalid input usually return?**
+
+Usually `400 Bad Request`, or sometimes `422 Unprocessable Entity` depending on the API style.
+
+---
+
+### Preview — Day 4 (Part 9)
+
+Now that the request body is clear, I want to zoom back out to HTTP. In Part 9, I will study content negotiation: how `Content-Type` and `Accept` help clients and servers agree on which serialization format to use.

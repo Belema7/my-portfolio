@@ -1,0 +1,489 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 10)
+description: >-
+  The complete serialization and deserialization mental model: data flow,
+  headers, validation, compatibility, format choices, and the senior engineer
+  mindset for API contracts.
+slug: backend-first-principles-day-4-part-10
+date: '2026-07-27'
+category: Learning Journey
+readingTime: 11 min read
+day: 4
+part: 10
+series: Learning Backend from First Principles
+order: 410
+published: true
+---
+# Backend from First Principles — Day 4 (Part 10)
+
+# Putting Serialization and Deserialization Together
+
+> *"Serialization is the bridge between systems. Deserialization is the way each side turns shared data back into its own native shape. But the real backend lesson is bigger than JSON: APIs are contracts, and serialization is one of the ways those contracts become real."*
+
+---
+
+## Introduction
+
+Day 4 started with a simple question:
+
+> **How can a React frontend and a Rust backend understand each other?**
+
+They do not share memory.
+
+They do not share object models.
+
+They do not even use the same language.
+
+JavaScript has objects.
+
+Rust has structs.
+
+Python has dictionaries.
+
+Java has class instances.
+
+But all of them can agree on a shared representation.
+
+That is the heart of serialization and deserialization.
+
+```text
+Different languages.
+Different runtimes.
+One agreed data format.
+```
+
+For most web APIs, that agreed format is JSON.
+
+---
+
+## Topic 10.1 — The Complete Flow
+
+Here is the full request and response flow from a frontend to a backend and back.
+
+### 1. Client Has a Native Object
+
+A React app starts with a JavaScript object:
+
+```js
+const user = {
+  name: "Belema",
+  age: 22,
+};
+```
+
+This object lives inside the JavaScript runtime.
+
+The backend cannot receive this object directly.
+
+### 2. Client Serializes the Object
+
+Before sending it over HTTP, the client converts it into JSON text:
+
+```js
+const body = JSON.stringify(user);
+```
+
+Now the data can travel as a request body:
+
+```http
+POST /users HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+### 3. The Network Carries Bytes
+
+The network does not understand JavaScript objects or Rust structs.
+
+It carries bytes.
+
+Those bytes represent JSON text because both sides agreed that the body is JSON.
+
+### 4. Server Deserializes the Request
+
+The backend receives the request and uses `Content-Type` to understand the body format.
+
+If the backend is Rust, it may deserialize the JSON into a struct:
+
+```rust
+#[derive(Deserialize)]
+struct CreateUserRequest {
+    name: String,
+    age: i32,
+}
+```
+
+The shape has to match.
+
+```text
+JSON keys and values → Rust fields and types
+```
+
+### 5. Server Validates the Data
+
+Deserialization is not enough.
+
+The backend still needs to validate:
+
+| Rule | Example |
+| --- | --- |
+| Required fields | `name` must exist |
+| Type expectations | `age` must be a number |
+| Constraints | `age` must be between 0 and 150 |
+| Business rules | Email must be unique |
+
+Only after validation should the data move deeper into the application.
+
+### 6. Server Runs Business Logic
+
+The backend can now process the request:
+
+```text
+Create user
+Save to database
+Send event
+Return response
+```
+
+This is where the application does its real work.
+
+### 7. Server Serializes the Response
+
+The server then creates a response value and serializes it back into JSON:
+
+```json
+{
+  "id": 15,
+  "name": "Belema",
+  "age": 22
+}
+```
+
+The response also includes a header:
+
+```http
+Content-Type: application/json
+```
+
+That tells the client how to interpret the body.
+
+### 8. Client Deserializes the Response
+
+The frontend receives JSON and turns it back into a JavaScript value:
+
+```js
+const data = await response.json();
+```
+
+Now the frontend can render it.
+
+```text
+Response JSON → JavaScript object → UI
+```
+
+The complete loop is:
+
+```text
+JavaScript object
+→ JSON
+→ HTTP
+→ Rust struct
+→ validation
+→ business logic
+→ JSON
+→ HTTP
+→ JavaScript object
+```
+
+That is the full bridge.
+
+---
+
+## Topic 10.2 — The Golden Rules
+
+This is the practical checklist I want to remember.
+
+| Rule | Summary |
+| --- | --- |
+| Use JSON for public APIs | It is readable, common, and supported everywhere |
+| Set correct headers | Use `Content-Type` and `Accept` intentionally |
+| Validate after deserialization | Parsed data is not automatically valid data |
+| Handle parsing errors | Invalid JSON should not crash the server |
+| Return clear errors | Clients need useful feedback |
+| Consider binary formats when needed | Protobuf and MessagePack can help with performance |
+| Keep naming consistent | Avoid random switching between `camelCase` and `snake_case` |
+
+These rules are not fancy.
+
+But they prevent a lot of confusion.
+
+### Handle Invalid JSON Gracefully
+
+If the request body is malformed, the server should return a clear client error.
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+  "error": "Invalid JSON"
+}
+```
+
+That is much better than an unhandled exception or a vague internal server error.
+
+### Be Consistent With Field Names
+
+If an API uses camelCase:
+
+```json
+{
+  "createdAt": "2026-07-27T10:00:00.000Z"
+}
+```
+
+It should not randomly switch to snake_case:
+
+```json
+{
+  "created_at": "2026-07-27T10:00:00.000Z"
+}
+```
+
+Both styles can be valid, but inconsistency makes APIs harder to use.
+
+The contract should feel predictable.
+
+---
+
+## Topic 10.3 — Choosing the Right Format
+
+JSON is usually the default for web APIs, but it is not the only option.
+
+| Situation | Good choice |
+| --- | --- |
+| Public REST API | JSON |
+| Frontend to backend communication | JSON |
+| Config files with comments | YAML |
+| Legacy enterprise integrations | XML |
+| Internal high-performance services | Protobuf or MessagePack |
+| Strict cross-language service contracts | Protobuf or Thrift |
+
+The choice depends on the job.
+
+JSON is excellent when humans need to inspect data and many clients need easy support.
+
+Binary formats become more attractive when systems need smaller payloads, faster parsing, or stronger predefined schemas.
+
+The lesson is not "always use JSON."
+
+The lesson is:
+
+```text
+Choose the serialization format that matches the system's constraints.
+```
+
+---
+
+## Topic 10.4 — Backward Compatibility
+
+Serialization also connects to API evolution.
+
+Once clients depend on an API response, changing the JSON shape can break them.
+
+For example, this response may be used by existing clients:
+
+```json
+{
+  "id": 15,
+  "name": "Belema"
+}
+```
+
+Adding a field is usually safe:
+
+```json
+{
+  "id": 15,
+  "name": "Belema",
+  "avatarUrl": "https://example.com/avatar.jpg"
+}
+```
+
+Most clients can ignore fields they do not use.
+
+But renaming or removing a field can break clients:
+
+```json
+{
+  "id": 15,
+  "displayName": "Belema"
+}
+```
+
+If old clients expect `name`, they may fail.
+
+### Safer API Changes
+
+| Change | Usually safe? | Reason |
+| --- | --- | --- |
+| Add optional field | Yes | Old clients can ignore it |
+| Add new endpoint | Yes | Existing clients are not forced to change |
+| Rename field | Risky | Old clients may expect the old name |
+| Remove field | Risky | Existing clients may depend on it |
+| Change field type | Risky | Deserialization or UI logic may break |
+
+This is where serialization becomes a contract.
+
+Changing the shape of the serialized data changes what other systems rely on.
+
+---
+
+## Topic 10.5 — The Senior Engineer Mindset
+
+The deeper lesson from Day 4 is not just knowing what `JSON.stringify()` does.
+
+It is learning how to think about boundaries.
+
+### Think in Contracts
+
+An API request is not just a blob of data.
+
+It is a promise:
+
+```text
+If you send this shape, I will understand it.
+If I respond with this shape, you can depend on it.
+```
+
+That promise should be documented, validated, and kept consistent.
+
+### Think in Failure Modes
+
+What happens if:
+
+```text
+The JSON is malformed?
+A field is missing?
+A type is wrong?
+The client asks for XML but the server only supports JSON?
+The backend returns a shape the frontend does not expect?
+```
+
+Good backend design does not assume the happy path is the only path.
+
+It defines clear behavior for failure too.
+
+### Think in Compatibility
+
+APIs live longer than the code I write today.
+
+A small field rename can break a mobile app, a frontend page, or another service.
+
+That is why backend changes need care.
+
+### Think in Security
+
+Every request body is external input.
+
+Even if it is valid JSON, it may still be dangerous, incomplete, or misleading.
+
+The backend should parse, validate, authorize, and store data carefully.
+
+### Think in Performance
+
+For most apps, JSON is perfect.
+
+For very large internal systems, JSON may not be the best fit everywhere.
+
+A senior engineer does not choose tools because they sound advanced. They choose based on constraints.
+
+---
+
+## My Biggest Realization
+
+Serialization and deserialization looked like small technical words at first.
+
+Now they feel like the foundation of web communication.
+
+When I send data from frontend to backend, I am not sending a JavaScript object into a Rust program.
+
+I am sending an agreed representation.
+
+The backend reads that representation, checks it, turns it into its own structure, uses it, and then sends another representation back.
+
+That is the whole dance.
+
+```text
+Systems do not need to share a language.
+They need to share a contract.
+```
+
+That sentence is the real Day 4 lesson for me.
+
+---
+
+## Part 10 Complete!
+
+## Final Summary
+
+**1. Serialization makes data portable**
+
+It converts language-specific values into a format that can move across the network.
+
+**2. Deserialization rebuilds native values**
+
+The receiver converts the shared representation into its own objects, structs, dictionaries, or classes.
+
+**3. JSON is the default web API format**
+
+It is readable, widely supported, and practical for public APIs.
+
+**4. Validation protects the application**
+
+Parsed data still needs to satisfy required fields, types, formats, constraints, and business rules.
+
+**5. Headers make format expectations explicit**
+
+`Content-Type` says what is being sent. `Accept` says what the client wants back.
+
+**6. API shapes are contracts**
+
+Changing serialized data can break clients, so compatibility matters.
+
+**7. Format choice depends on constraints**
+
+JSON is great for most web APIs, while binary formats can help in high-performance internal systems.
+
+### Checkpoint Questions
+
+**What is the complete serialization flow?**
+
+Native value to JSON, JSON over HTTP, JSON to native value, business logic, native value to JSON, JSON back over HTTP.
+
+**Why is validation needed after deserialization?**
+
+Because deserialization only converts data. It does not prove the data is correct or safe.
+
+**What is the difference between `Content-Type` and `Accept`?**
+
+`Content-Type` describes the body being sent. `Accept` describes what response formats the client wants.
+
+**Why does backward compatibility matter?**
+
+Because clients may already depend on the existing serialized shape of the API.
+
+---
+
+## Day 4 Complete!
+
+Serialization and deserialization are not just vocabulary words anymore.
+
+They explain how different systems talk, how APIs define contracts, how data crosses language boundaries, and why backend developers must care about shape, validation, headers, security, and compatibility.
+
+This is the kind of backend concept that looks small from the outside but touches almost everything.

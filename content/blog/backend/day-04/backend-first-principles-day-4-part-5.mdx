@@ -1,0 +1,411 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 5)
+description: >-
+  JSON Deep Dive: the syntax rules, supported values, limitations, HTTP headers,
+  and why JSON became the default format for modern web APIs.
+slug: backend-first-principles-day-4-part-5
+date: '2026-07-22'
+category: Learning Journey
+readingTime: 12 min read
+day: 4
+part: 5
+series: Learning Backend from First Principles
+order: 405
+published: true
+---
+# Backend from First Principles — Day 4 (Part 5)
+
+# JSON Deep Dive: The Default Language of Web APIs
+
+> *"After learning about text-based and binary serialization formats, I wanted to slow down and study the one format I will probably use the most as a web developer: JSON. It looks simple, but it has strict rules, important limitations, and a very specific role in HTTP communication."*
+
+---
+
+## Introduction
+
+JSON is everywhere.
+
+When a React app fetches data from a backend, the response is usually JSON. When a mobile app talks to an API, it often receives JSON. When I test an endpoint in Postman, I usually send JSON.
+
+At first, JSON looked like "just JavaScript objects."
+
+But that is not exactly true.
+
+```ts
+const user = {
+  name: "Belema",
+  age: 22,
+};
+```
+
+This is a JavaScript object.
+
+```json
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+This is JSON.
+
+They look similar, but they are not the same thing. JSON is a language-independent text format. JavaScript objects are in-memory values inside a JavaScript program.
+
+That difference matters because APIs exchange JSON text, not live JavaScript objects.
+
+---
+
+## Topic 5.1 — What JSON Actually Is
+
+JSON stands for **JavaScript Object Notation**.
+
+It was inspired by JavaScript syntax, but today it belongs to the whole web, not just JavaScript.
+
+Python can read JSON. Rust can read JSON. Java can read JSON. Go can read JSON. Almost every modern language has JSON support.
+
+That is why JSON is useful for APIs:
+
+```text
+React frontend → JSON → Rust backend
+Python service → JSON → Java service
+Mobile app → JSON → Node.js API
+```
+
+Each system may use different internal data structures, but they can agree on JSON as the shared representation.
+
+### The Core Idea
+
+JSON represents structured data using:
+
+* Objects
+* Arrays
+* Strings
+* Numbers
+* Booleans
+* Null
+
+That small set is one reason JSON is easy to learn. It does not try to represent every possible programming-language feature. It represents common data.
+
+---
+
+## Topic 5.2 — JSON Syntax Rules
+
+JSON is simple, but it is strict.
+
+### Objects
+
+Objects are collections of key-value pairs.
+
+```json
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+The keys must be strings, and they must use double quotes.
+
+### Arrays
+
+Arrays are ordered lists.
+
+```json
+["React", "Node.js", "PostgreSQL"]
+```
+
+Arrays can also contain objects:
+
+```json
+[
+  {
+    "id": 1,
+    "title": "Clean Code"
+  },
+  {
+    "id": 2,
+    "title": "Deep Work"
+  }
+]
+```
+
+### Nesting
+
+JSON can represent nested data:
+
+```json
+{
+  "id": 15,
+  "profile": {
+    "displayName": "Belema",
+    "country": "Ethiopia"
+  },
+  "roles": ["user", "writer"]
+}
+```
+
+This is why JSON works well for API responses. Real data often has relationships, lists, and nested objects.
+
+---
+
+## Topic 5.3 — The Six JSON Data Types
+
+JSON supports six value types.
+
+| Data type | Example |
+| --- | --- |
+| String | `"Hello World"` |
+| Number | `42`, `3.14`, `-10` |
+| Boolean | `true`, `false` |
+| Null | `null` |
+| Object | `{ "key": "value" }` |
+| Array | `[1, 2, 3]` |
+
+That is the full list.
+
+There is no separate date type. There is no `undefined`. There are no functions. There are no comments.
+
+JSON is intentionally limited.
+
+### Why the Small Type System Helps
+
+Because JSON has a small type system, different languages can map it into their own values.
+
+| JSON value | JavaScript | Python | Rust |
+| --- | --- | --- | --- |
+| Object | Object | Dict | Struct or map |
+| Array | Array | List | Vec |
+| String | String | String | String |
+| Number | Number | int or float | integer or float |
+| Boolean | Boolean | bool | bool |
+| Null | null | None | Option::None |
+
+The exact internal representation changes, but the shared meaning stays understandable.
+
+---
+
+## Topic 5.4 — What JSON Does Not Support
+
+Some JSON mistakes happen because people confuse JSON with JavaScript.
+
+### No Comments
+
+This is invalid JSON:
+
+```json
+{
+  // The user's display name
+  "name": "Belema"
+}
+```
+
+JSON does not support comments. If I need comments in configuration, YAML may be a better fit.
+
+### No Functions
+
+This is not valid JSON:
+
+```js
+{
+  "name": "Belema",
+  "greet": function () {
+    return "Hello";
+  }
+}
+```
+
+APIs exchange data, not executable behavior.
+
+### No Native Date Type
+
+Dates are usually represented as strings:
+
+```json
+{
+  "createdAt": "2026-07-22T10:00:00.000Z"
+}
+```
+
+The receiver must decide how to parse that string.
+
+### No Undefined
+
+JavaScript has `undefined`. JSON does not.
+
+```json
+{
+  "middleName": undefined
+}
+```
+
+That is invalid JSON.
+
+### No NaN or Infinity
+
+These are JavaScript number values, but they are not valid JSON numbers:
+
+```js
+NaN
+Infinity
+```
+
+JSON numbers must be ordinary finite numbers.
+
+---
+
+## Topic 5.5 — Why JSON Won the Web
+
+JSON became the default format for modern web APIs because it hit a very practical balance.
+
+| Reason | Why it matters |
+| --- | --- |
+| Native browser support | JavaScript has `JSON.parse()` and `JSON.stringify()` |
+| Human-readable | Developers can inspect requests and responses easily |
+| Lightweight enough | Less verbose than XML for common API data |
+| Language-agnostic | Backend and frontend can use different languages |
+| Tooling support | Browsers, frameworks, Postman, logs, and docs understand it |
+
+JSON did not win because it is perfect.
+
+It won because it is good enough for many API problems and easy enough for many teams to use consistently.
+
+### JSON Compared to XML
+
+The same data in XML:
+
+```xml
+<user>
+  <name>Belema</name>
+  <age>22</age>
+</user>
+```
+
+The same data in JSON:
+
+```json
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+For typical API payloads, JSON is usually shorter and maps more naturally to frontend data structures.
+
+---
+
+## Topic 5.6 — JSON in HTTP
+
+JSON is not just a syntax. In APIs, it is also connected to HTTP headers.
+
+### Content-Type
+
+`Content-Type` tells the receiver what format the body uses.
+
+```http
+POST /api/users HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+This tells the backend:
+
+```text
+The request body is JSON.
+Use a JSON parser.
+```
+
+### Accept
+
+`Accept` tells the server what format the client wants back.
+
+```http
+GET /api/users/15 HTTP/1.1
+Accept: application/json
+```
+
+This tells the backend:
+
+```text
+I prefer a JSON response.
+```
+
+### Response Content-Type
+
+The server should also identify the response format:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "id": 15,
+  "name": "Belema"
+}
+```
+
+Headers make the data format explicit instead of forcing the receiver to guess.
+
+---
+
+## My Biggest Realization
+
+JSON feels easy because I see it everywhere.
+
+But "easy" does not mean "loose."
+
+JSON has strict syntax, a small set of supported values, and a specific role in HTTP communication. If I treat JSON like JavaScript, I will make mistakes. If I treat it as a shared data format with rules, it becomes much clearer.
+
+> **JSON is not the object itself. JSON is the agreed representation of the object's data.**
+
+---
+
+## Part 5 Complete!
+
+## Final Summary
+
+**1. JSON is a language-independent data format**
+
+It was inspired by JavaScript but is used across many programming languages.
+
+**2. JSON supports only six value types**
+
+String, number, boolean, null, object, and array.
+
+**3. JSON is strict**
+
+Keys require double quotes, comments are not allowed, and trailing commas are invalid.
+
+**4. JSON does not support everything JavaScript supports**
+
+Functions, `undefined`, `NaN`, `Infinity`, and native dates are not JSON values.
+
+**5. HTTP headers explain how JSON should be handled**
+
+`Content-Type` describes what is being sent. `Accept` describes what the client wants back.
+
+### Checkpoint Questions
+
+**Is JSON the same as a JavaScript object?**
+
+No. JSON is a text representation. A JavaScript object is an in-memory value.
+
+**What are the six JSON data types?**
+
+String, number, boolean, null, object, and array.
+
+**Why does JSON use `Content-Type: application/json`?**
+
+To tell the receiver that the request or response body is JSON.
+
+**Why did JSON become popular for APIs?**
+
+It is readable, widely supported, lightweight enough, and maps naturally to common application data.
+
+---
+
+### Preview — Day 4 (Part 6)
+
+Now that I understand JSON itself, I want to see how real languages work with it. In Part 6, I will compare serialization and deserialization in JavaScript, Python, Java, Rust, Express.js, and Spring Boot.

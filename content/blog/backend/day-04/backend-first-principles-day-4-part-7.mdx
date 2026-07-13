@@ -1,0 +1,469 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 7)
+description: >-
+  Common JSON pitfalls: dates, comments, trailing commas, quotes, undefined,
+  NaN, and security mistakes that can turn simple API data into bugs.
+slug: backend-first-principles-day-4-part-7
+date: '2026-07-24'
+category: Learning Journey
+readingTime: 12 min read
+day: 4
+part: 7
+series: Learning Backend from First Principles
+order: 407
+published: true
+---
+# Backend from First Principles — Day 4 (Part 7)
+
+# JSON Gotchas: The Small Rules That Break APIs
+
+> *"JSON looks simple until one tiny detail breaks the request. A trailing comma, a date string, a missing double quote, or an `undefined` value can be enough to turn normal API data into a confusing bug."*
+
+---
+
+## Introduction
+
+In Part 6, I looked at serialization and deserialization across JavaScript, Python, Java, Rust, Express, and Spring Boot.
+
+That helped me see the main pattern:
+
+```text
+Native value → JSON text → Native value
+```
+
+But there is another side to this.
+
+JSON is simple, but it is not forgiving.
+
+It has strict syntax. It has a limited type system. It does not support every value that programming languages support. And because APIs often receive JSON from outside users, JSON can also become part of a security problem if I trust it too much.
+
+So this part is about the mistakes.
+
+Not because JSON is bad, but because good backend development means knowing where the sharp edges are.
+
+---
+
+## Topic 7.1 — Dates Are Not Native to JSON
+
+This was one of the first JSON limitations that surprised me.
+
+JSON has strings, numbers, booleans, null, objects, and arrays.
+
+It does not have a date type.
+
+So this is not a special JSON date:
+
+```json
+{
+  "createdAt": "2026-07-24T10:30:00.000Z"
+}
+```
+
+It is just a string.
+
+The string follows a common date format, but JSON itself does not know that. The receiving application has to decide how to interpret it.
+
+### Why ISO 8601 Is Common
+
+APIs usually represent dates as ISO 8601 strings:
+
+```json
+{
+  "publishedAt": "2026-07-24T10:30:00.000Z"
+}
+```
+
+This format is useful because it is:
+
+| Benefit | Why it matters |
+| --- | --- |
+| Standard | Many languages and libraries understand it |
+| Precise | It can include date, time, milliseconds, and timezone |
+| Text-based | It fits naturally into JSON |
+| Sortable | ISO-like timestamps often sort correctly as strings |
+
+The important thing is consistency.
+
+If an API sends dates as ISO strings in one endpoint, it should not suddenly send Unix timestamps in another endpoint unless there is a clear reason.
+
+### The Real Backend Lesson
+
+JSON can carry the date value, but my application still owns the meaning.
+
+```text
+JSON says: "Here is a string."
+Application says: "This string represents a date."
+```
+
+That means date parsing, timezone handling, and validation are still backend responsibilities.
+
+---
+
+## Topic 7.2 — JSON Does Not Support Comments
+
+This is invalid JSON:
+
+```json
+{
+  // The user's display name
+  "name": "Belema"
+}
+```
+
+That comment makes the whole JSON document invalid.
+
+This matters because JSON is often used in places where I may want to explain something. But JSON is designed as a data interchange format, not a documentation format.
+
+### What To Do Instead
+
+If I need comments for configuration, YAML may be a better fit:
+
+```yaml
+# The user's display name
+name: Belema
+```
+
+If I need to explain an API payload, the better solution is documentation:
+
+| Need | Better tool |
+| --- | --- |
+| Explain request fields | OpenAPI documentation |
+| Explain response shape | API docs |
+| Explain config values | YAML, TOML, or separate docs |
+| Explain code behavior | Code comments outside the JSON |
+
+JSON should stay as data.
+
+---
+
+## Topic 7.3 — Trailing Commas Are Invalid
+
+In JavaScript, this object is allowed:
+
+```js
+const user = {
+  name: "Belema",
+  age: 22,
+};
+```
+
+But in JSON, this is invalid:
+
+```json
+{
+  "name": "Belema",
+  "age": 22,
+}
+```
+
+The comma after `22` breaks the JSON.
+
+That difference matters because JSON looks like JavaScript, but it is stricter than JavaScript object syntax.
+
+### Valid Version
+
+```json
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+No trailing comma.
+
+This is one of those small mistakes that can produce a `400 Bad Request` response when an API tries to parse the body.
+
+---
+
+## Topic 7.4 — Keys Must Use Double Quotes
+
+This is valid JavaScript:
+
+```js
+const user = {
+  name: "Belema",
+  age: 22,
+};
+```
+
+But this is not valid JSON:
+
+```json
+{
+  name: "Belema",
+  age: 22
+}
+```
+
+JSON object keys must be strings, and strings must use double quotes.
+
+### Valid JSON
+
+```json
+{
+  "name": "Belema",
+  "age": 22
+}
+```
+
+This rule is one reason copying a JavaScript object directly into an API client can fail.
+
+The shape may be correct, but the syntax may not be JSON.
+
+---
+
+## Topic 7.5 — Single Quotes Are Invalid
+
+JavaScript allows single quotes:
+
+```js
+const user = {
+  name: 'Belema'
+};
+```
+
+JSON does not.
+
+This is invalid JSON:
+
+```json
+{
+  'name': 'Belema'
+}
+```
+
+The valid version uses double quotes:
+
+```json
+{
+  "name": "Belema"
+}
+```
+
+The rule is simple:
+
+```text
+JSON strings always use double quotes.
+```
+
+That applies to both object keys and string values.
+
+---
+
+## Topic 7.6 — No Undefined, NaN, or Infinity
+
+JavaScript has values that JSON does not support.
+
+For example, `undefined`:
+
+```js
+const user = {
+  name: "Belema",
+  middleName: undefined,
+};
+```
+
+JSON has no `undefined`.
+
+If a value is intentionally empty, JSON uses `null`:
+
+```json
+{
+  "name": "Belema",
+  "middleName": null
+}
+```
+
+There is an important difference between missing and null:
+
+| Shape | Possible meaning |
+| --- | --- |
+| `{ "middleName": null }` | The field exists, but the value is empty |
+| `{}` | The field was not sent |
+
+APIs should be clear about which one they expect.
+
+### No NaN or Infinity
+
+JavaScript also has special number values:
+
+```js
+NaN
+Infinity
+-Infinity
+```
+
+These are not valid JSON numbers.
+
+If an API needs to represent something unusual, it should use a clear agreed shape:
+
+```json
+{
+  "score": null
+}
+```
+
+or:
+
+```json
+{
+  "scoreStatus": "not_calculable"
+}
+```
+
+The backend should not silently accept impossible numeric values.
+
+---
+
+## Topic 7.7 — Security Risks Around JSON
+
+JSON is just data, but data from outside the application should never be blindly trusted.
+
+Deserialization turns JSON into a native object. That does not mean the object is safe.
+
+### Never Use eval on JSON
+
+This is dangerous:
+
+```js
+const user = eval("(" + jsonString + ")");
+```
+
+`eval()` can execute code.
+
+JSON should be parsed as data:
+
+```js
+const user = JSON.parse(jsonString);
+```
+
+That one difference matters a lot.
+
+```text
+JSON.parse() reads data.
+eval() can run code.
+```
+
+For JSON, `eval()` is the wrong tool.
+
+### Prototype Pollution
+
+In JavaScript, objects inherit from prototypes. If an application carelessly merges user-controlled objects into internal objects, attackers may try to modify special keys such as `__proto__`, `constructor`, or `prototype`.
+
+Example suspicious input:
+
+```json
+{
+  "__proto__": {
+    "isAdmin": true
+  }
+}
+```
+
+The exact risk depends on the code and libraries being used, but the mindset is the same:
+
+```text
+Do not blindly merge untrusted JSON into important objects.
+```
+
+Safer habits include:
+
+| Habit | Why it helps |
+| --- | --- |
+| Validate allowed fields | Reject unexpected keys |
+| Use well-maintained libraries | Avoid known unsafe merge behavior |
+| Avoid deep merging untrusted objects | Reduce dangerous object mutation |
+| Create plain dictionaries carefully | Avoid prototype surprises when needed |
+
+### SQL Injection
+
+JSON often carries values that later become database query inputs.
+
+This is dangerous:
+
+```js
+const sql = `SELECT * FROM users WHERE email = '${req.body.email}'`;
+```
+
+If `email` comes from JSON, it is still untrusted input.
+
+The safer approach is a parameterized query:
+
+```js
+const result = await db.query(
+  "SELECT * FROM users WHERE email = $1",
+  [req.body.email]
+);
+```
+
+JSON parsing does not protect my database.
+
+Validation and parameterized queries do.
+
+---
+
+## My Biggest Realization
+
+JSON bugs often come from treating JSON as "basically JavaScript."
+
+But JSON is not JavaScript.
+
+It is a strict data format with its own rules:
+
+```text
+Double quotes, no comments, no trailing commas, no undefined, no functions.
+```
+
+Once I remember that, many confusing errors become easier to debug.
+
+The bigger lesson is that parsing JSON is only the first step. After parsing, I still need to validate it, interpret it, and use it safely.
+
+---
+
+## Part 7 Complete!
+
+## Final Summary
+
+**1. JSON has no date type**
+
+Dates are usually sent as ISO 8601 strings, and the application must parse them.
+
+**2. JSON is stricter than JavaScript object syntax**
+
+No comments, no trailing commas, no unquoted keys, and no single-quoted strings.
+
+**3. JSON does not support every JavaScript value**
+
+There is no `undefined`, `NaN`, `Infinity`, or function value in JSON.
+
+**4. Deserialized JSON is still untrusted input**
+
+Parsing data does not mean the data is valid or safe.
+
+**5. Security depends on the next steps**
+
+Use `JSON.parse()`, validate fields, avoid unsafe object merging, and use parameterized database queries.
+
+### Checkpoint Questions
+
+**Does JSON support dates directly?**
+
+No. Dates are usually represented as strings, commonly using ISO 8601.
+
+**Why are trailing commas a problem?**
+
+They are allowed in many JavaScript objects, but invalid in JSON.
+
+**Why should I avoid `eval()` with JSON?**
+
+Because `eval()` can execute code. `JSON.parse()` treats JSON as data.
+
+**Is deserialized JSON safe automatically?**
+
+No. It still needs validation and careful handling.
+
+---
+
+### Preview — Day 4 (Part 8)
+
+Now that I understand common JSON mistakes, the next question is validation. In Part 8, I will study why deserialization is not enough and how tools like Zod, Pydantic, Bean Validation, and Rust validators help protect API boundaries.

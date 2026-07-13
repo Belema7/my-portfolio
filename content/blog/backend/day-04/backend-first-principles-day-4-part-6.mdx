@@ -1,0 +1,375 @@
+---
+title: Day 4 — Learning Backend from First Principles (Part 6)
+description: >-
+  Serialization and deserialization in practice across JavaScript, Python, Java,
+  Rust, Express.js, and Spring Boot.
+slug: backend-first-principles-day-4-part-6
+date: '2026-07-23'
+category: Learning Journey
+readingTime: 12 min read
+day: 4
+part: 6
+series: Learning Backend from First Principles
+order: 406
+published: true
+---
+# Backend from First Principles — Day 4 (Part 6)
+
+# Serialization in Practice: JavaScript, Python, Java, Rust, Express, and Spring Boot
+
+> *"The theory finally clicked when I saw the same operation across different languages. JavaScript calls it `JSON.parse()`, Python calls it `json.loads()`, Java often uses Jackson, and Rust commonly uses Serde. The names change, but the idea stays the same: convert between native values and a shared representation."*
+
+---
+
+## Introduction
+
+In the earlier parts of Day 4, I learned the mental model:
+
+```text
+Native object → Serialization → JSON text
+JSON text → Deserialization → Native object
+```
+
+Now I want to see what that looks like in real code.
+
+The interesting part is that every language has its own internal data structures:
+
+| Language | Native representation |
+| --- | --- |
+| JavaScript | Object |
+| Python | Dict |
+| Java | Class instance |
+| Rust | Struct |
+
+But all of them can meet in the middle using JSON.
+
+---
+
+## Topic 6.1 — JavaScript
+
+JavaScript has JSON support built in.
+
+### Deserialization
+
+```js
+const jsonString = '{"name":"Belema","age":22}';
+const user = JSON.parse(jsonString);
+
+console.log(user.name);
+```
+
+`JSON.parse()` converts JSON text into a JavaScript value.
+
+```text
+JSON string → JavaScript object
+```
+
+### Serialization
+
+```js
+const user = {
+  name: "Belema",
+  age: 22,
+};
+
+const jsonString = JSON.stringify(user);
+```
+
+`JSON.stringify()` converts a JavaScript value into JSON text.
+
+```text
+JavaScript object → JSON string
+```
+
+### The Important Detail
+
+`JSON.parse()` can fail if the JSON is invalid.
+
+```js
+try {
+  const user = JSON.parse("{ invalid json }");
+} catch (error) {
+  console.error("Invalid JSON");
+}
+```
+
+That means parsing external input should be treated as a risky operation, not a guaranteed success.
+
+---
+
+## Topic 6.2 — Python
+
+Python uses the built-in `json` module.
+
+### Deserialization
+
+```python
+import json
+
+json_string = '{"name": "Belema", "age": 22}'
+user = json.loads(json_string)
+
+print(user["name"])
+```
+
+`json.loads()` converts JSON text into a Python dictionary.
+
+### Serialization
+
+```python
+import json
+
+user = {
+    "name": "Belema",
+    "age": 22,
+}
+
+json_string = json.dumps(user)
+```
+
+`json.dumps()` converts a Python object into JSON text.
+
+### The Naming Pattern
+
+The names helped me remember the direction:
+
+| Function | Meaning |
+| --- | --- |
+| `loads` | Load from a string |
+| `dumps` | Dump to a string |
+
+Different language, same idea.
+
+---
+
+## Topic 6.3 — Java with Jackson
+
+Java usually works with classes instead of plain objects.
+
+For example:
+
+```java
+public class User {
+    private String name;
+    private int age;
+
+    public User() {}
+
+    public User(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    public String getName() {
+        return name;
+    }
+}
+```
+
+One common library for JSON in Java is Jackson.
+
+### Deserialization
+
+```java
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+ObjectMapper mapper = new ObjectMapper();
+
+String json = "{\"name\":\"Belema\",\"age\":22}";
+User user = mapper.readValue(json, User.class);
+
+System.out.println(user.getName());
+```
+
+Jackson reads JSON and creates a Java object.
+
+### Serialization
+
+```java
+User user = new User("Belema", 22);
+String json = mapper.writeValueAsString(user);
+```
+
+Here, Java does not just create a generic map. It can create an instance of a specific class.
+
+That is why Java JSON libraries often care about constructors, getters, setters, and annotations.
+
+---
+
+## Topic 6.4 — Rust with Serde
+
+Rust is strict about types, so JSON handling usually involves a struct.
+
+Serde is the common serialization framework.
+
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct User {
+    name: String,
+    age: i32,
+}
+```
+
+### Deserialization
+
+```rust
+let json = r#"{"name":"Belema","age":22}"#;
+let user: User = serde_json::from_str(json).unwrap();
+
+println!("{:?}", user);
+```
+
+### Serialization
+
+```rust
+let user = User {
+    name: "Belema".to_string(),
+    age: 22,
+};
+
+let json = serde_json::to_string(&user).unwrap();
+```
+
+The Rust version made one idea very clear to me:
+
+> **The JSON shape must match the structure the language expects.**
+
+If the JSON has the wrong field names or incompatible value types, deserialization can fail.
+
+---
+
+## Topic 6.5 — Express.js
+
+In a real Express API, I usually do not manually call `JSON.parse()` inside every route.
+
+Express can parse JSON request bodies using middleware:
+
+```js
+const express = require("express");
+const app = express();
+
+app.use(express.json());
+```
+
+That middleware handles deserialization for incoming JSON request bodies.
+
+```js
+app.post("/users", (req, res) => {
+  const user = req.body;
+
+  console.log(user.name);
+
+  res.status(201).json({
+    id: 1,
+    name: user.name,
+  });
+});
+```
+
+Two important things happen here:
+
+| Code | What happens |
+| --- | --- |
+| `express.json()` | Deserializes JSON request body into `req.body` |
+| `res.json()` | Serializes a JavaScript object into a JSON response |
+
+Frameworks hide the mechanics, but they do not remove the process.
+
+---
+
+## Topic 6.6 — Spring Boot
+
+Spring Boot also automates much of this work.
+
+```java
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @PostMapping
+    public User createUser(@RequestBody User user) {
+        System.out.println(user.getName());
+        return userService.save(user);
+    }
+}
+```
+
+`@RequestBody` tells Spring to read the HTTP request body and convert the JSON into a Java object.
+
+When the controller returns an object, Spring can serialize it back into JSON for the response.
+
+```text
+Request JSON → Java User object
+Java User object → Response JSON
+```
+
+This is the same flow as Express, but expressed through Spring's annotations and Java's type system.
+
+---
+
+## The Same Idea Across Languages
+
+| Environment | Deserialize | Serialize |
+| --- | --- | --- |
+| JavaScript | `JSON.parse()` | `JSON.stringify()` |
+| Python | `json.loads()` | `json.dumps()` |
+| Java | `mapper.readValue()` | `mapper.writeValueAsString()` |
+| Rust | `serde_json::from_str()` | `serde_json::to_string()` |
+| Express.js | `express.json()` | `res.json()` |
+| Spring Boot | `@RequestBody` | Controller return value |
+
+Seeing this table made the whole concept feel less mysterious.
+
+Different tools, same pattern.
+
+---
+
+## Part 6 Complete!
+
+## Final Summary
+
+**1. Every language has its own object model**
+
+JavaScript objects, Python dictionaries, Java classes, and Rust structs are different internal representations.
+
+**2. JSON creates the bridge**
+
+Each language can convert to and from the same text-based data format.
+
+**3. Frameworks often automate the conversion**
+
+Express and Spring Boot deserialize requests and serialize responses for me.
+
+**4. Deserialization can fail**
+
+Invalid JSON or mismatched shapes must be handled carefully.
+
+**5. The data shape matters**
+
+As long as the keys and values match what the receiver expects, different languages can communicate.
+
+### Checkpoint Questions
+
+**What does `JSON.parse()` do?**
+
+It converts JSON text into a JavaScript value.
+
+**What does `json.loads()` do in Python?**
+
+It loads JSON from a string into a Python value such as a dictionary.
+
+**What does `@RequestBody` do in Spring Boot?**
+
+It tells Spring to deserialize the request body into a Java object.
+
+**Why does the same JSON work across languages?**
+
+Because each language maps the shared JSON representation into its own native structures.
+
+---
+
+### Preview — Day 4 (Part 7)
+
+Now that I have seen JSON in real code, I need to study the mistakes that happen around it. In Part 7, I will explore common JSON pitfalls: dates, comments, trailing commas, invalid quotes, `undefined`, `NaN`, and security risks.
