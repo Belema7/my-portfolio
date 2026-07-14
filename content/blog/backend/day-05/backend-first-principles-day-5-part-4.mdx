@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-5-part-4
 date: '2026-07-31'
 category: Learning Journey
-readingTime: 14 min read
+readingTime: 18 min read
 day: 5
 part: 4
 series: Learning Backend from First Principles
@@ -42,6 +42,29 @@ All of these involve authentication or authorization, but they may not use the s
 The goal is not to memorize every standard.
 
 The goal is to understand which problem each model solves.
+
+### A Simple Way to Choose
+
+Before the details, I can ask a few simple questions:
+
+```text
+Is this a normal browser web app?
+Sessions or secure cookies may fit well.
+
+Is this a mobile app or API client?
+Bearer tokens may fit well.
+
+Is one backend calling another backend?
+API keys or client credentials may fit well.
+
+Is a user granting access to a third-party app?
+OAuth 2.0 is probably involved.
+
+Is this "Sign in with Google"?
+OpenID Connect is probably involved.
+```
+
+This does not replace deeper design, but it gives me an entry point.
 
 ---
 
@@ -79,6 +102,37 @@ Stateful auth is not old-fashioned in a bad way.
 It is still a strong choice for many traditional web apps.
 
 Its biggest strength is server control.
+
+### When Stateful Auth Feels Natural
+
+Stateful auth feels natural when:
+
+```text
+The backend controls the web app.
+The browser is the main client.
+The server can keep a session store.
+Logout should work immediately.
+Admins may need to revoke sessions quickly.
+```
+
+Example:
+
+```text
+An internal dashboard.
+A server-rendered app.
+A traditional ecommerce admin panel.
+A private company portal.
+```
+
+The server can say:
+
+```text
+Delete this session now.
+```
+
+After that, the session ID is useless.
+
+That immediate control is a major advantage.
 
 ---
 
@@ -119,6 +173,33 @@ Validate expected claims.
 
 A token is trustworthy only after the backend verifies it.
 
+### When Stateless Auth Feels Natural
+
+Stateless auth can fit well when:
+
+```text
+Many backend servers need to verify requests.
+Mobile clients are involved.
+Microservices need to pass identity around.
+The system wants to avoid shared session lookups.
+```
+
+But "stateless" can be misunderstood.
+
+The server may not store each login session, but the system still has state somewhere:
+
+```text
+Signing keys
+User records
+Revocation lists sometimes
+Refresh tokens sometimes
+Permission data
+```
+
+Stateless access tokens reduce one kind of state.
+
+They do not remove the need for careful security design.
+
 ---
 
 ## Topic 4.3 — API Key Authentication
@@ -150,6 +231,38 @@ API keys are simple and useful, but they are sensitive secrets.
 They should not be exposed in frontend code.
 
 If an API key leaks, it should be rotated or revoked.
+
+### API Key vs User Login
+
+An API key usually identifies an application, integration, or service.
+
+It does not always identify a human user.
+
+Example:
+
+```text
+A weather API gives my backend an API key.
+My backend uses that key to request weather data.
+The weather API knows my application is calling.
+It may not know which human user clicked the button.
+```
+
+This is why API keys are common for machine-to-machine access.
+
+They are simple, but they should still have limits:
+
+```text
+Scopes
+Expiration
+Rate limits
+Allowed origins or IPs where appropriate
+Rotation
+Revocation
+```
+
+An API key should not be treated like a harmless string.
+
+It is a credential.
 
 ---
 
@@ -196,6 +309,40 @@ The third-party app never needs the user's password.
 
 For modern browser and mobile flows, Authorization Code with PKCE is the safer default.
 
+### OAuth in Plain Language
+
+OAuth is easiest to understand with a real story.
+
+Imagine I use a photo printing app.
+
+The app wants access to my Google Photos.
+
+The unsafe old way would be:
+
+```text
+Photo app asks for my Google email and password.
+Photo app logs into Google as me.
+```
+
+That is bad because the photo app now has my password.
+
+OAuth creates a safer pattern:
+
+```text
+Photo app sends me to Google.
+I log into Google on Google's page.
+Google asks what access I want to grant.
+I approve limited access.
+Google gives the photo app a token.
+The photo app uses that token, not my password.
+```
+
+The key idea is delegated access.
+
+I am not giving away my password.
+
+I am granting limited permission.
+
 ---
 
 ## Topic 4.5 — OAuth 1.0 vs OAuth 2.0
@@ -215,6 +362,22 @@ OAuth 2.0 simplified many things by relying heavily on HTTPS and using bearer to
 | Usage today | Legacy and some platforms | Dominant standard |
 
 OAuth 2.0 is what I will usually encounter in modern apps.
+
+### Why OAuth 2.0 Relies So Much on HTTPS
+
+OAuth 2.0 commonly uses bearer tokens.
+
+A bearer token works like:
+
+```text
+Whoever bears this token can use it.
+```
+
+That means the token must be protected in transit.
+
+HTTPS is what protects it while it moves over the network.
+
+This is why OAuth 2.0 security depends heavily on correct HTTPS usage and safe token handling.
 
 ---
 
@@ -257,6 +420,30 @@ That is why "Sign in with Google" is usually OIDC, not plain OAuth alone.
 | Common use | API access delegation | Login and identity |
 
 OAuth and OIDC are related, but they are not interchangeable.
+
+### Why "Login With Google" Needs OIDC
+
+If my app only uses OAuth access tokens, it may know:
+
+```text
+This app can access a Google API.
+```
+
+But for login, my app also wants to know:
+
+```text
+Who is the user?
+What is their stable user ID?
+What email should I show?
+Who issued this identity?
+Was this token meant for my app?
+```
+
+OIDC standardizes those identity answers.
+
+The ID token is the piece that makes login clearer.
+
+That is why OAuth 2.0 and OIDC are often used together.
 
 ---
 

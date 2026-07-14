@@ -7,7 +7,7 @@ description: >-
 slug: backend-first-principles-day-5-part-8
 date: '2026-08-04'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 18 min read
 day: 5
 part: 8
 series: Learning Backend from First Principles
@@ -50,6 +50,18 @@ Authorization only on the frontend.
 
 This part is about those mistakes and the habits that prevent them.
 
+### A Beginner Warning
+
+Security bugs are different from styling bugs.
+
+If a button is ugly, users can see it.
+
+If a layout breaks, users can report it.
+
+But if an API lets one user read another user's private data, the app may look normal while the damage is happening quietly.
+
+That is why authentication and authorization need careful habits from the beginning.
+
 ---
 
 ## Topic 8.1 — Never Store Passwords in Plain Text
@@ -82,6 +94,38 @@ submitted password → compare with stored hash
 
 The original password should not be stored.
 
+### What Not To Do
+
+This is unsafe:
+
+```js
+await User.create({
+  email,
+  password,
+});
+```
+
+because it stores the original password.
+
+A safer flow looks like:
+
+```js
+const passwordHash = await bcrypt.hash(password, 12);
+
+await User.create({
+  email,
+  passwordHash,
+});
+```
+
+Then login uses:
+
+```js
+const isValid = await bcrypt.compare(password, user.passwordHash);
+```
+
+The backend never needs to read the original password from the database because it should not be there.
+
 ---
 
 ## Topic 8.2 — Be Careful With JWT Storage
@@ -109,6 +153,30 @@ Important attributes:
 | `SameSite` | Helps reduce CSRF risk |
 
 This does not remove all security concerns, but it reduces direct token theft through JavaScript.
+
+### XSS and CSRF in Simple Terms
+
+Two common browser security concerns are XSS and CSRF.
+
+XSS means malicious JavaScript runs in the page.
+
+If a token is in `localStorage`, malicious JavaScript may read it.
+
+CSRF means another site tricks the browser into sending a request with cookies.
+
+Because cookies are sent automatically, CSRF protection matters for cookie-based auth.
+
+This is why token storage involves tradeoffs:
+
+| Storage | Main concern |
+| --- | --- |
+| `localStorage` | JavaScript can read it if XSS exists |
+| `HttpOnly` cookie | Needs CSRF strategy because browser sends it automatically |
+| In-memory storage | Lost on refresh and still needs careful app design |
+
+There is no magic storage location.
+
+The goal is to understand the risks and choose a safe pattern for the app.
 
 ---
 
@@ -142,6 +210,20 @@ But the principle is clear:
 Limit the damage window if a token leaks.
 ```
 
+### Why "Remember Me" Is Not the Same as No Expiry
+
+Some apps have a "remember me" feature.
+
+That should not mean:
+
+```text
+Create an access token that works forever.
+```
+
+A safer design can keep access tokens short-lived while using refresh tokens or sessions to keep the user signed in.
+
+The app can still feel convenient without giving one stolen token unlimited power.
+
 ---
 
 ## Topic 8.4 — HTTPS Is Non-Negotiable
@@ -169,6 +251,22 @@ One-time codes
 ```
 
 If a system handles credentials, HTTPS is not optional.
+
+### Local Development vs Production
+
+During local development, I may use:
+
+```text
+http://localhost:3000
+```
+
+That is normal for learning and testing.
+
+But production auth should use HTTPS.
+
+Also, cookies with the `Secure` attribute are only sent over HTTPS in normal browser behavior.
+
+So secure cookie behavior should be tested in an environment that supports HTTPS before launch.
 
 ---
 
@@ -198,6 +296,27 @@ Rate limiting can be based on:
 
 Rate limiting should be careful not to create easy denial-of-service against real users, but doing nothing is also risky.
 
+### Rate Limiting Is Not Only About Passwords
+
+Other sensitive endpoints may also need protection:
+
+```text
+Password reset request
+Email verification resend
+MFA code verification
+Refresh token endpoint
+API key creation
+Invite sending
+```
+
+Any endpoint that can be abused repeatedly should make me ask:
+
+```text
+Should this be rate limited?
+Should this be logged?
+Should this require extra verification?
+```
+
 ---
 
 ## Topic 8.6 — Validate Tokens on Every Request
@@ -220,6 +339,23 @@ Skipping token validation is like accepting any ID card without checking whether
 Every protected request needs authentication checks.
 
 Security should not depend on memory from a previous request unless the server is using a validated session.
+
+### Do Not Decode Without Verifying
+
+A beginner mistake is decoding a JWT payload and trusting it immediately.
+
+Decoding only reads the token.
+
+Verification checks whether the token is valid.
+
+These are not the same.
+
+```text
+Decode = read what the token says.
+Verify = prove the token can be trusted.
+```
+
+Protected routes need verification, not just decoding.
 
 ---
 
@@ -252,6 +388,24 @@ Frontend checks are user experience.
 
 Backend checks are enforcement.
 
+### What the Frontend Should Still Do
+
+This does not mean frontend checks are useless.
+
+The frontend should still:
+
+```text
+Hide buttons the user cannot use.
+Disable actions that are not allowed.
+Show helpful permission messages.
+Redirect unauthenticated users to login.
+Avoid confusing users with impossible actions.
+```
+
+But all of that is user experience.
+
+The backend remains the authority.
+
 ---
 
 ## Topic 8.8 — Use Least Privilege
@@ -270,6 +424,22 @@ Examples:
 Least privilege reduces blast radius.
 
 If something is compromised, fewer actions are available to the attacker.
+
+### Least Privilege Is a Design Habit
+
+When adding a new role or token, I should ask:
+
+```text
+What is the minimum this identity needs?
+Can this permission be narrower?
+Can this token expire?
+Can this key be revoked?
+Can this action be logged?
+```
+
+Least privilege is not only a security slogan.
+
+It is a habit of reducing unnecessary power.
 
 ---
 

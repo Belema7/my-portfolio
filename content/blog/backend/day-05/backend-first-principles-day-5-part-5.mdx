@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-5-part-5
 date: '2026-08-01'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 17 min read
 day: 5
 part: 5
 series: Learning Backend from First Principles
@@ -47,6 +47,31 @@ A support agent may reset passwords but not view payment details.
 
 Authorization is the system that turns identity into decisions.
 
+### Beginner Mental Model
+
+Imagine authentication gives the backend a name tag:
+
+```text
+This is User 15.
+```
+
+Authorization then reads the rules:
+
+```text
+User 15 can read their own profile.
+User 15 cannot delete another user.
+User 15 can edit posts they created.
+User 15 cannot open the admin dashboard.
+```
+
+That is the important shift.
+
+The backend is no longer dealing with an unknown request.
+
+It is dealing with a known identity and a specific action.
+
+Authorization is the decision-making layer between those two things.
+
 ---
 
 ## Topic 5.1 — The Core Components
@@ -79,6 +104,39 @@ Can manager 7 update project 12?
 This makes authorization more concrete.
 
 It is not a vague security layer. It is a decision system.
+
+### Breaking Down One Request
+
+Take this request:
+
+```http
+DELETE /api/projects/42
+Authorization: Bearer valid-token
+```
+
+The authorization pieces are:
+
+| Component | In this request |
+| --- | --- |
+| Subject | The authenticated user from the token |
+| Resource | Project `42` |
+| Action | Delete |
+| Permission | Maybe `project:delete` |
+| Policy | "Only project owners or admins can delete projects" |
+
+The backend should not only ask:
+
+```text
+Is the user logged in?
+```
+
+It should ask:
+
+```text
+Is this logged-in user allowed to delete this exact project?
+```
+
+That is much more precise.
 
 ---
 
@@ -127,6 +185,42 @@ RBAC is a strong default for many applications.
 
 But it can become messy when every small exception becomes a new role.
 
+### Role Explosion Explained
+
+Role explosion happens when the app creates too many roles to handle every special case.
+
+At first, roles may be simple:
+
+```text
+ADMIN
+MANAGER
+USER
+```
+
+Then requirements grow:
+
+```text
+SALES_MANAGER
+SUPPORT_MANAGER
+READ_ONLY_ADMIN
+BILLING_ADMIN
+PROJECT_ADMIN
+PROJECT_EDITOR
+PROJECT_VIEWER
+REGIONAL_MANAGER
+TEMPORARY_MANAGER
+```
+
+The role list becomes hard to understand.
+
+At that point, permission-based checks or ABAC-style policies may become cleaner.
+
+The beginner lesson is:
+
+```text
+Roles are useful groups, but they should not become the only way to express every rule.
+```
+
 ---
 
 ## Topic 5.3 — Attribute-Based Access Control
@@ -168,6 +262,37 @@ But that flexibility has a cost.
 
 ABAC is useful in domains like healthcare, finance, government, and enterprise software where access depends on context.
 
+### ABAC Example in Plain Language
+
+Imagine a hospital system.
+
+A doctor should not automatically see every patient's record.
+
+The decision may depend on attributes:
+
+```text
+Doctor department
+Patient department
+Doctor assigned patients
+Emergency status
+Time of access
+Location of request
+```
+
+An ABAC-style rule might be:
+
+```text
+Allow if the doctor is assigned to the patient,
+or if emergency access is active,
+and log every access.
+```
+
+This is more detailed than a simple role check.
+
+The role `DOCTOR` is not enough.
+
+The system needs context.
+
 ---
 
 ## Topic 5.4 — Claims-Based Authorization
@@ -203,6 +328,40 @@ If a user's permissions change, an existing token may still contain old claims u
 
 That is why short-lived access tokens matter.
 
+### Claims Are Convenient, But Not Always Fresh
+
+Suppose the token says:
+
+```json
+{
+  "sub": "15",
+  "role": "ADMIN"
+}
+```
+
+Then the user is demoted from admin to normal user in the database.
+
+If the existing token still says `ADMIN`, the backend has a problem until that token expires or is revoked.
+
+This is the freshness tradeoff.
+
+Claims can reduce database lookups, but they can become outdated.
+
+Common ways to reduce the risk include:
+
+| Strategy | How it helps |
+| --- | --- |
+| Short access token lifetime | Old claims expire quickly |
+| Refresh token checks | Server can re-check user status |
+| Token version field | Invalidate old tokens after changes |
+| Permission lookup for sensitive actions | Confirm critical access from database |
+
+For beginner projects, the main lesson is:
+
+```text
+Do not put long-lived powerful permissions in tokens without thinking about revocation.
+```
+
 ---
 
 ## Topic 5.5 — Access Control Lists
@@ -225,6 +384,35 @@ ACLs are very fine-grained, but they can be difficult to manage at scale.
 
 If every document has its own list, auditing and updating permissions can become complicated.
 
+### ACLs in a Shared Document App
+
+Imagine a document called `roadmap.md`.
+
+Its ACL might look like:
+
+| Identity | Permission |
+| --- | --- |
+| Alice | Owner |
+| Bob | Editor |
+| Charlie | Viewer |
+| Dana | No access |
+
+When Bob sends:
+
+```http
+PATCH /api/documents/roadmap
+```
+
+the backend checks the document's ACL.
+
+Bob is an editor, so the update is allowed.
+
+When Charlie sends the same request, the backend denies it because Charlie can only view.
+
+This model is easy to understand for shared resources.
+
+It becomes harder when there are millions of resources and many changing permissions.
+
 ---
 
 ## Topic 5.6 — Principle of Least Privilege
@@ -246,6 +434,26 @@ A support agent should not automatically have access to every private field.
 Least privilege limits damage.
 
 If an account or service is compromised, the attacker gets only the permissions that identity had.
+
+### Least Privilege for Services
+
+Least privilege is not only for human users.
+
+Backend services need it too.
+
+Example:
+
+```text
+Email service only needs permission to send emails.
+Image service only needs access to image storage.
+Analytics service only needs read access to event data.
+```
+
+If every service has admin access to everything, one compromised service can damage the whole system.
+
+Good authorization limits what each service can do.
+
+That is why API keys, service accounts, and database users should also have scoped permissions.
 
 ---
 

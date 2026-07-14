@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-5-part-6
 date: '2026-08-02'
 category: Learning Journey
-readingTime: 14 min read
+readingTime: 19 min read
 day: 5
 part: 6
 series: Learning Backend from First Principles
@@ -44,6 +44,34 @@ Run protected handler
 ```
 
 The exact syntax changes across frameworks, but the shape of the security flow stays the same.
+
+### Before the Code: What Is Middleware?
+
+For a beginner, middleware can sound mysterious.
+
+In Express, middleware is just a function that runs before the final route handler.
+
+It receives:
+
+```text
+req  = the incoming request
+res  = the outgoing response object
+next = a function that moves to the next middleware
+```
+
+A middleware can:
+
+```text
+Read headers
+Validate data
+Attach information to req
+Stop the request with an error response
+Call next() to continue
+```
+
+For authentication and authorization, middleware is useful because protected routes need the same checks again and again.
+
+Instead of rewriting token validation in every route, I can put it in one middleware.
 
 ---
 
@@ -104,6 +132,67 @@ After this middleware succeeds, later code can use `req.user`.
 
 That is the bridge from authentication to authorization.
 
+### Code Walkthrough Line by Line
+
+This line reads the auth header:
+
+```js
+const authHeader = req.headers.authorization;
+```
+
+The client usually sends something like:
+
+```http
+Authorization: Bearer eyJhbGciOi...
+```
+
+The word `Bearer` means:
+
+```text
+The client is carrying a token and presenting it as proof.
+```
+
+This line splits the header:
+
+```js
+const [scheme, token] = authHeader.split(" ");
+```
+
+So this:
+
+```text
+Bearer abc123
+```
+
+becomes:
+
+```text
+scheme = Bearer
+token = abc123
+```
+
+Then `jwt.verify()` checks whether the token is trustworthy:
+
+```js
+const decoded = jwt.verify(token, JWT_SECRET);
+```
+
+If verification succeeds, the decoded claims are attached to the request:
+
+```js
+req.user = decoded;
+```
+
+That means the next middleware can ask:
+
+```text
+What role does this user have?
+What permissions does this user have?
+What userId is this?
+```
+
+This is the exact moment authentication prepares the request for authorization.
+
 ---
 
 ## Topic 6.2 — Role-Based Authorization Middleware
@@ -154,6 +243,37 @@ authenticate → authorizeRoles → handler
 ```
 
 If authorization runs before authentication, there may be no user identity to check.
+
+### Why This Middleware Returns 401 or 403
+
+Inside authorization middleware, there are two different failure cases.
+
+If `req.user` does not exist, authentication did not happen correctly.
+
+That is a `401`.
+
+```js
+if (!req.user) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+```
+
+If `req.user` exists but the user lacks the role, authentication succeeded but authorization failed.
+
+That is a `403`.
+
+```js
+if (!hasRole) {
+  return res.status(403).json({ error: "Forbidden" });
+}
+```
+
+This is a practical version of the Day 5 rule:
+
+```text
+401 = I do not know who you are.
+403 = I know who you are, but you cannot do this.
+```
 
 ---
 
@@ -218,6 +338,44 @@ Permission checks are often better than role checks when the system grows.
 
 Roles can still exist, but permissions describe the actual ability.
 
+### Roles vs Permissions in Code
+
+A role is a label:
+
+```text
+ADMIN
+MANAGER
+USER
+```
+
+A permission is an ability:
+
+```text
+user:read
+user:delete
+project:update
+invoice:refund
+```
+
+Roles can contain permissions:
+
+```json
+{
+  "role": "ADMIN",
+  "permissions": ["user:read", "user:delete", "project:update"]
+}
+```
+
+When checking access, permissions often make the route easier to understand:
+
+```js
+requirePermissions(["invoice:refund"])
+```
+
+That says exactly what the route needs.
+
+The route does not need to know every role that might include that permission.
+
 ---
 
 ## Topic 6.4 — Login Flow
@@ -272,6 +430,55 @@ In a browser app, the token may be sent in an `HttpOnly`, `Secure`, `SameSite` c
 
 The storage choice depends on the client type and security model.
 
+### Why the Error Message Is Generic
+
+The example returns:
+
+```json
+{
+  "error": "Invalid credentials"
+}
+```
+
+for both a missing user and a wrong password.
+
+That is intentional.
+
+If the server says:
+
+```text
+This username does not exist.
+```
+
+an attacker can use the login endpoint to discover real usernames.
+
+A generic message gives less information away.
+
+The backend can still log the detailed reason internally, but the public response should be careful.
+
+### Where Refresh Tokens Fit
+
+The example creates a short-lived access token:
+
+```js
+{ expiresIn: "15m" }
+```
+
+In a real app, a user should not have to log in every 15 minutes.
+
+That is why many systems use refresh tokens.
+
+The simplified idea:
+
+```text
+Access token: short-lived, used for API requests.
+Refresh token: longer-lived, used to get new access tokens.
+```
+
+Refresh tokens need careful storage, rotation, and revocation.
+
+They are powerful credentials.
+
 ---
 
 ## Topic 6.5 — Complete Protected Route Flow
@@ -318,6 +525,27 @@ That last business rule is important.
 Even if a user has `user:delete`, the system may still forbid deleting yourself.
 
 Authorization can be both general and resource-specific.
+
+### Why Multiple Checks Are Normal
+
+At first, the route can look like it has too many checks.
+
+But each check answers a different question:
+
+| Check | Question |
+| --- | --- |
+| `authenticate` | Who is making the request? |
+| `authorizeRoles(["ADMIN"])` | Is this user in an admin role? |
+| `requirePermissions(["user:delete"])` | Does this user have delete ability? |
+| `req.user.userId === targetUserId` | Is this specific delete blocked by business rules? |
+
+Security often works in layers.
+
+One check may be broad.
+
+Another check may be precise.
+
+Together, they make the route safer and easier to reason about.
 
 ---
 
@@ -377,6 +605,37 @@ app.get(
 ```
 
 Nested routes remind me that authorization is often about relationships, not just roles.
+
+### Why "Find by Both IDs" Helps
+
+This line in the example is important:
+
+```js
+const order = await findOrderForUser(orderId, userId);
+```
+
+The backend should not only find:
+
+```text
+Order 99
+```
+
+It should find:
+
+```text
+Order 99 that belongs to User 15
+```
+
+That prevents a common authorization bug where a user changes a URL parameter to access someone else's resource.
+
+Example:
+
+```text
+/users/15/orders/99
+/users/16/orders/99
+```
+
+If the backend does not verify the relationship, a user may access data they should not see.
 
 ---
 

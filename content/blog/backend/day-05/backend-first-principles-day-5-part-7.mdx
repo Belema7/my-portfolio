@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-5-part-7
 date: '2026-08-03'
 category: Learning Journey
-readingTime: 10 min read
+readingTime: 13 min read
 day: 5
 part: 7
 series: Learning Backend from First Principles
@@ -37,6 +37,27 @@ That is the first thing I need to remember:
 ```
 
 Once I connect these status codes back to authentication and authorization, the difference becomes much clearer.
+
+### Why the Names Are Confusing
+
+The word `Unauthorized` sounds like it should mean:
+
+```text
+You are not authorized.
+```
+
+But in HTTP, `401 Unauthorized` is used when authentication is missing or invalid.
+
+So as a beginner, I should not rely only on the English word.
+
+I should remember the practical backend meaning:
+
+```text
+401 = Please authenticate correctly.
+403 = You are authenticated, but access is denied.
+```
+
+That one mental model prevents many mistakes.
 
 ---
 
@@ -79,6 +100,42 @@ The meaning is:
 You must authenticate before accessing this resource.
 ```
 
+### More 401 Examples
+
+Missing header:
+
+```http
+GET /api/me HTTP/1.1
+```
+
+Invalid scheme:
+
+```http
+Authorization: Basic abc123
+```
+
+when the API expects:
+
+```http
+Authorization: Bearer abc123
+```
+
+Expired token:
+
+```text
+The token used to be valid, but its exp time has passed.
+```
+
+Malformed token:
+
+```text
+The token cannot be parsed or verified.
+```
+
+All of these are authentication problems.
+
+The backend cannot establish a valid identity.
+
 ---
 
 ## Topic 7.2 — The WWW-Authenticate Header
@@ -106,6 +163,18 @@ The main idea is:
 ```
 
 That is why `401` belongs to authentication failure.
+
+### Beginner Note
+
+Not every simple tutorial API includes `WWW-Authenticate`, but it is part of the HTTP authentication model.
+
+It is especially useful when the API wants to clearly tell clients:
+
+```text
+This endpoint expects Bearer authentication.
+```
+
+For production APIs, consistent auth error responses help client developers debug problems faster.
 
 ---
 
@@ -148,6 +217,33 @@ The meaning is:
 I know who you are, and you still cannot do this.
 ```
 
+### More 403 Examples
+
+Authenticated normal user tries admin route:
+
+```http
+GET /api/admin/users
+Authorization: Bearer valid-user-token
+```
+
+Authenticated user tries another user's private data:
+
+```http
+GET /api/users/29/orders
+Authorization: Bearer token-for-user-15
+```
+
+Authenticated editor tries owner-only action:
+
+```http
+DELETE /api/projects/42
+Authorization: Bearer valid-editor-token
+```
+
+In each case, the identity is known.
+
+The problem is permission.
+
 ---
 
 ## Topic 7.4 — The Golden Rule
@@ -171,6 +267,30 @@ This maps directly to the Day 5 theme.
 Authentication failure returns `401`.
 
 Authorization failure returns `403`.
+
+### A Simple Decision Table
+
+| Situation | Status |
+| --- | --- |
+| No token | `401` |
+| Token is expired | `401` |
+| Token signature is invalid | `401` |
+| Session cookie is missing | `401` |
+| Logged-in user lacks role | `403` |
+| Logged-in user lacks permission | `403` |
+| Logged-in user tries another user's resource | `403` or sometimes `404` |
+| Logged-in user violates business rule | `403` |
+
+Some APIs return `404` instead of `403` when they do not want to reveal whether a private resource exists.
+
+That is a product and security decision.
+
+But the beginner rule still holds:
+
+```text
+Authentication problem → 401
+Permission problem → 403
+```
 
 ---
 

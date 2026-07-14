@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-5-part-3
 date: '2026-07-30'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 17 min read
 day: 5
 part: 3
 series: Learning Backend from First Principles
@@ -42,6 +42,32 @@ Cookie = browser storage and transport mechanism
 ```
 
 Once I saw that separation, the whole topic became less confusing.
+
+### The Beginner Problem: Login Is Not Enough
+
+When I first think about login, it feels like a single event:
+
+```text
+User enters email and password.
+Server says yes.
+User is logged in.
+```
+
+But HTTP does not remember that by itself.
+
+If the browser sends another request one second later, that request is separate.
+
+The backend needs some way to connect the second request to the successful login.
+
+That is the job of sessions, tokens, and cookies.
+
+They answer:
+
+```text
+How does the server recognize this user again on the next request?
+```
+
+Without one of these mechanisms, the user would have to send their password on every single request, which would be both annoying and unsafe.
 
 ---
 
@@ -96,6 +122,43 @@ If the user logs out or the account is disabled, the server can delete the sessi
 The biggest cost is state.
 
 If the application has many servers, they must all be able to read the session.
+
+### A More Detailed Session Example
+
+Imagine I log in successfully.
+
+The server creates a session record like this:
+
+```json
+{
+  "sessionId": "abc123",
+  "userId": 15,
+  "createdAt": "2026-07-30T10:00:00.000Z",
+  "expiresAt": "2026-07-30T12:00:00.000Z"
+}
+```
+
+The browser does not receive all of this information.
+
+It receives only the session ID:
+
+```http
+Set-Cookie: sessionId=abc123; HttpOnly; Secure; SameSite=Lax
+```
+
+On the next request, the browser sends:
+
+```http
+Cookie: sessionId=abc123
+```
+
+Then the server looks up `abc123`.
+
+If the session exists and has not expired, the server knows the request belongs to user 15.
+
+This is why sessions are called stateful.
+
+The important state lives on the server.
 
 ---
 
@@ -154,6 +217,43 @@ The server must still validate the signature, expiry, issuer, audience, and expe
 
 A JWT should be trusted only after verification.
 
+### What "Signed" Means for a Beginner
+
+A JWT payload is not automatically secret.
+
+In many JWTs, the payload is only Base64URL-encoded.
+
+That means it can often be decoded and read.
+
+The security comes from the signature.
+
+The signature lets the server detect whether the token was changed.
+
+Example:
+
+```text
+Original token says: role = USER
+Attacker changes it to: role = ADMIN
+Signature no longer matches
+Server rejects token
+```
+
+So a JWT is not mainly a way to hide data.
+
+It is mainly a way to carry claims in a tamper-detectable token.
+
+Sensitive secrets should not be placed inside a JWT payload unless encryption or another protection is being used.
+
+### Why Expiry Matters
+
+Because JWTs are often stateless, the server may not store a session that can be deleted immediately.
+
+If a token is stolen, the attacker may use it until it expires.
+
+That is why access tokens should usually be short-lived.
+
+Short expiry is a safety limit.
+
 ---
 
 ## Topic 3.3 — Cookies
@@ -194,6 +294,25 @@ A cookie can also carry a JWT.
 
 For browser-based auth, `HttpOnly`, `Secure`, and `SameSite` are especially important.
 
+### Cookies Are Automatic
+
+One detail that makes cookies special is that the browser sends matching cookies automatically.
+
+If the cookie belongs to `example.com`, then requests to `example.com` can include it without manually adding an `Authorization` header.
+
+This is convenient for web apps.
+
+But automatic sending also means I need to think about CSRF protection.
+
+`SameSite` helps reduce that risk by controlling when cookies are sent on cross-site requests.
+
+For beginners, the simple version is:
+
+```text
+Cookies are convenient because browsers manage them.
+Cookies need careful settings because browsers send them automatically.
+```
+
 ---
 
 ## Topic 3.4 — How They Work Together
@@ -215,6 +334,34 @@ The server-side session is the data the server looks up.
 Similarly, a JWT is not the same as a cookie.
 
 A JWT can be stored in a cookie, sent in an `Authorization` header, or used in other controlled environments.
+
+### Common Beginner Confusions
+
+**Confusion 1: "Cookie auth and session auth are the same thing."**
+
+Not exactly.
+
+The cookie may only store a session ID.
+
+The session is the server-side record.
+
+**Confusion 2: "JWT means no cookies."**
+
+Not necessarily.
+
+A JWT can be stored in an `HttpOnly` cookie.
+
+**Confusion 3: "JWT means secure."**
+
+Not automatically.
+
+A JWT must be signed correctly, verified correctly, stored safely, and expired appropriately.
+
+**Confusion 4: "Stateless means the server does no work."**
+
+No.
+
+The server still verifies the token and checks authorization rules.
 
 ---
 
