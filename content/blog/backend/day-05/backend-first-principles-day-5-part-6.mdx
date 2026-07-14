@@ -1,0 +1,445 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 6)
+description: >-
+  Authentication and authorization in practice with Express-style middleware:
+  JWT verification, role checks, permission checks, login, and protected routes.
+slug: backend-first-principles-day-5-part-6
+date: '2026-08-02'
+category: Learning Journey
+readingTime: 14 min read
+day: 5
+part: 6
+series: Learning Backend from First Principles
+order: 506
+published: true
+---
+# Backend from First Principles — Day 5 (Part 6)
+
+# Auth in Practice: Middleware, Roles, and Permissions
+
+> *"The theory becomes practical when I can see the request move through middleware: first authenticate the caller, then authorize the action, then run the controller."*
+
+---
+
+## Introduction
+
+So far, I have learned the concepts:
+
+```text
+Authentication = Who are you?
+Authorization = What can you do?
+```
+
+Now I want to see the flow in code.
+
+The examples in this part use Express-style JavaScript because middleware makes the sequence easy to see.
+
+The same ideas apply in other frameworks:
+
+```text
+Verify identity
+Attach user to request
+Check permissions
+Run protected handler
+```
+
+The exact syntax changes across frameworks, but the shape of the security flow stays the same.
+
+---
+
+## Topic 6.1 — Authentication Middleware
+
+Authentication middleware checks whether the request has a valid identity.
+
+For a JWT-based API, that usually means reading the `Authorization` header.
+
+```http
+Authorization: Bearer eyJhbGciOi...
+```
+
+Example middleware:
+
+```js
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "No token provided",
+    });
+  }
+
+  const [scheme, token] = authHeader.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid authorization header",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    return next();
+  } catch (error) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid or expired token",
+    });
+  }
+};
+```
+
+The middleware does three important things:
+
+| Step | Purpose |
+| --- | --- |
+| Read token | Find the credential |
+| Verify token | Prove it is valid and not expired |
+| Attach user | Make identity available to later middleware |
+
+After this middleware succeeds, later code can use `req.user`.
+
+That is the bridge from authentication to authorization.
+
+---
+
+## Topic 6.2 — Role-Based Authorization Middleware
+
+Once the request has a user, the backend can check roles.
+
+```js
+const authorizeRoles = (requiredRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: "Unauthorized",
+      });
+    }
+
+    const roles = req.user.roles || [];
+    const hasRole = roles.some((role) => requiredRoles.includes(role));
+
+    if (!hasRole) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You do not have the required role",
+      });
+    }
+
+    return next();
+  };
+};
+```
+
+Usage:
+
+```js
+app.get(
+  "/api/admin/users",
+  authenticate,
+  authorizeRoles(["ADMIN"]),
+  (req, res) => {
+    res.json({ users: [] });
+  }
+);
+```
+
+The order matters:
+
+```text
+authenticate → authorizeRoles → handler
+```
+
+If authorization runs before authentication, there may be no user identity to check.
+
+---
+
+## Topic 6.3 — Permission-Based Authorization Middleware
+
+Roles are useful, but permissions are often more precise.
+
+Instead of asking:
+
+```text
+Is this user an admin?
+```
+
+The backend can ask:
+
+```text
+Does this user have user:delete?
+```
+
+Example middleware:
+
+```js
+const requirePermissions = (requiredPermissions) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: "Unauthorized",
+      });
+    }
+
+    const permissions = req.user.permissions || [];
+    const hasAllPermissions = requiredPermissions.every((permission) =>
+      permissions.includes(permission)
+    );
+
+    if (!hasAllPermissions) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Missing required permission",
+      });
+    }
+
+    return next();
+  };
+};
+```
+
+Usage:
+
+```js
+app.delete(
+  "/api/users/:id",
+  authenticate,
+  requirePermissions(["user:delete"]),
+  (req, res) => {
+    res.json({ message: "User deleted" });
+  }
+);
+```
+
+Permission checks are often better than role checks when the system grows.
+
+Roles can still exist, but permissions describe the actual ability.
+
+---
+
+## Topic 6.4 — Login Flow
+
+Authentication usually begins at login.
+
+The backend receives credentials, validates them, and creates a token or session.
+
+```js
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await User.findOne({ username });
+
+  if (!user) {
+    return res.status(401).json({
+      error: "Invalid credentials",
+    });
+  }
+
+  const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+
+  if (!passwordMatches) {
+    return res.status(401).json({
+      error: "Invalid credentials",
+    });
+  }
+
+  const token = jwt.sign(
+    {
+      userId: user.id,
+      username: user.username,
+      roles: user.roles,
+      permissions: user.permissions,
+    },
+    JWT_SECRET,
+    { expiresIn: "15m" }
+  );
+
+  return res.json({ token });
+});
+```
+
+Two security details matter here:
+
+| Detail | Why it matters |
+| --- | --- |
+| `bcrypt.compare()` | The backend compares against a password hash, not a plain password |
+| Short expiry | Limits damage if an access token is stolen |
+
+In a browser app, the token may be sent in an `HttpOnly`, `Secure`, `SameSite` cookie instead of a JSON response body.
+
+The storage choice depends on the client type and security model.
+
+---
+
+## Topic 6.5 — Complete Protected Route Flow
+
+Now the full flow can be combined:
+
+```js
+app.delete(
+  "/api/users/:id",
+  authenticate,
+  authorizeRoles(["ADMIN"]),
+  requirePermissions(["user:delete"]),
+  async (req, res) => {
+    const targetUserId = Number(req.params.id);
+
+    if (req.user.userId === targetUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You cannot delete yourself",
+      });
+    }
+
+    await deleteUser(targetUserId);
+
+    return res.json({
+      message: "User deleted successfully",
+    });
+  }
+);
+```
+
+The request passes through layers:
+
+```text
+1. Is there a valid token?
+2. Does the user have the ADMIN role?
+3. Does the user have user:delete permission?
+4. Does the business rule allow this specific delete?
+5. Run the controller.
+```
+
+That last business rule is important.
+
+Even if a user has `user:delete`, the system may still forbid deleting yourself.
+
+Authorization can be both general and resource-specific.
+
+---
+
+## Topic 6.6 — Nested Resource Checks
+
+Nested routes often require ownership or relationship checks.
+
+Example:
+
+```http
+GET /users/15/orders/99
+```
+
+The backend should not only check:
+
+```text
+Can this user read orders?
+```
+
+It may also need to check:
+
+```text
+Does order 99 belong to user 15?
+Is the authenticated user allowed to view user 15's orders?
+```
+
+Example:
+
+```js
+app.get(
+  "/api/users/:userId/orders/:orderId",
+  authenticate,
+  async (req, res) => {
+    const userId = Number(req.params.userId);
+    const orderId = Number(req.params.orderId);
+
+    const canViewOwnOrders = req.user.userId === userId;
+    const canViewAllOrders = req.user.permissions?.includes("order:read:any");
+
+    if (!canViewOwnOrders && !canViewAllOrders) {
+      return res.status(403).json({
+        error: "Forbidden",
+      });
+    }
+
+    const order = await findOrderForUser(orderId, userId);
+
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found",
+      });
+    }
+
+    return res.json(order);
+  }
+);
+```
+
+Nested routes remind me that authorization is often about relationships, not just roles.
+
+---
+
+## My Biggest Realization
+
+Middleware makes the security pipeline visible.
+
+The request should move through identity first, permission second, business rules third.
+
+```text
+Authenticate.
+Authorize.
+Then execute.
+```
+
+That order keeps protected route logic easier to reason about.
+
+---
+
+## Part 6 Complete!
+
+## Final Summary
+
+**1. Authentication middleware verifies identity**
+
+It validates the token and attaches the decoded user to the request.
+
+**2. Authorization middleware checks access**
+
+It uses roles, permissions, or resource rules to decide whether the request can continue.
+
+**3. Middleware order matters**
+
+Authentication should run before authorization.
+
+**4. Login should validate hashed passwords**
+
+Use `bcrypt`, `Argon2`, or `scrypt`, never plain text password storage.
+
+**5. Business rules still matter**
+
+Even users with broad permissions may be blocked by resource-specific rules.
+
+### Checkpoint Questions
+
+**What should authentication middleware do?**
+
+Verify the credential, reject invalid requests, and attach identity to the request.
+
+**What status code should missing or invalid tokens return?**
+
+`401 Unauthorized`.
+
+**What status code should missing permissions return?**
+
+`403 Forbidden`.
+
+**Why should authorization be checked on the server?**
+
+Because clients can bypass the frontend and call the API directly.
+
+---
+
+### Preview — Day 5 (Part 7)
+
+Now that the code flow is clear, I need to lock in the HTTP responses. In Part 7, I will study the difference between `401 Unauthorized` and `403 Forbidden`.

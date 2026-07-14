@@ -1,0 +1,316 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 5)
+description: >-
+  Authorization from first principles: subjects, resources, actions,
+  permissions, roles, policies, RBAC, ABAC, claims, ACLs, and least privilege.
+slug: backend-first-principles-day-5-part-5
+date: '2026-08-01'
+category: Learning Journey
+readingTime: 13 min read
+day: 5
+part: 5
+series: Learning Backend from First Principles
+order: 505
+published: true
+---
+# Backend from First Principles — Day 5 (Part 5)
+
+# Authorization: What Can You Do?
+
+> *"Authentication gives the request an identity. Authorization decides what that identity is allowed to do. A secure API needs both."*
+
+---
+
+## Introduction
+
+Authentication answers:
+
+```text
+Who are you?
+```
+
+Authorization answers:
+
+```text
+What can you do?
+```
+
+This distinction matters because a logged-in user should not automatically have full access to the system.
+
+A normal user may view their own profile.
+
+An admin may manage users.
+
+A manager may view team reports.
+
+A support agent may reset passwords but not view payment details.
+
+Authorization is the system that turns identity into decisions.
+
+---
+
+## Topic 5.1 — The Core Components
+
+Authorization decisions usually involve a few core pieces.
+
+| Component | Meaning | Example |
+| --- | --- | --- |
+| Subject | Who is making the request | `User: Belema` |
+| Resource | What is being accessed | `Document: report.pdf` |
+| Action | What the subject wants to do | `read`, `write`, `delete` |
+| Permission | A named ability | `document:read` |
+| Role | A collection of permissions | `ADMIN`, `USER` |
+| Policy | A rule that decides access | "Managers can view team reports" |
+
+An authorization check usually asks:
+
+```text
+Can this subject perform this action on this resource?
+```
+
+Example:
+
+```text
+Can user 15 delete user 29?
+Can user 15 read invoice 44?
+Can manager 7 update project 12?
+```
+
+This makes authorization more concrete.
+
+It is not a vague security layer. It is a decision system.
+
+---
+
+## Topic 5.2 — Role-Based Access Control
+
+Role-Based Access Control, or RBAC, assigns permissions to roles, then assigns roles to users.
+
+The flow is:
+
+```text
+Define permissions
+→ Group permissions into roles
+→ Assign roles to users
+→ Check role or permission during requests
+```
+
+### Example
+
+| User | Role | Permissions |
+| --- | --- | --- |
+| Alice | Admin | `user:read`, `user:write`, `user:delete` |
+| Bob | Manager | `user:read`, `user:write` |
+| Charlie | User | `user:read` for own profile |
+
+RBAC is popular because it is easy to understand.
+
+Most applications can start with roles like:
+
+```text
+ADMIN
+MANAGER
+USER
+GUEST
+```
+
+### RBAC Pros and Cons
+
+| Pros | Cons |
+| --- | --- |
+| Simple mental model | Can become rigid |
+| Easy to manage at first | Role explosion in complex systems |
+| Works for most apps | Does not capture every context |
+| Easy to explain to teams | May need custom rules later |
+
+RBAC is a strong default for many applications.
+
+But it can become messy when every small exception becomes a new role.
+
+---
+
+## Topic 5.3 — Attribute-Based Access Control
+
+Attribute-Based Access Control, or ABAC, makes decisions using attributes.
+
+Attributes can belong to:
+
+| Attribute source | Examples |
+| --- | --- |
+| User | department, clearance, location |
+| Resource | owner, sensitivity, project |
+| Environment | time, IP address, device |
+| Action | read, write, approve, delete |
+
+Example policies:
+
+```text
+Allow if user.department == resource.department.
+Allow if user.clearance >= resource.sensitivity.
+Allow if request.time is between 9 AM and 5 PM.
+Allow if user.id == resource.ownerId.
+```
+
+ABAC is more flexible than RBAC.
+
+It can express detailed rules.
+
+But that flexibility has a cost.
+
+### ABAC Pros and Cons
+
+| Pros | Cons |
+| --- | --- |
+| Very flexible | More complex to implement |
+| Fine-grained control | Policies can be hard to debug |
+| Good for large organizations | Requires reliable attributes |
+| Handles context well | Harder to explain than roles |
+
+ABAC is useful in domains like healthcare, finance, government, and enterprise software where access depends on context.
+
+---
+
+## Topic 5.4 — Claims-Based Authorization
+
+Claims-based authorization uses claims attached to an identity.
+
+A claim is a statement about a user or client.
+
+Example JWT payload:
+
+```json
+{
+  "sub": "15",
+  "role": "ADMIN",
+  "permissions": ["user:read", "user:delete"],
+  "department": "engineering"
+}
+```
+
+The backend can use those claims to make decisions:
+
+```text
+Does the token include role ADMIN?
+Does the token include permission user:delete?
+Does the department claim match the resource department?
+```
+
+Claims are useful because they can reduce database lookups.
+
+But they can also become stale.
+
+If a user's permissions change, an existing token may still contain old claims until it expires.
+
+That is why short-lived access tokens matter.
+
+---
+
+## Topic 5.5 — Access Control Lists
+
+An Access Control List, or ACL, stores access rules on the resource itself.
+
+Example:
+
+| Resource | User | Allowed actions |
+| --- | --- | --- |
+| `report.pdf` | Alice | `read`, `write` |
+| `report.pdf` | Bob | `read` |
+| `report.pdf` | Charlie | none |
+
+This is common in file systems and shared drives.
+
+The resource knows who can access it.
+
+ACLs are very fine-grained, but they can be difficult to manage at scale.
+
+If every document has its own list, auditing and updating permissions can become complicated.
+
+---
+
+## Topic 5.6 — Principle of Least Privilege
+
+The Principle of Least Privilege says:
+
+```text
+Give users and systems only the access they need, and no more.
+```
+
+This is one of the most important authorization ideas.
+
+A user who only needs to read reports should not have delete permissions.
+
+A service that only sends emails should not have full database admin access.
+
+A support agent should not automatically have access to every private field.
+
+Least privilege limits damage.
+
+If an account or service is compromised, the attacker gets only the permissions that identity had.
+
+---
+
+## My Biggest Realization
+
+Authorization is not just roles.
+
+Roles are one way to organize access, but the deeper idea is:
+
+```text
+Subject + resource + action + policy = authorization decision
+```
+
+That model helps me think beyond simple admin checks.
+
+It also reminds me that authorization belongs on the server.
+
+The frontend can hide buttons, but the backend must enforce rules.
+
+---
+
+## Part 5 Complete!
+
+## Final Summary
+
+**1. Authorization answers "What can you do?"**
+
+It happens after authentication and decides whether an identity can perform an action.
+
+**2. Authorization decisions involve subjects, resources, actions, and policies**
+
+This makes access control more concrete and testable.
+
+**3. RBAC is simple and common**
+
+Users receive roles, and roles contain permissions.
+
+**4. ABAC is flexible and context-aware**
+
+It uses attributes from users, resources, actions, and environments.
+
+**5. Least privilege is the guiding principle**
+
+Give each user or system only the access they need.
+
+### Checkpoint Questions
+
+**What is RBAC?**
+
+A model where permissions are grouped into roles and roles are assigned to users.
+
+**What is ABAC?**
+
+A model where access decisions are based on attributes and policies.
+
+**What is a claim?**
+
+A statement about a user or client, often stored in a token.
+
+**What is least privilege?**
+
+The practice of granting only the minimum access needed.
+
+---
+
+### Preview — Day 5 (Part 6)
+
+Now I want to turn the concepts into code. In Part 6, I will build Express-style examples for authentication middleware, role checks, permission checks, and a full login-to-protected-route flow.

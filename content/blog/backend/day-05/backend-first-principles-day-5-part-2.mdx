@@ -1,0 +1,398 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 2)
+description: >-
+  The historical evolution of authentication: trust, tokens, passphrases,
+  passwords, hashing, PKI, MFA, OAuth, JWT, Zero Trust, and future identity.
+slug: backend-first-principles-day-5-part-2
+date: '2026-07-29'
+category: Learning Journey
+readingTime: 13 min read
+day: 5
+part: 2
+series: Learning Backend from First Principles
+order: 502
+published: true
+---
+# Backend from First Principles — Day 5 (Part 2)
+
+# The History of Authentication: Proving Identity Over Time
+
+> *"Authentication is not a new problem. Long before APIs, passwords, JWTs, or OAuth, humans were already asking the same question: how do I know you are really who you claim to be?"*
+
+---
+
+## Introduction
+
+In Part 1, I defined authentication as the answer to one question:
+
+```text
+Who are you?
+```
+
+That question sounds modern because I am thinking about login forms, API tokens, cookies, and JWTs.
+
+But the problem is ancient.
+
+Kings needed to know whether a messenger was trusted. Armies needed to know whether an order was real. Banks needed to know whether a customer was allowed to withdraw money. Computer systems needed to know whether a user should access a mainframe.
+
+The tools changed.
+
+The core challenge stayed the same.
+
+```text
+How can one party trust another party's identity?
+```
+
+---
+
+## Topic 2.1 — Authentication Started With Trust
+
+The earliest form of authentication was often implicit.
+
+People trusted identity because of context:
+
+```text
+I know your face.
+Someone I trust introduced you.
+You are from my village.
+You carry a known symbol.
+```
+
+This works in small communities.
+
+If everyone knows everyone, identity can be based on recognition and reputation.
+
+But implicit trust does not scale.
+
+Once societies became larger, more mobile, and more complex, people needed more explicit ways to prove identity.
+
+### Why Implicit Authentication Failed to Scale
+
+| Problem | Why it matters |
+| --- | --- |
+| Limited reach | Recognition only works in small groups |
+| Easy impersonation | Strangers can claim false identities |
+| No audit trail | There may be no record of who approved access |
+| Weak consistency | Different people may trust different signals |
+
+This is similar to backend systems.
+
+A small script may trust everything locally. A real API exposed to the internet cannot.
+
+---
+
+## Topic 2.2 — Tokens, Seals, and Passphrases
+
+As systems became larger, authentication became more explicit.
+
+People used physical objects to prove authority:
+
+```text
+Seals
+Stamped documents
+Badges
+Keys
+Tokens
+Signed letters
+```
+
+This is the "something you have" model.
+
+If a messenger carried the correct seal, the receiver could trust that the message came from an authority.
+
+But physical tokens had problems.
+
+They could be stolen, copied, forged, or misused.
+
+### Passphrases
+
+Another method was a shared secret.
+
+A person could prove identity by knowing a phrase agreed in advance.
+
+That is the ancestor of the modern password.
+
+```text
+Guard: What is the passphrase?
+Visitor: The correct secret.
+Guard: You may enter.
+```
+
+This is the "something you know" model.
+
+The weakness is that secrets can be overheard, guessed, reused, or leaked.
+
+---
+
+## Topic 2.3 — Passwords Enter Computing
+
+When computers became shared systems, authentication became a software problem.
+
+Mainframes in the 1960s and 1970s needed to support multiple users.
+
+The system needed to know:
+
+```text
+Which user is logging in?
+Should this user access these files or programs?
+```
+
+Passwords became a natural fit because they were simple.
+
+The user knew a secret. The computer checked it.
+
+But early password systems had a serious problem:
+
+```text
+Many stored passwords in plain text.
+```
+
+If the password database leaked, every password was exposed.
+
+That is a disaster because users often reuse passwords across systems.
+
+### Why Plain Text Passwords Are Dangerous
+
+| Risk | Impact |
+| --- | --- |
+| Database breach | Attackers immediately see every password |
+| Insider access | Administrators may read user secrets |
+| Password reuse | One breach can unlock other accounts |
+| No recovery path | The secret is already exposed |
+
+A backend should never store passwords in plain text.
+
+Not in production.
+
+Not in a demo.
+
+Not "temporarily."
+
+---
+
+## Topic 2.4 — Hashing Changed Password Storage
+
+Hashing improved password storage.
+
+Instead of storing the password itself, the server stores a derived value.
+
+```text
+password → hash function → password hash
+```
+
+During login:
+
+```text
+User submits password
+Server hashes submitted password
+Server compares it to stored hash
+```
+
+If the hashes match, the password is probably correct.
+
+The backend does not need to store the original password.
+
+### Salts
+
+A salt is a random value added to each password before hashing.
+
+It helps protect against precomputed attacks and makes identical passwords produce different stored hashes.
+
+```text
+password + unique salt → password hash
+```
+
+Modern password hashing should use algorithms designed for passwords, such as:
+
+| Algorithm | Why it is used |
+| --- | --- |
+| `bcrypt` | Slow by design and widely supported |
+| `Argon2` | Modern, memory-hard, strong default choice |
+| `scrypt` | Memory-hard and resistant to some hardware attacks |
+
+General-purpose fast hashes like plain SHA-256 are not enough for password storage by themselves because attackers can try huge numbers of guesses quickly.
+
+Password hashing should be intentionally slow.
+
+---
+
+## Topic 2.5 — Public Key Cryptography
+
+Asymmetric cryptography was a major breakthrough.
+
+Instead of both parties sharing the same secret, a person or system can have two keys:
+
+```text
+Public key  → safe to share
+Private key → must be kept secret
+```
+
+This creates new possibilities.
+
+A message can be signed with a private key and verified with a public key.
+
+That means identity can be proven without revealing the private key itself.
+
+This is the foundation of many modern security systems, including TLS certificates, SSH keys, and public key infrastructure.
+
+### Why PKI Matters
+
+PKI stands for Public Key Infrastructure.
+
+It helps answer:
+
+```text
+Can I trust that this public key belongs to this identity?
+```
+
+On the web, certificates help browsers trust that they are really talking to the right website.
+
+This matters for authentication because credentials and tokens should travel over secure channels.
+
+Without HTTPS, passwords and tokens can be exposed in transit.
+
+---
+
+## Topic 2.6 — Multi-Factor Authentication
+
+Multi-factor authentication combines multiple proof types.
+
+The three classic factors are:
+
+| Factor | Meaning | Examples |
+| --- | --- | --- |
+| Something you know | A secret | Password, PIN, passphrase |
+| Something you have | A device or object | Phone, hardware key, OTP app |
+| Something you are | A physical trait | Fingerprint, Face ID, retina scan |
+
+The reason MFA is powerful is simple:
+
+```text
+If one factor is stolen, the attacker still needs another factor.
+```
+
+A password can leak.
+
+But if the account also requires a hardware security key or one-time code, the password alone may not be enough.
+
+MFA does not make systems magically perfect, but it raises the cost of attack.
+
+---
+
+## Topic 2.7 — OAuth, JWT, and Zero Trust
+
+Modern authentication and authorization became more complex because applications became more connected.
+
+A user may want one app to access data from another app.
+
+For example:
+
+```text
+Use Google to sign in.
+Let a calendar app read my Google Calendar.
+Let a deployment service access my GitHub repositories.
+```
+
+OAuth 2.0 exists for delegated authorization.
+
+It lets users grant limited access without giving the third-party app their password.
+
+JWTs became popular because they can carry signed claims in a compact token format.
+
+Zero Trust is a security model built around an important idea:
+
+```text
+Do not automatically trust a request just because it comes from inside the network.
+```
+
+Every request should be authenticated, authorized, and evaluated.
+
+That mindset fits modern cloud systems where services, devices, users, and networks are constantly changing.
+
+---
+
+## Topic 2.8 — The Future of Authentication
+
+Authentication is still evolving.
+
+Some important directions include:
+
+| Direction | Idea |
+| --- | --- |
+| Passwordless login | Reduce dependence on memorized secrets |
+| Passkeys | Use public key cryptography for user-friendly login |
+| Decentralized identity | Let users control identity without one central provider |
+| Stronger biometrics | Use physical traits with local device protections |
+| Post-quantum cryptography | Prepare for future attacks against current algorithms |
+
+The future may use fewer passwords, more cryptography, and more device-based identity.
+
+But the core question remains the same:
+
+```text
+How do I trust that you are who you say you are?
+```
+
+---
+
+## My Biggest Realization
+
+Authentication is a long story of replacing weak trust with stronger proof.
+
+It moved from recognition, to physical tokens, to shared secrets, to hashed passwords, to public key cryptography, to multi-factor systems and delegated identity.
+
+Each generation solved some problems and created new ones.
+
+The backend lesson is that authentication is not just a login form.
+
+It is a trust system.
+
+---
+
+## Part 2 Complete!
+
+## Final Summary
+
+**1. Authentication is an old problem**
+
+Humans have always needed ways to prove identity and authority.
+
+**2. Authentication factors fall into three groups**
+
+Something you know, something you have, and something you are.
+
+**3. Plain text passwords are unacceptable**
+
+If the database leaks, every stored password is immediately exposed.
+
+**4. Passwords should be hashed with password-specific algorithms**
+
+Use `bcrypt`, `Argon2`, or `scrypt`, with salts and appropriate cost settings.
+
+**5. Modern authentication uses layered trust**
+
+MFA, OAuth, JWTs, HTTPS, PKI, and Zero Trust all help protect identity in different ways.
+
+### Checkpoint Questions
+
+**Why could implicit authentication not scale?**
+
+It depends on personal recognition and local trust, which breaks down in large systems.
+
+**What are the three authentication factors?**
+
+Something you know, something you have, and something you are.
+
+**Why should passwords be hashed?**
+
+So the backend does not store the original password and a database breach is less damaging.
+
+**What problem does MFA solve?**
+
+It reduces reliance on one proof by requiring multiple factors.
+
+---
+
+### Preview — Day 5 (Part 3)
+
+Now that I understand how authentication evolved, I want to learn the core mechanisms used in web apps today. In Part 3, I will study sessions, JWTs, and cookies.

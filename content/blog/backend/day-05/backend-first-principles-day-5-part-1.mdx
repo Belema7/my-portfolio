@@ -1,0 +1,303 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 1)
+description: >-
+  Authentication and authorization as the gatekeepers of an API: who is making
+  the request, what they can do, and why authentication always comes first.
+slug: backend-first-principles-day-5-part-1
+date: '2026-07-28'
+category: Learning Journey
+readingTime: 10 min read
+day: 5
+part: 1
+series: Learning Backend from First Principles
+order: 501
+published: true
+---
+# Backend from First Principles — Day 5 (Part 1)
+
+# Authentication and Authorization: The Gatekeepers of Your API
+
+> *"The moment an API handles private data, security stops being an extra feature. The backend must know who is making the request and what that person is allowed to do. Authentication and authorization are the two gatekeepers that make that possible."*
+
+---
+
+## Introduction
+
+In the earlier days of this backend journey, I learned how requests move through a server.
+
+I learned about routing. I learned about serialization. I learned how data can travel from a frontend to a backend through a shared format like JSON.
+
+But one huge question remains:
+
+> **Should this request be allowed?**
+
+That question changes everything.
+
+A public homepage can be open to everyone. But most real APIs eventually deal with private or sensitive information:
+
+| API action | Why it needs protection |
+| --- | --- |
+| View my profile | Only I should see my private data |
+| Update my email | Only the account owner should change it |
+| Delete a user | Only admins should be allowed |
+| View payment history | Highly sensitive financial data |
+| Access company reports | Depends on role, team, or permission |
+
+Without authentication and authorization, an API is just trusting every request that arrives.
+
+That is not security.
+
+That is hope.
+
+---
+
+## Topic 1.1 — The Core Problem
+
+An API receives requests from the outside world.
+
+Some requests come from real users. Some come from browsers. Some come from mobile apps. Some come from other backend services. Some may come from attackers.
+
+The backend cannot simply assume:
+
+```text
+If a request arrived, it must be legitimate.
+```
+
+That would be dangerous.
+
+Instead, the backend needs to answer two questions:
+
+```text
+Who are you?
+What are you allowed to do?
+```
+
+Those two questions are the foundation of authentication and authorization.
+
+---
+
+## Topic 1.2 — Authentication: Who Are You?
+
+Authentication is the process of proving identity.
+
+It answers:
+
+```text
+Who are you?
+```
+
+If I send a login request with an email and password, the backend checks whether those credentials match a real user.
+
+If they do, the backend can say:
+
+```text
+This request belongs to user 15.
+```
+
+That identity may later be represented by a session, a cookie, a JWT, or another credential.
+
+The mechanism can change, but the purpose is the same.
+
+Authentication assigns an identity to the subject making the request.
+
+### Authentication Examples
+
+| Method | What it proves |
+| --- | --- |
+| Email and password | The user knows the correct secret |
+| One-time code | The user has access to a device or inbox |
+| Fingerprint | The user matches a biometric factor |
+| API key | The request comes from a known application |
+| Client certificate | The caller possesses a trusted private key |
+
+All of these are ways of answering the identity question.
+
+---
+
+## Topic 1.3 — Authorization: What Can You Do?
+
+Authorization happens after authentication.
+
+It answers:
+
+```text
+What can you do?
+```
+
+Knowing who the user is does not automatically mean they can do everything.
+
+For example:
+
+```text
+Belema is authenticated.
+```
+
+That only proves identity.
+
+The backend still needs to ask:
+
+```text
+Can Belema delete this user?
+Can Belema view this invoice?
+Can Belema update this project?
+Can Belema access the admin dashboard?
+```
+
+Authorization is about permissions, roles, policies, and access rules.
+
+### Authorization Examples
+
+| User | Action | Decision |
+| --- | --- | --- |
+| Normal user | View own profile | Allow |
+| Normal user | Delete another user | Deny |
+| Admin | Delete another user | Allow |
+| Manager | View team report | Allow |
+| Guest | View private report | Deny |
+
+Authentication identifies the caller.
+
+Authorization decides what that caller can do.
+
+---
+
+## Topic 1.4 — The Bouncer Analogy
+
+The nightclub analogy helped me separate the two concepts.
+
+Imagine a club with a bouncer at the door.
+
+First, the bouncer checks my ID.
+
+That is authentication.
+
+```text
+Are you really the person you claim to be?
+```
+
+Then the bouncer checks whether I am allowed into a specific area.
+
+Maybe regular guests can enter the main floor, but only VIP guests can enter the VIP room.
+
+That is authorization.
+
+```text
+Now that I know who you are, what access do you have?
+```
+
+The order matters.
+
+The bouncer cannot check whether I am on the VIP list before knowing who I am.
+
+---
+
+## Topic 1.5 — The Golden Rule
+
+The most important rule is:
+
+> **Authentication always comes first.**
+
+The backend cannot authorize someone until it knows who they are.
+
+The flow should look like this:
+
+```text
+Request arrives
+→ Authenticate the caller
+→ Attach identity to the request
+→ Authorize the action
+→ Run the protected logic
+```
+
+If authentication fails, the request should stop.
+
+If authentication succeeds but authorization fails, the request should still stop.
+
+Only when both checks pass should the backend continue.
+
+---
+
+## Topic 1.6 — Why This Matters for APIs
+
+Frontend checks are useful for user experience, but they are not enough.
+
+A React app can hide an admin button from normal users.
+
+But a malicious user can skip the frontend and call the API directly:
+
+```http
+DELETE /api/users/15 HTTP/1.1
+```
+
+That is why the backend must enforce access control.
+
+The frontend can guide users.
+
+The backend must protect the system.
+
+---
+
+## My Biggest Realization
+
+I used to think authentication and authorization were almost the same thing because they both sound like "security checks."
+
+Now the separation is much clearer.
+
+```text
+Authentication = identity
+Authorization = permission
+```
+
+The backend first asks who is making the request. Then it asks whether that identity is allowed to perform the requested action.
+
+That order is the foundation for almost every secure API.
+
+---
+
+## Part 1 Complete!
+
+## Final Summary
+
+**1. APIs need gatekeepers**
+
+Sensitive data and dangerous actions cannot be open to every request.
+
+**2. Authentication answers "Who are you?"**
+
+It proves or assigns identity to the caller.
+
+**3. Authorization answers "What can you do?"**
+
+It checks permissions, roles, and policies after identity is known.
+
+**4. Authentication always comes first**
+
+The backend cannot authorize a user before identifying them.
+
+**5. The backend must enforce security**
+
+Frontend checks improve experience, but server-side checks protect the system.
+
+### Checkpoint Questions
+
+**What does authentication answer?**
+
+It answers: "Who are you?"
+
+**What does authorization answer?**
+
+It answers: "What can you do?"
+
+**Why does authentication come first?**
+
+Because the backend must know the caller's identity before checking their permissions.
+
+**Why is frontend-only authorization unsafe?**
+
+Because users can bypass the frontend and call the API directly.
+
+---
+
+### Preview — Day 5 (Part 2)
+
+Now that the basic definitions are clear, I want to understand where authentication came from. In Part 2, I will look at the history of authentication: trust, seals, passwords, hashing, public key cryptography, MFA, OAuth, and the future of identity.

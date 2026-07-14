@@ -1,0 +1,402 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 9)
+description: >-
+  The complete authentication and authorization flow: login, password hashes,
+  JWTs, protected routes, middleware, status codes, golden rules, and the
+  senior engineer security mindset.
+slug: backend-first-principles-day-5-part-9
+date: '2026-08-05'
+category: Learning Journey
+readingTime: 12 min read
+day: 5
+part: 9
+series: Learning Backend from First Principles
+order: 509
+published: true
+---
+# Backend from First Principles — Day 5 (Part 9)
+
+# Putting Authentication and Authorization Together
+
+> *"Authentication and authorization are not isolated features. They form a request pipeline: prove identity, check permission, protect the action, return the right response, and leave an audit trail."*
+
+---
+
+## Introduction
+
+Day 5 started with two questions:
+
+```text
+Who are you?
+What can you do?
+```
+
+Now I can see how much those questions control.
+
+They affect login.
+
+They affect passwords.
+
+They affect cookies and tokens.
+
+They affect middleware.
+
+They affect HTTP status codes.
+
+They affect database access, admin actions, logs, and user privacy.
+
+Authentication and authorization are not small pieces of backend development.
+
+They are part of the foundation.
+
+---
+
+## Topic 9.1 — The Complete Auth Flow
+
+Here is the full flow from login to protected API request.
+
+### 1. Client Sends Credentials
+
+The client sends a login request:
+
+```http
+POST /login HTTP/1.1
+Content-Type: application/json
+
+{
+  "username": "belema",
+  "password": "user-submitted-password"
+}
+```
+
+This is the moment where the user claims an identity.
+
+The backend must verify it.
+
+### 2. Server Validates Credentials
+
+The server finds the user and compares the submitted password against the stored password hash.
+
+```text
+Submitted password + stored hash → password verification
+```
+
+The database should store a hash created with `bcrypt`, `Argon2`, or `scrypt`.
+
+It should not store the plain password.
+
+### 3. Server Creates an Auth Credential
+
+If the credentials are valid, the server creates either:
+
+```text
+A server-side session
+or
+A signed token such as a JWT
+```
+
+For JWTs, the token may include claims:
+
+```json
+{
+  "sub": "15",
+  "roles": ["ADMIN"],
+  "permissions": ["user:read", "user:delete"],
+  "exp": 1785844800
+}
+```
+
+The token should expire.
+
+Long-lived access tokens increase risk.
+
+### 4. Server Sends the Credential
+
+The server sends the credential back to the client.
+
+For browser apps, a secure cookie is often preferred:
+
+```http
+Set-Cookie: accessToken=...; HttpOnly; Secure; SameSite=Lax
+```
+
+For mobile apps or service calls, a bearer token may be sent and later included in the `Authorization` header.
+
+The transport and storage choice must match the client and threat model.
+
+### 5. Client Makes a Protected Request
+
+The client calls a protected endpoint:
+
+```http
+DELETE /api/users/29 HTTP/1.1
+Authorization: Bearer eyJhbGciOi...
+```
+
+or the browser sends a cookie automatically:
+
+```http
+Cookie: accessToken=...
+```
+
+The backend now starts the protected request pipeline.
+
+### 6. Authentication Middleware Runs
+
+The backend verifies the credential:
+
+```text
+Is the token present?
+Is the signature valid?
+Is the token expired?
+Are issuer and audience correct?
+Are required claims present?
+```
+
+If this fails, the server returns:
+
+```http
+401 Unauthorized
+```
+
+Authentication failed.
+
+### 7. Authorization Middleware Runs
+
+If authentication succeeds, the backend checks permissions:
+
+```text
+Does this user have ADMIN role?
+Does this user have user:delete permission?
+Is this user allowed to delete this specific resource?
+```
+
+If this fails, the server returns:
+
+```http
+403 Forbidden
+```
+
+Authorization failed.
+
+### 8. Protected Logic Runs
+
+Only now should the controller perform the protected action.
+
+```text
+Delete user.
+Update settings.
+Return private data.
+Create API key.
+Access admin report.
+```
+
+This order protects the system:
+
+```text
+Authenticate → Authorize → Execute
+```
+
+### 9. Security Events Are Logged
+
+The backend should log important events:
+
+```text
+Failed login
+Invalid token
+Permission denied
+Admin action
+Password reset
+API key creation
+```
+
+Logs help detect problems and investigate incidents.
+
+They should not expose secrets.
+
+---
+
+## Topic 9.2 — The Golden Rules
+
+These are the Day 5 rules I want to remember.
+
+| Rule | Summary |
+| --- | --- |
+| Authenticate first | Identify the caller before checking permissions |
+| Authorize on the server | Frontend checks are not enough |
+| Use HTTPS | Protect credentials and tokens in transit |
+| Hash passwords | Never store plain text passwords |
+| Use short-lived tokens | Reduce the impact of token theft |
+| Store browser tokens carefully | Prefer `HttpOnly`, `Secure`, `SameSite` cookies |
+| Rate limit login | Slow brute force attempts |
+| Validate every request | Do not trust tokens without verification |
+| Use least privilege | Grant only necessary permissions |
+| Log security events | Make failures and sensitive actions visible |
+
+These rules are practical.
+
+They are not only theory.
+
+They affect how I design real endpoints.
+
+---
+
+## Topic 9.3 — The Senior Engineer Mindset
+
+A senior engineer does not treat auth as something to "add at the end."
+
+Auth shapes the system from the beginning.
+
+### Think Security First
+
+For every protected route, ask:
+
+```text
+Who can call this?
+How do we know?
+What are they allowed to do?
+What happens when they are denied?
+Is the denial logged?
+```
+
+### Use Standards
+
+Security is not a good place to invent clever custom systems.
+
+Prefer proven tools and standards:
+
+```text
+bcrypt
+Argon2
+scrypt
+OAuth 2.0
+OpenID Connect
+JWT libraries
+HTTPS
+Secure cookies
+```
+
+The goal is not to be original.
+
+The goal is to be correct and boring in the best way.
+
+### Design for Failure
+
+Auth systems must handle failure clearly:
+
+| Failure | Response |
+| --- | --- |
+| Missing token | `401 Unauthorized` |
+| Expired token | `401 Unauthorized` |
+| Valid token but missing permission | `403 Forbidden` |
+| Bad password | `401 Unauthorized` |
+| Too many login attempts | Rate limit response |
+
+Failure paths are part of the API contract.
+
+### Respect Privacy
+
+Authentication systems touch sensitive data.
+
+That means I must think about:
+
+```text
+What data is collected?
+Where is it stored?
+Who can access it?
+How long is it retained?
+What appears in logs?
+What happens when users request deletion?
+```
+
+Security and privacy are connected.
+
+---
+
+## My Biggest Realization
+
+Authentication and authorization are not just about blocking users.
+
+They are about making trust explicit.
+
+The backend should never guess who is making a request.
+
+It should never assume an authenticated user can do everything.
+
+It should never rely on the frontend as the final guard.
+
+The clean model is:
+
+```text
+Prove identity.
+Check permission.
+Enforce on the server.
+Fail clearly.
+Log carefully.
+```
+
+That is the Day 5 lesson.
+
+---
+
+## Part 9 Complete!
+
+## Final Summary
+
+**1. Authentication proves identity**
+
+It answers "Who are you?" and must happen before authorization.
+
+**2. Authorization checks permissions**
+
+It answers "What can you do?" using roles, permissions, claims, policies, or resource rules.
+
+**3. Secure login depends on password hashing**
+
+Use password-specific hashing like `bcrypt`, `Argon2`, or `scrypt`.
+
+**4. Tokens and sessions must be protected**
+
+Use short lifetimes, secure storage, HTTPS, and validation on every request.
+
+**5. Status codes should reveal the failure type**
+
+Use `401` for authentication failure and `403` for authorization failure.
+
+**6. Least privilege limits damage**
+
+Users and services should receive only the access they need.
+
+**7. Backend enforcement is non-negotiable**
+
+The frontend can improve UX, but the server must protect the data.
+
+### Checkpoint Questions
+
+**What is the complete auth flow?**
+
+Login, verify password hash, issue session or token, send credential, authenticate future requests, authorize actions, execute protected logic.
+
+**Why must authentication come before authorization?**
+
+Because the backend must know the caller's identity before checking permissions.
+
+**What is the difference between `401` and `403`?**
+
+`401` means authentication failed. `403` means authentication succeeded but authorization failed.
+
+**What is the senior engineer mindset for auth?**
+
+Use standards, validate every request, enforce on the server, design failure paths, log security events, and protect user privacy.
+
+---
+
+## Day 5 Complete!
+
+Authentication and authorization are the gatekeepers of an API.
+
+Authentication gives the request an identity.
+
+Authorization gives that identity boundaries.
+
+Together, they turn an open backend into a controlled system where users, services, and administrators can do exactly what they are allowed to do, and no more.

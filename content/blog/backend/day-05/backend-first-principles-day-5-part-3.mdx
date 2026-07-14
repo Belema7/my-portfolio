@@ -1,0 +1,339 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 3)
+description: >-
+  Sessions, JWTs, and cookies: how web applications remember authenticated
+  users, transport credentials, and choose between stateful and stateless auth.
+slug: backend-first-principles-day-5-part-3
+date: '2026-07-30'
+category: Learning Journey
+readingTime: 13 min read
+day: 5
+part: 3
+series: Learning Backend from First Principles
+order: 503
+published: true
+---
+# Backend from First Principles — Day 5 (Part 3)
+
+# Sessions, JWTs, and Cookies: The Core Auth Vocabulary
+
+> *"Authentication does not end after login. Once the server knows who I am, it needs a way to remember that identity on later requests. Sessions, JWTs, and cookies are three of the most important tools in that conversation."*
+
+---
+
+## Introduction
+
+HTTP is stateless.
+
+That means each request is independent by default.
+
+If I log in on one request, the next request does not automatically remember me unless the application creates a mechanism for that.
+
+This is where sessions, JWTs, and cookies become important.
+
+They are related, but they are not the same thing.
+
+I needed to separate them clearly:
+
+```text
+Session = server-side authenticated state
+JWT = signed token containing claims
+Cookie = browser storage and transport mechanism
+```
+
+Once I saw that separation, the whole topic became less confusing.
+
+---
+
+## Topic 3.1 — Sessions
+
+A session is server-side state that remembers an authenticated user.
+
+The basic flow looks like this:
+
+1. User logs in.
+2. Server validates the credentials.
+3. Server creates a session record.
+4. Server sends the browser a session ID.
+5. Browser sends that session ID on later requests.
+6. Server looks up the session and identifies the user.
+
+The session data usually lives on the server.
+
+It may be stored in memory, a database, or a shared cache like Redis.
+
+### Example Flow
+
+```text
+POST /login
+→ Server creates session: abc123
+→ Server stores: abc123 = user 15
+→ Browser receives cookie: sessionId=abc123
+→ Browser sends cookie on future requests
+→ Server looks up abc123 and finds user 15
+```
+
+The browser does not need to know the user's role, email, or permissions.
+
+It only holds the session ID.
+
+The server holds the meaning.
+
+### Session Tradeoffs
+
+| Aspect | Session-based auth |
+| --- | --- |
+| State | Stateful |
+| Storage | Server stores session data |
+| Invalidation | Easy and immediate |
+| Scaling | Needs shared session storage |
+| Common use | Traditional web apps |
+
+The biggest advantage is control.
+
+If the user logs out or the account is disabled, the server can delete the session.
+
+The biggest cost is state.
+
+If the application has many servers, they must all be able to read the session.
+
+---
+
+## Topic 3.2 — JWTs
+
+JWT stands for JSON Web Token.
+
+A JWT is a compact signed token that can carry claims about a user.
+
+It has three parts:
+
+```text
+header.payload.signature
+```
+
+The payload may contain claims like:
+
+```json
+{
+  "sub": "15",
+  "role": "ADMIN",
+  "permissions": ["user:read", "user:delete"],
+  "exp": 1785412800
+}
+```
+
+The signature lets the server verify that the token was created by a trusted issuer and was not changed.
+
+### JWT Flow
+
+1. User logs in.
+2. Server validates credentials.
+3. Server signs a JWT.
+4. Client stores the JWT.
+5. Client sends the JWT on later requests.
+6. Server verifies the signature and expiry.
+7. Server reads the claims.
+
+The key idea is that the server may not need to store a session record.
+
+The token carries the data needed to identify the user.
+
+### JWT Tradeoffs
+
+| Aspect | JWT-based auth |
+| --- | --- |
+| State | Often stateless |
+| Storage | Client stores token |
+| Invalidation | Hard until token expires |
+| Scaling | Easy across many servers |
+| Common use | APIs, SPAs, mobile apps, microservices |
+
+JWTs are powerful, but they are not magic.
+
+The server must still validate the signature, expiry, issuer, audience, and expected claims.
+
+A JWT should be trusted only after verification.
+
+---
+
+## Topic 3.3 — Cookies
+
+A cookie is a small piece of data that a server can ask the browser to store.
+
+The server sends it with `Set-Cookie`:
+
+```http
+HTTP/1.1 200 OK
+Set-Cookie: sessionId=abc123; HttpOnly; Secure; SameSite=Lax
+```
+
+Then the browser automatically sends it back:
+
+```http
+GET /dashboard HTTP/1.1
+Cookie: sessionId=abc123
+```
+
+Cookies are not authentication by themselves.
+
+They are a transport and storage mechanism.
+
+A cookie can carry a session ID.
+
+A cookie can also carry a JWT.
+
+### Important Cookie Attributes
+
+| Attribute | Why it matters |
+| --- | --- |
+| `HttpOnly` | JavaScript cannot read the cookie, reducing XSS token theft |
+| `Secure` | Browser only sends the cookie over HTTPS |
+| `SameSite` | Helps reduce CSRF risk |
+| `Max-Age` | Controls how long the cookie should live |
+| `Path` | Limits where the cookie is sent |
+
+For browser-based auth, `HttpOnly`, `Secure`, and `SameSite` are especially important.
+
+---
+
+## Topic 3.4 — How They Work Together
+
+The confusing part is that sessions, JWTs, and cookies can be combined.
+
+| Combination | Meaning | Common use |
+| --- | --- | --- |
+| Session + Cookie | Cookie stores session ID | Traditional web apps |
+| JWT + Cookie | Cookie stores signed token | Browser apps with secure cookies |
+| JWT + Authorization Header | Header carries bearer token | APIs, mobile apps, service calls |
+
+The cookie is not the same as the session.
+
+The cookie may only carry the session ID.
+
+The server-side session is the data the server looks up.
+
+Similarly, a JWT is not the same as a cookie.
+
+A JWT can be stored in a cookie, sent in an `Authorization` header, or used in other controlled environments.
+
+---
+
+## Topic 3.5 — Stateful vs Stateless
+
+Stateful authentication means the server stores login state.
+
+```text
+Client sends session ID
+Server looks up session data
+```
+
+Stateless authentication means the server does not need a session lookup for every request.
+
+```text
+Client sends signed token
+Server verifies token
+```
+
+### Comparison
+
+| Aspect | Session + Cookie | JWT + Cookie | JWT + Header |
+| --- | --- | --- | --- |
+| State | Stateful | Usually stateless | Usually stateless |
+| Main storage | Server session store | Client cookie | Client app storage |
+| Browser auto-sends | Yes | Yes | No |
+| XSS token theft risk | Lower with `HttpOnly` | Lower with `HttpOnly` | Higher if stored in `localStorage` |
+| CSRF concern | Needs protection | Needs `SameSite` or CSRF strategy | Lower for manual headers |
+| Invalidation | Easy | Harder | Harder |
+| Scaling | Needs shared store | Easier | Easier |
+
+This table helped me understand that there is no perfect option.
+
+Every auth mechanism has tradeoffs.
+
+---
+
+## Topic 3.6 — Token Storage Matters
+
+Where a token is stored is a security decision.
+
+Storing JWTs in `localStorage` is risky because JavaScript can read them.
+
+If an XSS vulnerability exists, malicious JavaScript may steal the token.
+
+For browser apps, a safer common pattern is an `HttpOnly`, `Secure`, `SameSite` cookie.
+
+```http
+Set-Cookie: accessToken=...; HttpOnly; Secure; SameSite=Lax
+```
+
+This does not remove every risk, but it reduces one major risk: direct token theft through JavaScript.
+
+Security is always about layers.
+
+---
+
+## My Biggest Realization
+
+I used to mix these words together.
+
+Now I see the roles:
+
+```text
+Sessions remember auth state on the server.
+JWTs carry signed claims.
+Cookies store and send browser data automatically.
+```
+
+They can work together, but they solve different parts of the problem.
+
+That distinction matters because choosing an auth strategy is really choosing a set of tradeoffs.
+
+---
+
+## Part 3 Complete!
+
+## Final Summary
+
+**1. Sessions are server-side state**
+
+The client usually holds only a session ID while the server stores the meaning.
+
+**2. JWTs are signed tokens**
+
+They can carry identity and claims, but they must be verified on every request.
+
+**3. Cookies are transport and storage**
+
+They let browsers automatically send data back to the server.
+
+**4. Stateful and stateless auth have tradeoffs**
+
+Sessions are easier to invalidate. JWTs are easier to scale.
+
+**5. Secure storage matters**
+
+For browser apps, `HttpOnly`, `Secure`, and `SameSite` cookies reduce important risks.
+
+### Checkpoint Questions
+
+**What is a session?**
+
+Server-side state that tracks an authenticated user's session.
+
+**What is a JWT?**
+
+A signed token with a `header.payload.signature` structure that can carry claims.
+
+**What is a cookie?**
+
+A browser mechanism for storing small data and sending it automatically with requests.
+
+**Why is `HttpOnly` important?**
+
+It prevents browser JavaScript from reading the cookie directly.
+
+---
+
+### Preview — Day 5 (Part 4)
+
+Now that the vocabulary is clear, I want to compare the main types of authentication. In Part 4, I will study stateful sessions, stateless tokens, API keys, OAuth 2.0, and OpenID Connect.

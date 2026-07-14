@@ -1,0 +1,343 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 4)
+description: >-
+  Types of authentication: stateful sessions, stateless JWTs, API keys, OAuth
+  2.0, OAuth 1.0, OpenID Connect, and when each model fits.
+slug: backend-first-principles-day-5-part-4
+date: '2026-07-31'
+category: Learning Journey
+readingTime: 14 min read
+day: 5
+part: 4
+series: Learning Backend from First Principles
+order: 504
+published: true
+---
+# Backend from First Principles — Day 5 (Part 4)
+
+# Types of Authentication: Choosing the Right Model
+
+> *"Authentication is not one technique. It is a family of approaches. Sessions, JWTs, API keys, OAuth, and OpenID Connect all answer identity or access questions in different contexts."*
+
+---
+
+## Introduction
+
+In Part 3, I separated sessions, JWTs, and cookies.
+
+Now I want to zoom out and compare authentication styles.
+
+Different systems need different approaches:
+
+```text
+A server-rendered dashboard
+A React single-page app
+A mobile app
+A backend calling another backend
+A third-party app requesting Google access
+```
+
+All of these involve authentication or authorization, but they may not use the same mechanism.
+
+The goal is not to memorize every standard.
+
+The goal is to understand which problem each model solves.
+
+---
+
+## Topic 4.1 — Stateful Authentication
+
+Stateful authentication usually means server-side sessions.
+
+The server stores session data, and the client holds only a session ID.
+
+```text
+Client cookie: sessionId=abc123
+Server store: abc123 → user 15, role USER
+```
+
+### How It Works
+
+1. User logs in.
+2. Server verifies credentials.
+3. Server creates a session record.
+4. Browser receives a session ID in a cookie.
+5. Browser sends the cookie automatically.
+6. Server looks up the session on each request.
+
+### Pros and Cons
+
+| Pros | Cons |
+| --- | --- |
+| Simple mental model | Requires session storage |
+| Easy logout and invalidation | Scaling needs shared store |
+| User data stays on server | Every request may need a lookup |
+| Works well with server-rendered apps | More infrastructure at scale |
+
+Stateful auth is not old-fashioned in a bad way.
+
+It is still a strong choice for many traditional web apps.
+
+Its biggest strength is server control.
+
+---
+
+## Topic 4.2 — Stateless Authentication
+
+Stateless authentication usually means token-based authentication.
+
+The server signs a token, and the client sends it with future requests.
+
+The server validates the token instead of looking up a session.
+
+```text
+Client sends JWT
+Server verifies signature and expiry
+Server reads claims
+```
+
+### Pros and Cons
+
+| Pros | Cons |
+| --- | --- |
+| Scales well across many servers | Harder to invalidate instantly |
+| No shared session store required | Token theft matters until expiry |
+| Works well for APIs and mobile apps | Token payloads can grow |
+| Useful for service-to-service systems | Claims can become stale |
+
+Stateless does not mean "no security checks."
+
+Every request still needs verification.
+
+```text
+Validate signature.
+Validate expiry.
+Validate issuer.
+Validate audience.
+Validate expected claims.
+```
+
+A token is trustworthy only after the backend verifies it.
+
+---
+
+## Topic 4.3 — API Key Authentication
+
+API keys are common for machine-to-machine access.
+
+An API key is usually a long random string issued to a client application.
+
+The client sends it with requests:
+
+```http
+GET /api/reports HTTP/1.1
+X-API-Key: sk_live_abc123...
+```
+
+The server checks whether the key exists, whether it is active, and what access it allows.
+
+### Where API Keys Fit
+
+| Use case | Why API keys fit |
+| --- | --- |
+| Third-party integrations | Identify calling application |
+| Server-to-server requests | No human login needed |
+| Developer APIs | Easy key issuance and revocation |
+| Internal tools | Simple controlled access |
+
+API keys are simple and useful, but they are sensitive secrets.
+
+They should not be exposed in frontend code.
+
+If an API key leaks, it should be rotated or revoked.
+
+---
+
+## Topic 4.4 — OAuth 2.0
+
+OAuth 2.0 is about delegated authorization.
+
+That phrase matters.
+
+OAuth lets a user grant an application limited access to resources without sharing the user's password with that application.
+
+Example:
+
+```text
+I allow a calendar app to read my Google Calendar.
+The calendar app does not receive my Google password.
+It receives an access token with limited permissions.
+```
+
+### Why OAuth Exists
+
+Before OAuth-style flows, a third-party app might ask for a user's username and password for another service.
+
+That is dangerous.
+
+OAuth creates a safer flow:
+
+1. User is redirected to trusted provider.
+2. User approves requested access.
+3. Provider gives the app an authorization code.
+4. App exchanges the code for tokens.
+5. App uses the access token for limited API access.
+
+The third-party app never needs the user's password.
+
+### Common OAuth 2.0 Grant Types
+
+| Grant type | Common use |
+| --- | --- |
+| Authorization Code | Web apps and login flows, often with PKCE |
+| Client Credentials | Machine-to-machine access |
+| Refresh Token | Get new access tokens without asking user to log in again |
+| Device Code | Devices with limited input |
+
+For modern browser and mobile flows, Authorization Code with PKCE is the safer default.
+
+---
+
+## Topic 4.5 — OAuth 1.0 vs OAuth 2.0
+
+OAuth 1.0 and OAuth 2.0 are different.
+
+OAuth 1.0 required request signing and was more complex to implement.
+
+OAuth 2.0 simplified many things by relying heavily on HTTPS and using bearer tokens.
+
+| Aspect | OAuth 1.0 | OAuth 2.0 |
+| --- | --- | --- |
+| Release era | Earlier standard | Modern standard |
+| Complexity | Higher | Lower |
+| Request signing | Required | Usually not required by clients |
+| Security model | Cryptographic request signatures | HTTPS plus tokens |
+| Usage today | Legacy and some platforms | Dominant standard |
+
+OAuth 2.0 is what I will usually encounter in modern apps.
+
+---
+
+## Topic 4.6 — OpenID Connect
+
+OAuth 2.0 is about authorization.
+
+OpenID Connect, or OIDC, adds an identity layer on top of OAuth 2.0.
+
+This distinction is important:
+
+```text
+OAuth 2.0 = What can this app access?
+OIDC = Who is the user?
+```
+
+OIDC introduces an ID token, often a JWT, that contains identity claims.
+
+Example claims:
+
+```json
+{
+  "sub": "123456",
+  "email": "belema@example.com",
+  "name": "Belema",
+  "iss": "https://accounts.example.com",
+  "aud": "my-app"
+}
+```
+
+That is why "Sign in with Google" is usually OIDC, not plain OAuth alone.
+
+### OAuth 2.0 vs OIDC
+
+| Aspect | OAuth 2.0 | OIDC |
+| --- | --- | --- |
+| Main purpose | Authorization | Authentication |
+| Main token | Access token | ID token plus access token |
+| Question | What can the app access? | Who is the user? |
+| Common use | API access delegation | Login and identity |
+
+OAuth and OIDC are related, but they are not interchangeable.
+
+---
+
+## Topic 4.7 — Comparison Table
+
+| Type | Who is identified? | Common use | State | Invalidation |
+| --- | --- | --- | --- | --- |
+| Stateful session | Human user | Traditional web apps | Stateful | Easy |
+| JWT token | Human user or service | APIs, SPAs, mobile apps | Often stateless | Harder |
+| API key | Application or service | Machine-to-machine | Usually stateless | Easy if checked server-side |
+| OAuth 2.0 | App access on behalf of user | Delegated access | Token-based | Via token expiry and revocation |
+| OIDC | Human user identity | Sign in with provider | Token-based | Provider controlled |
+
+The right choice depends on the application.
+
+There is no single winner for every system.
+
+---
+
+## My Biggest Realization
+
+Authentication design is mostly about context.
+
+A session is great when the server wants strong control.
+
+A JWT is useful when many servers need to validate identity without shared session state.
+
+An API key fits machine-to-machine calls.
+
+OAuth solves delegated access.
+
+OIDC solves login on top of OAuth.
+
+The names are less important than the question each tool answers.
+
+---
+
+## Part 4 Complete!
+
+## Final Summary
+
+**1. Stateful authentication stores session data on the server**
+
+It is easy to invalidate but needs shared storage when scaling.
+
+**2. Stateless authentication uses signed tokens**
+
+It scales well but makes instant invalidation harder.
+
+**3. API keys identify applications or services**
+
+They are useful for machine-to-machine access and must be protected like secrets.
+
+**4. OAuth 2.0 is delegated authorization**
+
+It lets apps access resources without receiving the user's password.
+
+**5. OIDC adds authentication to OAuth 2.0**
+
+It provides identity through an ID token.
+
+### Checkpoint Questions
+
+**When should I consider stateful authentication?**
+
+When server-side control and easy invalidation are more important than avoiding session storage.
+
+**What is OAuth 2.0 mainly for?**
+
+Delegated authorization.
+
+**What does OIDC add?**
+
+An identity layer for authentication, including an ID token.
+
+**Should API keys be exposed in frontend code?**
+
+No. API keys used for privileged access should be kept server-side.
+
+---
+
+### Preview — Day 5 (Part 5)
+
+Now that authentication models are clearer, I need to study the second gatekeeper. In Part 5, I will focus on authorization: roles, permissions, policies, RBAC, ABAC, claims, and ACLs.

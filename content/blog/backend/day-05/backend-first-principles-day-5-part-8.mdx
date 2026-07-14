@@ -1,0 +1,368 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 8)
+description: >-
+  Common authentication and authorization pitfalls, plus best practices for
+  password hashing, token storage, HTTPS, rate limiting, server-side checks,
+  logging, and least privilege.
+slug: backend-first-principles-day-5-part-8
+date: '2026-08-04'
+category: Learning Journey
+readingTime: 13 min read
+day: 5
+part: 8
+series: Learning Backend from First Principles
+order: 508
+published: true
+---
+# Backend from First Principles — Day 5 (Part 8)
+
+# Auth Pitfalls and Best Practices
+
+> *"Authentication and authorization bugs are dangerous because they often do not look like normal bugs. The app may still run, the routes may still respond, and the UI may still look correct while the system is quietly unsafe."*
+
+---
+
+## Introduction
+
+At this point, I understand the main concepts:
+
+```text
+Authentication proves identity.
+Authorization checks permission.
+401 means not authenticated.
+403 means authenticated but forbidden.
+```
+
+But knowing the concepts is not enough.
+
+Security depends on the details.
+
+A small mistake can turn a working auth system into a vulnerable one:
+
+```text
+Plain text passwords.
+Tokens that never expire.
+JWTs in localStorage.
+No HTTPS.
+No rate limiting.
+Authorization only on the frontend.
+```
+
+This part is about those mistakes and the habits that prevent them.
+
+---
+
+## Topic 8.1 — Never Store Passwords in Plain Text
+
+Plain text password storage is one of the worst authentication mistakes.
+
+If the database is breached, attackers immediately get every user's password.
+
+The backend should store password hashes, not passwords.
+
+Use password-specific hashing algorithms:
+
+| Algorithm | Why it is acceptable |
+| --- | --- |
+| `bcrypt` | Mature, slow by design, widely supported |
+| `Argon2` | Modern and memory-hard |
+| `scrypt` | Memory-hard and designed for password hashing |
+
+The backend should also use salts and appropriate cost settings.
+
+The flow should be:
+
+```text
+Register:
+password → password hash → store hash
+
+Login:
+submitted password → compare with stored hash
+```
+
+The original password should not be stored.
+
+---
+
+## Topic 8.2 — Be Careful With JWT Storage
+
+JWTs are bearer tokens.
+
+That means whoever has the token can use it until it expires or is rejected.
+
+Storing JWTs in `localStorage` is risky because JavaScript can read `localStorage`.
+
+If an attacker finds an XSS vulnerability, malicious JavaScript may steal the token.
+
+For browser apps, a safer common pattern is:
+
+```http
+Set-Cookie: accessToken=...; HttpOnly; Secure; SameSite=Lax
+```
+
+Important attributes:
+
+| Attribute | Protection |
+| --- | --- |
+| `HttpOnly` | JavaScript cannot read the cookie directly |
+| `Secure` | Cookie is sent only over HTTPS |
+| `SameSite` | Helps reduce CSRF risk |
+
+This does not remove all security concerns, but it reduces direct token theft through JavaScript.
+
+---
+
+## Topic 8.3 — Tokens Should Expire
+
+Access tokens that never expire are dangerous.
+
+If a token is stolen, the attacker can use it forever.
+
+A better pattern is:
+
+```text
+Short-lived access token
+Longer-lived refresh token
+Refresh token rotation
+Revocation strategy
+```
+
+Example:
+
+| Token | Lifetime | Purpose |
+| --- | --- | --- |
+| Access token | 5 to 15 minutes | Access protected APIs |
+| Refresh token | Longer, controlled | Get new access tokens |
+
+The exact lifetime depends on the app's risk profile.
+
+But the principle is clear:
+
+```text
+Limit the damage window if a token leaks.
+```
+
+---
+
+## Topic 8.4 — HTTPS Is Non-Negotiable
+
+Authentication over plain HTTP is unsafe.
+
+Credentials and tokens can be exposed in transit.
+
+Production auth should use HTTPS.
+
+```text
+HTTP  → data may travel in plain text
+HTTPS → data is encrypted in transit
+```
+
+This matters for:
+
+```text
+Passwords
+Session cookies
+JWTs
+API keys
+Refresh tokens
+One-time codes
+```
+
+If a system handles credentials, HTTPS is not optional.
+
+---
+
+## Topic 8.5 — Rate Limit Login Attempts
+
+Login endpoints are natural targets for brute force attacks.
+
+An attacker may try many password guesses for one account or many accounts.
+
+Rate limiting helps slow that down.
+
+Example policy:
+
+```text
+Allow 5 failed attempts per minute per IP and account.
+After that, slow down or temporarily block attempts.
+```
+
+Rate limiting can be based on:
+
+| Signal | Why it helps |
+| --- | --- |
+| IP address | Limits one source |
+| Account identifier | Protects specific users |
+| Device fingerprint | Adds context |
+| Global patterns | Detects distributed abuse |
+
+Rate limiting should be careful not to create easy denial-of-service against real users, but doing nothing is also risky.
+
+---
+
+## Topic 8.6 — Validate Tokens on Every Request
+
+A protected route should not trust a token just because it looks like a JWT.
+
+The backend must validate:
+
+```text
+Signature
+Expiry
+Issuer
+Audience
+Algorithm
+Required claims
+```
+
+Skipping token validation is like accepting any ID card without checking whether it is real.
+
+Every protected request needs authentication checks.
+
+Security should not depend on memory from a previous request unless the server is using a validated session.
+
+---
+
+## Topic 8.7 — Never Authorize Only on the Frontend
+
+The frontend can hide buttons.
+
+The frontend can redirect users.
+
+The frontend can make the interface cleaner.
+
+But the frontend cannot be the final security boundary.
+
+A user can call the API directly:
+
+```http
+DELETE /api/users/15 HTTP/1.1
+Authorization: Bearer valid-token
+```
+
+So the backend must check:
+
+```text
+Is this token valid?
+Is this user allowed to delete users?
+Is this specific delete allowed?
+```
+
+Frontend checks are user experience.
+
+Backend checks are enforcement.
+
+---
+
+## Topic 8.8 — Use Least Privilege
+
+Users and services should receive only the permissions they need.
+
+Examples:
+
+| Bad | Better |
+| --- | --- |
+| Every staff user is admin | Staff receive task-specific roles |
+| Service has full database access | Service can only read needed tables |
+| Token has all permissions | Token has scoped permissions |
+| API key never expires | API key can be rotated and revoked |
+
+Least privilege reduces blast radius.
+
+If something is compromised, fewer actions are available to the attacker.
+
+---
+
+## Topic 8.9 — Log Security Events
+
+Security events should be visible.
+
+Useful events include:
+
+```text
+Failed login attempts
+Password reset requests
+Token refresh failures
+Permission denials
+Role changes
+API key creation and revocation
+Suspicious access patterns
+```
+
+Logs help with debugging, auditing, and attack detection.
+
+But logs must not contain secrets.
+
+Do not log passwords, full tokens, session IDs, or sensitive personal data unless there is a carefully controlled reason.
+
+---
+
+## My Biggest Realization
+
+Auth security is not one setting.
+
+It is a chain.
+
+```text
+Hash passwords.
+Use HTTPS.
+Store tokens carefully.
+Expire credentials.
+Rate limit login.
+Validate every request.
+Authorize on the server.
+Log important events.
+Use least privilege.
+```
+
+If one link is weak, the whole system becomes easier to attack.
+
+---
+
+## Part 8 Complete!
+
+## Final Summary
+
+**1. Never store passwords in plain text**
+
+Use `bcrypt`, `Argon2`, or `scrypt` with salts and appropriate cost settings.
+
+**2. Token storage is a security decision**
+
+For browser apps, `HttpOnly`, `Secure`, `SameSite` cookies are safer than exposing tokens to JavaScript.
+
+**3. Tokens should expire**
+
+Short-lived access tokens limit damage if a token is stolen.
+
+**4. HTTPS is required in production**
+
+Credentials and tokens must be protected in transit.
+
+**5. Authorization must happen on the backend**
+
+Frontend checks can be bypassed.
+
+### Checkpoint Questions
+
+**Why are plain text passwords dangerous?**
+
+A database breach immediately exposes every user's password.
+
+**Why is `localStorage` risky for JWTs?**
+
+JavaScript can read it, so XSS can steal tokens.
+
+**Why do access tokens need expiry?**
+
+To limit how long a stolen token remains useful.
+
+**Why is server-side authorization required?**
+
+Because attackers can bypass the frontend and call APIs directly.
+
+---
+
+### Preview — Day 5 (Part 9)
+
+Now I can connect the whole auth picture. In Part 9, I will put authentication, authorization, tokens, middleware, status codes, and security best practices into one complete backend flow.

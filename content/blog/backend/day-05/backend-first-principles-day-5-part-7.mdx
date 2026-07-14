@@ -1,0 +1,282 @@
+---
+title: Day 5 — Learning Backend from First Principles (Part 7)
+description: >-
+  The critical HTTP status code difference in auth: when to return 401
+  Unauthorized, when to return 403 Forbidden, and how WWW-Authenticate fits in.
+slug: backend-first-principles-day-5-part-7
+date: '2026-08-03'
+category: Learning Journey
+readingTime: 10 min read
+day: 5
+part: 7
+series: Learning Backend from First Principles
+order: 507
+published: true
+---
+# Backend from First Principles — Day 5 (Part 7)
+
+# 401 vs 403: The Two Auth Status Codes I Must Not Confuse
+
+> *"Authentication and authorization have different meanings, so their failure responses should be different too. `401` means the request is not properly authenticated. `403` means the request is authenticated but not allowed."*
+
+---
+
+## Introduction
+
+Auth errors can be confusing because the names are not perfect.
+
+The status code `401 Unauthorized` sounds like an authorization problem.
+
+But in practice, `401` is about authentication.
+
+That is the first thing I need to remember:
+
+```text
+401 = Who are you? I do not know.
+403 = I know who you are, but you cannot do this.
+```
+
+Once I connect these status codes back to authentication and authorization, the difference becomes much clearer.
+
+---
+
+## Topic 7.1 — 401 Unauthorized
+
+`401 Unauthorized` means the request has not been authenticated successfully.
+
+Common reasons:
+
+| Situation | Why it is `401` |
+| --- | --- |
+| No token provided | Server cannot identify the caller |
+| Invalid token | Credential cannot be trusted |
+| Expired token | Credential is no longer valid |
+| Malformed auth header | Server cannot parse the credential |
+| Missing session | No authenticated session exists |
+
+Example:
+
+```http
+GET /api/profile HTTP/1.1
+```
+
+If this route requires login and the request has no credential, the server can return:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
+Content-Type: application/json
+
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+The meaning is:
+
+```text
+You must authenticate before accessing this resource.
+```
+
+---
+
+## Topic 7.2 — The WWW-Authenticate Header
+
+`WWW-Authenticate` tells the client which authentication scheme can be used.
+
+For bearer tokens:
+
+```http
+WWW-Authenticate: Bearer
+```
+
+The header can also include more detail:
+
+```http
+WWW-Authenticate: Bearer error="invalid_token"
+```
+
+This is especially relevant for APIs that use standard auth schemes.
+
+The main idea is:
+
+```text
+401 can challenge the client to authenticate correctly.
+```
+
+That is why `401` belongs to authentication failure.
+
+---
+
+## Topic 7.3 — 403 Forbidden
+
+`403 Forbidden` means the server understood the request and knows the caller, but refuses to allow the action.
+
+Common reasons:
+
+| Situation | Why it is `403` |
+| --- | --- |
+| User lacks required role | Identity is known but insufficient |
+| Missing permission | User cannot perform this action |
+| Resource belongs to someone else | Ownership rule blocks access |
+| Account is restricted | Authenticated user is not allowed |
+| Business rule forbids action | Example: admin cannot delete themselves |
+
+Example:
+
+```http
+DELETE /api/users/15 HTTP/1.1
+Authorization: Bearer valid-user-token
+```
+
+If the token is valid but the user is not an admin:
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "error": "Forbidden",
+  "message": "You do not have permission to access this resource"
+}
+```
+
+The meaning is:
+
+```text
+I know who you are, and you still cannot do this.
+```
+
+---
+
+## Topic 7.4 — The Golden Rule
+
+The rule I want to remember is:
+
+```text
+Use 401 when authentication failed.
+Use 403 when authorization failed.
+```
+
+Another way:
+
+| Question | Failure status |
+| --- | --- |
+| Who are you? | `401 Unauthorized` |
+| What can you do? | `403 Forbidden` |
+
+This maps directly to the Day 5 theme.
+
+Authentication failure returns `401`.
+
+Authorization failure returns `403`.
+
+---
+
+## Topic 7.5 — Example Decision Flow
+
+A protected route can think like this:
+
+```text
+Does the request include a token?
+No → 401
+
+Is the token valid and not expired?
+No → 401
+
+Does the authenticated user have permission?
+No → 403
+
+Is the resource-specific rule satisfied?
+No → 403
+
+Otherwise → continue
+```
+
+Example:
+
+```js
+if (!token) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+
+if (!validToken) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+
+if (!hasPermission) {
+  return res.status(403).json({ error: "Forbidden" });
+}
+```
+
+The code becomes easier to read when the status codes match the concept.
+
+---
+
+## My Biggest Realization
+
+The names are slightly misleading, but the model is simple.
+
+`401 Unauthorized` is really about not being authenticated.
+
+`403 Forbidden` is about not being authorized.
+
+So the status code should tell the client where the failure happened:
+
+```text
+Login problem → 401
+Permission problem → 403
+```
+
+That is the clean mental model.
+
+---
+
+## Part 7 Complete!
+
+## Final Summary
+
+**1. `401 Unauthorized` means authentication failed**
+
+The request has no valid identity.
+
+**2. `403 Forbidden` means authorization failed**
+
+The identity is known, but the action is not allowed.
+
+**3. `WWW-Authenticate` belongs with authentication challenges**
+
+It tells the client which auth scheme can be used.
+
+**4. Missing or invalid tokens should return `401`**
+
+The server cannot trust the caller's identity.
+
+**5. Missing roles or permissions should return `403`**
+
+The server knows the caller but denies the action.
+
+### Checkpoint Questions
+
+**When should an API return `401`?**
+
+When authentication is missing, invalid, expired, or malformed.
+
+**When should an API return `403`?**
+
+When the user is authenticated but lacks permission.
+
+**What does `WWW-Authenticate` do?**
+
+It tells the client which authentication scheme is expected.
+
+**What is the golden rule?**
+
+Use `401` for authentication failure and `403` for authorization failure.
+
+---
+
+### Preview — Day 5 (Part 8)
+
+Now that I know the failure codes, I want to study the common mistakes that create real security problems. In Part 8, I will cover password storage, token storage, HTTPS, rate limiting, server-side authorization, and least privilege.
