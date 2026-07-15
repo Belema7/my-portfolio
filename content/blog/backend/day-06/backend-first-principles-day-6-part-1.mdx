@@ -1,0 +1,179 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 1)
+description: >-
+  Why every API must treat incoming data as untrusted and validate it before
+  malformed, accidental, or hostile input reaches business logic.
+slug: backend-first-principles-day-6-part-1
+date: '2026-08-06'
+category: Learning Journey
+readingTime: 14 min read
+day: 6
+part: 1
+series: Learning Backend from First Principles
+order: 601
+published: true
+---
+# Backend from First Principles — Day 6 (Part 1)
+
+# Validation and Transformation: The Gatekeepers of Data Integrity
+
+> *“Never trust anything that comes from the client. Validate and transform all incoming data before it reaches the service layer.”*
+
+---
+
+## Introduction: The Quality-Control Checkpoint
+
+An API is a boundary between a system I control and clients I do not.
+
+Those clients may be web browsers, mobile apps, command-line tools, third-party services, old application versions, automated bots, or attackers. Even an honest client can send bad data because of a bug, a stale form, a weak network connection, or a misunderstanding of the API contract.
+
+That means every value entering the server must begin with the same status:
+
+```text
+Untrusted until checked.
+```
+
+Day 5 focused on whether a caller is allowed to make a request. Day 6 focuses on a different question:
+
+> **Is the request data safe, correctly shaped, and meaningful enough to process?**
+
+Authentication cannot answer that. A fully authenticated user can still submit an invalid date, a negative quantity, a malformed identifier, or a field they should not be allowed to change.
+
+## The Core Problem
+
+Input reaches an API through more places than the JSON body:
+
+| Input source | Example | Hidden risk |
+| --- | --- | --- |
+| Request body | `{ "quantity": -4 }` | Invalid values or unexpected fields |
+| Query string | `?page=two` | Values arrive as strings |
+| Path parameter | `/users/not-an-id` | Invalid resource identifiers |
+| Header | `Authorization: Basic ???` | Malformed credentials |
+| Cookie | `theme=<script>...` | Tampered client-controlled data |
+| Uploaded file | A renamed executable | Misleading type, size, or content |
+
+If I do not validate these boundaries, the damage moves inward. A malformed value might trigger a runtime error. An unexpected object could corrupt stored data. An unbounded string could waste memory. A field such as `role: "admin"` could become a privilege escalation if the server blindly copies the body into the database.
+
+The problem is not only malicious data. It is **uncontrolled data**.
+
+## A Factory Mental Model
+
+Imagine a factory that receives raw materials from many suppliers. A quality-control inspector checks each delivery before it reaches the assembly line.
+
+The inspector asks:
+
+```text
+Is this the material we ordered?
+Does it meet the required dimensions?
+Is it safe to use?
+Does the quantity match the paperwork?
+```
+
+Rejected material never reaches production. That protects the machines, the workers, and the final product.
+
+An API boundary plays the same role:
+
+```text
+Raw request
+    ↓
+Extract the relevant input
+    ↓
+Transform it into an internal representation
+    ↓
+Validate its shape, type, and meaning
+    ↓
+Only then call the service
+```
+
+A club bouncer offers another useful analogy. A convincing outfit does not replace an ID check, and a valid ID does not grant access to every private room. In the same way, JSON that *looks* correct still needs validation, and valid data still needs authorization.
+
+## Validation and Transformation Are Different
+
+These terms work together, but they are not interchangeable.
+
+**Validation** asks whether a value satisfies a rule:
+
+```text
+Is email present?
+Is age an integer?
+Is the referenced project real?
+```
+
+**Transformation** converts one representation into another:
+
+```text
+"20" → 20
+" TRUE " → true
+"BELEMA@EXAMPLE.COM " → "belema@example.com"
+```
+
+Transformation does not prove validity. `Number("hello")` still produces an unusable value. Validation must confirm that the result is acceptable.
+
+The exact order can depend on the contract. A strict JSON API may reject `"20"` when it requires a number. A query parameter API may intentionally convert the string `"20"` into the number `20`. The important thing is to define the policy explicitly instead of relying on JavaScript coercion.
+
+## What Happens Without a Boundary?
+
+Consider pagination:
+
+```js
+const offset = (req.query.page - 1) * req.query.limit;
+```
+
+This code assumes both values exist, represent numbers, and fall within safe limits. A caller could send:
+
+```http
+GET /api/bookmarks?page=-10&limit=999999999
+```
+
+Even if JavaScript happens to coerce the strings, the request is not safe. Negative offsets can break a query. Huge limits can exhaust memory or overload the database.
+
+A protected boundary establishes a contract first:
+
+```text
+page: integer, minimum 1, default 1
+limit: integer, minimum 1, maximum 100, default 20
+```
+
+Now the service receives a dependable object:
+
+```js
+{ page: 1, limit: 20, offset: 0 }
+```
+
+It does not need to rediscover what the controller should already know.
+
+## Validation Is a Contract, Not a Collection of `if` Statements
+
+Good validation describes the boundary of an operation. For `POST /users`, that contract may say:
+
+- `name` is required, trimmed, and between 1 and 80 characters;
+- `email` is required, normalized, syntactically valid, and unique;
+- `age` is an optional integer in an accepted range;
+- unknown fields are rejected or removed according to policy;
+- `role` cannot be supplied by a normal registration request.
+
+This contract should produce consistent errors and be testable without running the whole application.
+
+## The Golden Rule
+
+The rule I want to carry forward is simple:
+
+> **Validate every client-controlled value at the server boundary before using it.**
+
+Frontend validation improves user experience, but it can be bypassed. TypeScript improves developer experience, but its types disappear at runtime. An ORM can protect query construction, but it does not know every business rule.
+
+The backend must still enforce its own contract.
+
+## What I Learned
+
+Validation is not cleanup added after an API works. It is part of defining what the API means.
+
+The reliable mental model is:
+
+```text
+Outside data is untrusted.
+The boundary establishes trust.
+The service receives only known input.
+```
+
+In Part 2, I will place that boundary inside a controller–service–repository architecture and examine which rules belong at each layer.

@@ -1,0 +1,235 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 7)
+description: >-
+  Safe input transformation for query parameters, booleans, numbers, dates,
+  normalized strings, identifiers, defaults, and strict coercion policies.
+slug: backend-first-principles-day-6-part-7
+date: '2026-08-12'
+category: Learning Journey
+readingTime: 15 min read
+day: 6
+part: 7
+series: Learning Backend from First Principles
+order: 607
+published: true
+---
+# Backend from First Principles — Day 6 (Part 7)
+
+# Transformation: From External Text to Internal Meaning
+
+> *“Transformation is useful only when the conversion policy is explicit. Silent coercion turns bad input into surprising behavior.”*
+
+---
+
+## Introduction
+
+HTTP often carries values as text, while application logic wants numbers, booleans, dates, normalized identifiers, or richer domain objects.
+
+Transformation converts the external representation into the internal one:
+
+| Raw value | Intended result |
+| --- | --- |
+| Query `page=2` | Number `2` |
+| Query `includeDrafts=false` | Boolean `false` |
+| Body `"2026-08-12T09:00:00Z"` | Valid instant/date representation |
+| Email `" Alice@Example.COM "` | Canonical email form chosen by policy |
+
+But transformation must not guess. A permissive parser can turn malformed input into a different valid-looking value.
+
+## Query and Path Parameters Start as Text
+
+This request contains textual query values:
+
+```http
+GET /bookmarks?page=2&limit=20
+```
+
+The server should parse them deliberately:
+
+```js
+function parseInteger(value) {
+  if (typeof value !== "string" || !/^-?\d+$/.test(value)) {
+    return { ok: false };
+  }
+
+  const number = Number(value);
+
+  if (!Number.isSafeInteger(number)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: number };
+}
+```
+
+Why not only use `parseInt`?
+
+```js
+parseInt("20px", 10) // 20
+parseInt("3.9", 10)  // 3
+```
+
+Those results may hide client errors. Validate the complete source string when the contract requires an integer.
+
+## Boolean Parsing Must Be Exact
+
+This is incorrect:
+
+```js
+const includeDrafts = Boolean(req.query.includeDrafts);
+```
+
+Every non-empty string is truthy:
+
+```js
+Boolean("false") // true
+Boolean("0")     // true
+```
+
+An exact parser is safer:
+
+```js
+function parseBoolean(value) {
+  if (value === "true") return { ok: true, value: true };
+  if (value === "false") return { ok: true, value: false };
+  return { ok: false };
+}
+```
+
+If the API also accepts `1` and `0`, that should be an explicit documented choice.
+
+## Defaults Apply to Absence, Not Invalidity
+
+This distinction is essential:
+
+```text
+No `page` supplied → use default page 1
+`page=banana` supplied → return a validation error
+```
+
+Silently replacing invalid input with a default makes client bugs hard to find. A good transformation utility treats missing and malformed values differently:
+
+```js
+function parsePage(value) {
+  if (value === undefined) return { ok: true, value: 1 };
+
+  const result = parseInteger(value);
+  if (!result.ok || result.value < 1) return { ok: false };
+
+  return result;
+}
+```
+
+## Dates Need a Contract
+
+`new Date(value)` accepts many environment-dependent representations. An API should document an exact format and timezone rule.
+
+For an instant, an ISO 8601 string with an offset is clear:
+
+```text
+2026-08-12T09:00:00Z
+```
+
+For a calendar-only birthday, a plain `YYYY-MM-DD` value may be more appropriate because a birthday is not an instant in UTC.
+
+The transformation pipeline should:
+
+```text
+validate exact representation
+→ parse
+→ confirm the result is real
+→ preserve or normalize timezone intentionally
+```
+
+Dates are a domain decision, not merely a constructor call.
+
+## String Normalization
+
+Common transformations include trimming outer whitespace, collapsing repeated spaces, or applying a canonical case:
+
+```js
+function normalizeDisplayName(value) {
+  return value.trim().replace(/\s+/gu, " ");
+}
+
+function normalizeEmail(value) {
+  return value.trim().toLowerCase();
+}
+```
+
+But not every string should be lowercased or altered. Passwords must generally be compared exactly as submitted. Case rules for usernames, international names, and identifiers must follow product policy.
+
+Normalization should be predictable and documented. It should not silently rewrite meaningful content.
+
+## Transformation Is Not Security Sanitization
+
+Lowercasing an email does not prevent injection. Removing `<script>` substrings does not make arbitrary HTML safe. Safe handling depends on where data is used:
+
+- SQL values belong in parameterized queries;
+- HTML text needs context-appropriate output encoding;
+- shell arguments should be avoided or passed without shell interpolation;
+- URLs require allowlisted schemes and careful destination checks;
+- logs need protection against secrets and log-forging characters.
+
+Transform data for meaning; protect each output sink with the right mechanism.
+
+## A Complete Pagination Transformer
+
+```js
+function parsePagination(query) {
+  const page = parsePage(query.page);
+  const limit = query.limit === undefined
+    ? { ok: true, value: 20 }
+    : parseInteger(query.limit);
+
+  if (!page.ok) {
+    return { ok: false, error: { field: "page", code: "invalid_integer" } };
+  }
+
+  if (!limit.ok || limit.value < 1 || limit.value > 100) {
+    return { ok: false, error: { field: "limit", code: "out_of_range" } };
+  }
+
+  return {
+    ok: true,
+    value: {
+      page: page.value,
+      limit: limit.value,
+      offset: (page.value - 1) * limit.value,
+    },
+  };
+}
+```
+
+Now the service receives numbers with known bounds instead of raw query strings.
+
+## Transform Then Validate—or Validate Then Transform?
+
+Both phrases can be correct because transformation often contains validation.
+
+For a query integer:
+
+```text
+validate lexical form → transform to number → validate numeric range
+```
+
+For a display name:
+
+```text
+validate input is a string → trim → validate normalized length
+```
+
+The strongest model is not a slogan about order. It is a staged parser in which every conversion has a defined precondition and every result has a defined postcondition.
+
+## What I Learned
+
+Safe transformation follows four rules:
+
+```text
+Parse deliberately.
+Reject ambiguous input.
+Default only missing values.
+Validate the transformed result.
+```
+
+Part 8 combines extraction, transformation, boundary validation, semantic checks, service calls, and error handling into one complete pipeline.

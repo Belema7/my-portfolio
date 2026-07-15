@@ -1,0 +1,238 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 5)
+description: >-
+  Runtime type validation for strings, finite numbers, integers, booleans,
+  arrays, objects, nullability, and the limits of TypeScript at API boundaries.
+slug: backend-first-principles-day-6-part-5
+date: '2026-08-10'
+category: Learning Journey
+readingTime: 13 min read
+day: 6
+part: 5
+series: Learning Backend from First Principles
+order: 605
+published: true
+---
+# Backend from First Principles — Day 6 (Part 5)
+
+# Type Validation: Is the Runtime Value Correct?
+
+> *“A static type describes what developers intend. Runtime validation proves what the client actually sent.”*
+
+---
+
+## Introduction
+
+Type validation ensures that each incoming value uses the representation required by the API contract.
+
+```text
+name       → string
+age        → integer
+isActive   → boolean
+hobbies    → array of strings
+address    → object
+```
+
+This is especially important in JavaScript because values can be coerced in surprising ways, and in TypeScript because network data remains unknown at runtime.
+
+## The Basic Checks
+
+| Expected value | Useful runtime check |
+| --- | --- |
+| String | `typeof value === "string"` |
+| Finite number | `typeof value === "number" && Number.isFinite(value)` |
+| Integer | `Number.isInteger(value)` |
+| Boolean | `typeof value === "boolean"` |
+| Array | `Array.isArray(value)` |
+| Plain object | Object, non-null, and not an array |
+
+The last two matter because JavaScript has historical quirks:
+
+```js
+typeof []   // "object"
+typeof null // "object"
+```
+
+Therefore this check is incomplete:
+
+```js
+typeof value === "object"
+```
+
+A safer plain-object check starts like this:
+
+```js
+function isPlainObject(value) {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+```
+
+## Numbers Need More Than `typeof`
+
+JavaScript says `NaN` and `Infinity` are numbers:
+
+```js
+typeof NaN      // "number"
+typeof Infinity // "number"
+```
+
+Most APIs do not want either. A quantity usually needs all of these rules:
+
+```js
+function isValidQuantity(value) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 100
+  );
+}
+```
+
+Type and range rules often sit next to each other, even though the range begins to express value semantics.
+
+## Strict Types vs Coercion
+
+Suppose a JSON body contains:
+
+```json
+{ "age": "30", "isActive": "false" }
+```
+
+The strings resemble the intended values, but they are not a number and boolean.
+
+A strict body contract rejects them:
+
+```text
+age must be a JSON number
+isActive must be a JSON boolean
+```
+
+That is usually easier to reason about than broad coercion. JavaScript makes this particularly dangerous:
+
+```js
+Boolean("false") // true
+```
+
+If an API chooses coercion, it should parse an exact allowlist:
+
+```js
+function parseBoolean(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+```
+
+Query and path parameters naturally arrive as text, so deliberate parsing is normal there. JSON already supports native numbers and booleans, so strictness is often preferable.
+
+## Arrays Need Item Validation
+
+Confirming that a value is an array is only the beginning:
+
+```json
+{ "tags": ["api", 42, null] }
+```
+
+The container has the right type, but its elements do not. The complete rule might be:
+
+```text
+tags is an array
+tags contains at most 10 values
+every value is a string
+every string is 1–30 characters after trimming
+duplicate tags are not allowed
+```
+
+Nested arrays and objects require validation all the way down. A valid outer object does not make its children valid.
+
+## Optional, Nullable, and Missing
+
+These contracts are not equivalent:
+
+```ts
+nickname?: string;
+nickname: string | null;
+nickname?: string | null;
+```
+
+- **Optional** means the property may be absent.
+- **Nullable** means the property may be present with `null`.
+- An empty string is still a string and needs a separate rule.
+
+Clear nullability is important for update endpoints. In a patch request, missing may mean “leave unchanged,” while `null` may mean “clear this value.”
+
+## TypeScript Does Not Validate HTTP
+
+This controller is unsafe despite looking typed:
+
+```ts
+type CreateUserBody = {
+  name: string;
+  age: number;
+};
+
+const body = req.body as CreateUserBody;
+```
+
+The `as` keyword tells the compiler to trust the developer. It emits no runtime check. A caller can still send:
+
+```json
+{ "name": 0, "age": "old" }
+```
+
+The honest boundary type is `unknown`. A schema parser validates it and returns a typed result only on success:
+
+```ts
+const input = createUserSchema.parse(req.body);
+// input is now validated and typed
+```
+
+## A Manual Type Validator
+
+```js
+function validateTypes(data) {
+  const errors = [];
+
+  if (typeof data.name !== "string") {
+    errors.push({ field: "name", code: "expected_string" });
+  }
+
+  if (!Number.isInteger(data.age)) {
+    errors.push({ field: "age", code: "expected_integer" });
+  }
+
+  if (typeof data.isActive !== "boolean") {
+    errors.push({ field: "isActive", code: "expected_boolean" });
+  }
+
+  if (!Array.isArray(data.hobbies)) {
+    errors.push({ field: "hobbies", code: "expected_array" });
+  } else if (!data.hobbies.every((item) => typeof item === "string")) {
+    errors.push({ field: "hobbies", code: "expected_string_items" });
+  }
+
+  return errors;
+}
+```
+
+## What I Learned
+
+Type validation is the bridge between untyped external data and dependable application code.
+
+The rules I want to remember are:
+
+```text
+Treat runtime input as unknown.
+Avoid accidental coercion.
+Check arrays and objects precisely.
+Validate nested values.
+Define optionality and nullability explicitly.
+```
+
+Correct types make data usable. They do not yet make it meaningful. Part 6 covers semantic validation and business rules.

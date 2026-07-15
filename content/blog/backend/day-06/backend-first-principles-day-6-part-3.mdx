@@ -1,0 +1,223 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 3)
+description: >-
+  Validation from first principles: syntactic, type, and semantic checks, the
+  input pipeline, trust boundaries, and useful failure responses.
+slug: backend-first-principles-day-6-part-3
+date: '2026-08-08'
+category: Learning Journey
+readingTime: 14 min read
+day: 6
+part: 3
+series: Learning Backend from First Principles
+order: 603
+published: true
+---
+# Backend from First Principles — Day 6 (Part 3)
+
+# What Validation Really Means
+
+> *“Validation is checking whether incoming data is the data the operation expects.”*
+
+---
+
+## Introduction
+
+Validation is the process of deciding whether input satisfies an explicit contract.
+
+That definition sounds simple, but “valid” has several meanings. The string may have a valid format while representing an impossible value. A number may have the right type but violate a business rule. An identifier may look correct but point to no existing resource.
+
+I can make the subject clearer by dividing validation into three levels.
+
+## The Three Levels
+
+| Level | Checks | Main question |
+| --- | --- | --- |
+| Syntactic | Shape, required fields, length, pattern | Does it look right? |
+| Type | String, number, boolean, array, object | Is it represented correctly? |
+| Semantic | Meaning, state, permissions, relationships | Does it make sense here? |
+
+Consider a booking date:
+
+```json
+{ "startDate": "2026-02-30" }
+```
+
+It is a string. It even resembles the `YYYY-MM-DD` pattern. But February 30 does not exist. If the date were real but already in the past, it could still fail the booking rule.
+
+That produces three separate questions:
+
+```text
+Syntactic: does it match the accepted date representation?
+Type/value: can it become a real date?
+Semantic: is that date available and allowed for this booking?
+```
+
+## The Input Pipeline
+
+A dependable pipeline looks like this:
+
+```text
+Raw request
+  → extract selected sources
+  → parse or transform according to policy
+  → validate shape and primitive values
+  → validate business meaning
+  → create trusted command
+  → call service operation
+```
+
+Some libraries combine parsing, coercion, and validation into one schema call. That is fine as long as the behavior is intentional and testable.
+
+For example, query parameters are text at the HTTP boundary:
+
+```http
+GET /reports?year=2026&includeDrafts=false
+```
+
+The API contract may parse those into:
+
+```js
+{ year: 2026, includeDrafts: false }
+```
+
+By contrast, a JSON body contract may require the client to send an actual boolean and reject the string `"false"`. Both policies can be correct. Consistency matters more than silent convenience.
+
+## Validation Narrows Possibilities
+
+Before validation, a value can be almost anything:
+
+```js
+unknown
+```
+
+After validation, the application has a narrower guarantee:
+
+```ts
+type CreateUserInput = {
+  name: string;
+  email: string;
+  age?: number;
+};
+```
+
+TypeScript alone cannot create that guarantee. Network input is runtime data, and static types do not validate it. Writing this is an assertion, not evidence:
+
+```ts
+const input = req.body as CreateUserInput;
+```
+
+A runtime schema or explicit checks must prove the claim.
+
+## Presence Is More Subtle Than Truthiness
+
+This check is common:
+
+```js
+if (!data.quantity) {
+  throw new Error("Quantity is required");
+}
+```
+
+But truthiness combines several values:
+
+```text
+undefined, null, "", 0, false, NaN
+```
+
+Sometimes `0` and `false` are valid. A better contract distinguishes:
+
+- missing;
+- explicitly `null`;
+- empty string;
+- present but invalid;
+- present and valid.
+
+Precise validation produces precise API behavior.
+
+## Failures Are Part of the Contract
+
+A useful validation response tells the caller what can be corrected without exposing internal details:
+
+```json
+{
+  "type": "validation_error",
+  "message": "The request contains invalid fields.",
+  "errors": [
+    {
+      "field": "email",
+      "code": "invalid_format",
+      "message": "Enter a valid email address."
+    },
+    {
+      "field": "age",
+      "code": "out_of_range",
+      "message": "Age must be between 0 and 150."
+    }
+  ]
+}
+```
+
+Machine-readable codes help clients localize or customize messages. Field paths help forms focus the correct input. A stable top-level shape helps every endpoint behave consistently.
+
+However, errors should not echo secrets, stack traces, SQL, internal table names, or entire malicious payloads.
+
+## Validation Is Not Sanitization
+
+Validation asks whether data is allowed. Sanitization or normalization deliberately changes its representation. Output encoding makes data safe for a particular destination.
+
+These should not be blurred:
+
+```text
+Validation: reject a display name longer than 80 characters.
+Normalization: trim surrounding whitespace.
+Parameterized SQL: keep input separate from query syntax.
+HTML output encoding: render text without executing markup.
+```
+
+There is no universal `sanitize()` function that makes a value safe everywhere. Safety depends on the sink: SQL, HTML, shell commands, URLs, and logs each have different rules.
+
+## Validate the Entire Request Surface
+
+Teams often validate `req.body` and forget everything else. But all client-controlled sources deserve a contract:
+
+```text
+body
+query parameters
+path parameters
+headers
+cookies
+file metadata and content
+webhook payloads
+message queue events
+```
+
+Even server-to-server traffic is not automatically trustworthy. Services can be misconfigured or compromised, and contracts can drift.
+
+## The First Line of Defense, Not the Only One
+
+Validation reduces risk, but it does not replace:
+
+- authentication and authorization;
+- parameterized database queries;
+- output encoding;
+- rate limits and size limits;
+- database constraints;
+- secure file handling;
+- observability and auditing.
+
+It is one layer in a defense-in-depth system.
+
+## What I Learned
+
+Validation is the act of converting an external claim into an internal guarantee.
+
+The three-level model gives me a repeatable way to reason:
+
+```text
+Syntactic → Does it look right?
+Type      → Is it represented correctly?
+Semantic  → Does it make sense in this operation?
+```
+
+The next three parts examine each level in detail, beginning with syntactic validation.

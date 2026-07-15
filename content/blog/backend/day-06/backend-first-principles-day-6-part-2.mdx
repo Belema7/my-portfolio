@@ -1,0 +1,221 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 2)
+description: >-
+  Where validation belongs in controller-service-repository architecture, how
+  early rejection protects deeper layers, and where business invariants live.
+slug: backend-first-principles-day-6-part-2
+date: '2026-08-07'
+category: Learning Journey
+readingTime: 15 min read
+day: 6
+part: 2
+series: Learning Backend from First Principles
+order: 602
+published: true
+---
+# Backend from First Principles — Day 6 (Part 2)
+
+# The Layered Architecture: Where Validation Belongs
+
+> *“Reject invalid requests before significant work begins, but keep business invariants protected wherever the business operation runs.”*
+
+---
+
+## Introduction
+
+Saying “validate on the server” is correct, but incomplete. A backend has several layers. If validation is scattered through controllers, services, and repositories without a clear policy, the code becomes hard to reason about.
+
+The useful question is not only **whether** validation happens. It is:
+
+> **Which kind of validation belongs at which boundary?**
+
+## The Three-Layer Model
+
+| Layer | Main responsibility | Should avoid |
+| --- | --- | --- |
+| Controller | HTTP input, status codes, response shape, boundary validation | Business workflows and direct database queries |
+| Service | Use cases, business rules, orchestration, transactions | HTTP-specific objects such as `req` and `res` |
+| Repository | Database reads and writes | HTTP policy and unrelated business decisions |
+
+The request moves downward and the result moves upward:
+
+```text
+HTTP request
+    ↓
+Controller — extract, parse, validate request contract
+    ↓
+Service — enforce use-case and domain rules
+    ↓
+Repository — perform safe persistence operations
+    ↓
+Service result
+    ↓
+Controller — map result to HTTP response
+```
+
+This separation gives each layer a smaller vocabulary. The controller understands headers and status codes. The service understands operations such as “register user” or “place order.” The repository understands records, queries, and transactions.
+
+## Boundary Validation in the Controller
+
+Suppose the API accepts:
+
+```http
+POST /api/orders
+Content-Type: application/json
+
+{
+  "productId": "prod_42",
+  "quantity": 2
+}
+```
+
+The controller boundary should establish that:
+
+- the body is an object;
+- required fields are present;
+- `productId` is a non-empty string in the expected format;
+- `quantity` is an integer within the public API limit;
+- unknown properties are rejected or stripped;
+- parsing and normalization follow the endpoint contract.
+
+After that, it can call a transport-independent service:
+
+```js
+const order = await orderService.placeOrder({
+  customerId: authenticatedUser.id,
+  productId: input.productId,
+  quantity: input.quantity,
+});
+```
+
+Notice what the service does not receive:
+
+```js
+req
+res
+req.body
+req.query
+```
+
+It receives a deliberate command object.
+
+## Why Reject Early?
+
+Early validation gives several benefits at once.
+
+### Security
+
+Unexpected values do not reach sensitive code paths. An allowlist of accepted fields also prevents mass-assignment bugs such as a client submitting `isAdmin: true`.
+
+### Performance
+
+The server does not open a transaction, query inventory, call a payment provider, or publish an event for a request that was malformed from the start.
+
+### Maintainability
+
+The public contract has a visible home. A developer can inspect the request schema without tracing dozens of conditional statements.
+
+### Testability
+
+Controller tests can focus on malformed HTTP input. Service tests can use valid command objects and focus on business behavior.
+
+## An Important Nuance: Services Still Protect Invariants
+
+“Validate before the service layer” must not become “the service layer never checks a rule.” That would be too absolute.
+
+There are two different categories:
+
+```text
+Boundary rule:
+quantity must be an integer from 1 to 100
+
+Business invariant:
+quantity cannot exceed the currently available stock
+```
+
+The controller can check the first rule without any business context. The service normally owns the second because it may require current database state, authorization context, a transaction, and protection from race conditions.
+
+Services may also be called by more than HTTP:
+
+- a background job;
+- a message consumer;
+- a command-line administration tool;
+- another internal service.
+
+If a critical invariant exists only in an HTTP controller, those callers could bypass it. Therefore:
+
+> **Validate transport shape at the boundary; enforce business invariants in the domain or service operation.**
+
+## What the Repository Protects
+
+The repository should not become a general validation layer, but the database must still enforce the invariants it can guarantee reliably.
+
+Examples include:
+
+- `NOT NULL` constraints;
+- unique indexes;
+- foreign keys;
+- check constraints;
+- correct parameterization of queries;
+- transaction and concurrency guarantees.
+
+This is defense in depth, not duplication without purpose.
+
+An email uniqueness schema check in a service can produce a friendly response, but a unique database index is still required because two requests can race:
+
+```text
+Request A checks: email is free
+Request B checks: email is free
+Request A inserts
+Request B inserts
+```
+
+Only the database constraint can reliably make the final decision. The service catches that conflict and maps it to a meaningful result; the controller maps the result to an HTTP response such as `409 Conflict`.
+
+## Separation of Concerns in Practice
+
+Here is a useful ownership map:
+
+| Question | Owner |
+| --- | --- |
+| Is the JSON body shaped correctly? | Controller boundary/schema |
+| Is `quantity` an integer? | Controller boundary/schema |
+| Is the caller authenticated? | Authentication middleware/boundary |
+| May this caller order for this account? | Authorization policy/service |
+| Is enough stock available right now? | Service/domain operation |
+| Is `email` globally unique under concurrency? | Database constraint |
+| Should failure be HTTP 400 or 409? | Controller/error mapper |
+
+The same fact can be checked at more than one layer for a different reason. The key is to know which layer is authoritative.
+
+## A Clean Controller Example
+
+```js
+async function createOrderController(req, res, next) {
+  try {
+    const input = createOrderSchema.parse({
+      body: req.body,
+      userId: req.user.id,
+    });
+
+    const result = await orderService.placeOrder(input);
+    return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+```
+
+The controller is short because it coordinates the boundary. That is a feature, not missing logic.
+
+## What I Learned
+
+A strong backend does not rely on one giant “validation layer.” It uses deliberate boundaries:
+
+```text
+Controller: Is this a valid request?
+Service/domain: Is this operation allowed and meaningful now?
+Repository/database: Can this state be persisted safely?
+```
+
+In Part 3, I will break validation into syntactic, type, and semantic levels so each rule becomes easier to classify.

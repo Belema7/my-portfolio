@@ -1,0 +1,280 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 8)
+description: >-
+  A complete Express-style validation pipeline using runtime schemas, strict
+  request contracts, semantic checks, services, repositories, and error mapping.
+slug: backend-first-principles-day-6-part-8
+date: '2026-08-13'
+category: Learning Journey
+readingTime: 17 min read
+day: 6
+part: 8
+series: Learning Backend from First Principles
+order: 608
+published: true
+---
+# Backend from First Principles — Day 6 (Part 8)
+
+# The Complete Validation Pipeline in Code
+
+> *“The goal of a validation pipeline is not merely to reject bad input. It is to hand the service a small, trustworthy command.”*
+
+---
+
+## Introduction
+
+The ideas from the previous parts become most useful when they form one predictable request pipeline:
+
+```text
+Extract
+→ parse and transform
+→ validate request contract
+→ authenticate and authorize
+→ enforce business invariants
+→ persist safely
+→ map result to HTTP
+```
+
+This part uses Express-style JavaScript and Zod-style schemas to show the architecture. The principles apply equally to Joi, Valibot, Yup, class-validator, Pydantic, Jakarta Bean Validation, or a carefully written custom validator.
+
+## 1. Define the Public Contract
+
+```js
+import { z } from "zod";
+
+const createUserBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    email: z.string().trim().toLowerCase().email().max(254),
+    age: z.number().int().min(0).max(150).optional(),
+  })
+  .strict();
+
+const createUserRequestSchema = z.object({
+  body: createUserBodySchema,
+  requestId: z.string().min(1),
+});
+```
+
+The strict body rejects unknown properties such as `role` or `isAdmin`. The schema accepts a JSON number for `age`; it does not silently coerce a string.
+
+That policy is different for query parameters, where text parsing is expected:
+
+```js
+const positiveIntegerText = z
+  .string()
+  .regex(/^\d+$/)
+  .transform(Number)
+  .refine(Number.isSafeInteger);
+
+const listUsersQuerySchema = z
+  .object({
+    page: positiveIntegerText.pipe(z.number().min(1)).default("1"),
+    limit: positiveIntegerText.pipe(z.number().min(1).max(100)).default("20"),
+  })
+  .strict();
+```
+
+Defaults apply only when a field is absent. A malformed value still fails.
+
+## 2. Parse at the Boundary
+
+```js
+async function createUserController(req, res, next) {
+  try {
+    const parsed = createUserRequestSchema.safeParse({
+      body: req.body,
+      requestId: req.id,
+    });
+
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationErrors(parsed.error));
+    }
+
+    const user = await userService.register(parsed.data.body);
+
+    return res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+```
+
+The controller passes only the validated body to the service. It also shapes the response explicitly so internal fields such as password hashes never leak through serialization.
+
+## 3. Enforce Semantic Rules in the Service
+
+```js
+async function register(input) {
+  const existing = await userRepository.findByEmail(input.email);
+
+  if (existing) {
+    throw new EmailConflictError();
+  }
+
+  try {
+    return await userRepository.create(input);
+  } catch (error) {
+    if (isUniqueEmailViolation(error)) {
+      throw new EmailConflictError();
+    }
+
+    throw error;
+  }
+}
+```
+
+The service performs a friendly pre-check. It also handles the database unique constraint because concurrency can defeat a check-then-insert sequence.
+
+The database remains authoritative for uniqueness.
+
+## 4. Persist an Explicit Object
+
+```js
+async function create(input) {
+  return database.user.create({
+    data: {
+      name: input.name,
+      email: input.email,
+      age: input.age ?? null,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      age: true,
+    },
+  });
+}
+```
+
+Explicit mapping is safer than spreading `req.body` into a persistence call:
+
+```js
+// Dangerous boundary design
+database.user.create({ data: req.body });
+```
+
+Allowlisting protects against accidental fields, privilege fields, and future schema changes.
+
+## 5. Return Structured Validation Errors
+
+```js
+function formatValidationErrors(error) {
+  return {
+    type: "validation_error",
+    message: "The request contains invalid fields.",
+    errors: error.issues.map((issue) => ({
+      field: issue.path.join("."),
+      code: issue.code,
+      message: issue.message,
+    })),
+  };
+}
+```
+
+Example response:
+
+```json
+{
+  "type": "validation_error",
+  "message": "The request contains invalid fields.",
+  "errors": [
+    {
+      "field": "body.email",
+      "code": "invalid_format",
+      "message": "Invalid email address"
+    }
+  ]
+}
+```
+
+In a mature API, public error codes should remain stable even if the underlying library changes. A mapping layer can translate library-specific issue codes into the API’s own vocabulary.
+
+## 6. Map Domain Errors Separately
+
+```js
+function errorHandler(error, req, res, next) {
+  if (error instanceof EmailConflictError) {
+    return res.status(409).json({
+      type: "conflict",
+      code: "email_already_registered",
+      message: "An account already uses that email.",
+    });
+  }
+
+  req.log.error({ error, requestId: req.id }, "Unhandled request error");
+
+  return res.status(500).json({
+    type: "server_error",
+    message: "An unexpected error occurred.",
+    requestId: req.id,
+  });
+}
+```
+
+Validation failures, conflicts, authorization failures, and server failures are different categories. A global error mapper keeps the distinction consistent.
+
+## Middleware Ordering
+
+A typical route stack might be:
+
+```js
+app.post(
+  "/api/users",
+  requestIdMiddleware,
+  bodySizeLimit,
+  express.json(),
+  rateLimitRegistration,
+  createUserController,
+);
+```
+
+For a protected route:
+
+```js
+app.patch(
+  "/api/teams/:teamId/members/:memberId",
+  authenticate,
+  validateChangeRoleRequest,
+  authorizeTeamAdmin,
+  changeMemberRoleController,
+);
+```
+
+The precise order depends on cost and information needs. Size limits should run before expensive parsing. Authentication may run before or after cheap structural validation depending on whether the endpoint wants to reveal validation details to anonymous callers. Authorization must use validated identifiers and trusted identity.
+
+## Test Each Stage
+
+At minimum, tests should cover:
+
+- missing and unknown fields;
+- wrong primitive types;
+- boundary values and over-limit values;
+- invalid nested arrays or objects;
+- normalization behavior;
+- semantic conflicts;
+- concurrent uniqueness enforcement;
+- safe public errors;
+- absence of internal fields in responses.
+
+Property-based or fuzz testing can add malformed shapes humans may not think to write manually.
+
+## What I Learned
+
+The complete flow is:
+
+```text
+Raw request
+→ validated request DTO
+→ service command
+→ protected domain operation
+→ constrained persistence
+→ explicit response DTO
+```
+
+Every arrow is a boundary where the set of possibilities becomes smaller and clearer. Part 9 compares frontend and backend validation and explains why both are valuable but only one can enforce security.

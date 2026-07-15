@@ -1,0 +1,231 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 10)
+description: >-
+  Validation pitfalls and best practices covering allowlists, schemas, error
+  design, injection defenses, limits, observability, testing, and API evolution.
+slug: backend-first-principles-day-6-part-10
+date: '2026-08-15'
+category: Learning Journey
+readingTime: 16 min read
+day: 6
+part: 10
+series: Learning Backend from First Principles
+order: 610
+published: true
+---
+# Backend from First Principles — Day 6 (Part 10)
+
+# Validation Pitfalls and Production Best Practices
+
+> *“Good validation is strict about the contract, careful about security, and predictable for every client that depends on it.”*
+
+---
+
+## Introduction
+
+Validation code can exist and still fail to protect a system. The most dangerous mistakes are often not missing `if` statements. They are unclear ownership, permissive coercion, inconsistent schemas, and false assumptions about what validation can prevent.
+
+## Pitfall 1: Validating Only the Body
+
+An endpoint may validate JSON while trusting path parameters, query strings, headers, cookies, or files.
+
+The fix is to model the whole request surface:
+
+```js
+const requestSchema = z.object({
+  params: paramsSchema,
+  query: querySchema,
+  body: bodySchema,
+  headers: selectedHeadersSchema,
+});
+```
+
+Validate selected headers instead of passing the entire header object into application logic.
+
+## Pitfall 2: Trusting Frontend or TypeScript Checks
+
+Browser validation can be bypassed. TypeScript types are erased at runtime. API input must be validated where it enters the trusted server process.
+
+Treat request data as `unknown` until a runtime parser proves its shape.
+
+## Pitfall 3: Passing Request Bodies Directly to the Database
+
+This is concise and dangerous:
+
+```js
+await db.user.update({
+  where: { id },
+  data: req.body,
+});
+```
+
+It can enable mass assignment and makes future database fields part of the public API accidentally.
+
+Create explicit allowlisted data:
+
+```js
+const changes = {
+  displayName: input.displayName,
+  biography: input.biography,
+};
+```
+
+## Pitfall 4: Broad Coercion
+
+Convenient coercion can turn mistakes into valid-looking values:
+
+```js
+Boolean("false") // true
+parseInt("12px") // 12
+Number("")       // 0
+```
+
+Use exact parsers, document accepted forms, and reject ambiguous input.
+
+## Pitfall 5: Confusing Validation With Injection Defense
+
+An email validator does not prevent SQL injection. A text length limit does not prevent XSS.
+
+Use defenses designed for the destination:
+
+| Destination | Primary defense |
+| --- | --- |
+| SQL | Parameterized queries / safe ORM APIs |
+| HTML | Context-aware output encoding |
+| Shell | Avoid shell construction; use argument APIs |
+| Redirect URL | Allowlisted origins and schemes |
+| File path | Server-generated paths and strict containment |
+
+Validation is an additional allowlist, not a substitute for sink-specific protection.
+
+## Pitfall 6: Friendly Pre-Checks Without Constraints
+
+Checking whether an email exists before insertion does not guarantee uniqueness under concurrency. Protect important invariants with database constraints, transactions, and atomic operations, then map constraint failures into clear domain errors.
+
+## Pitfall 7: Unlimited Input
+
+A syntactically valid payload can still be abusive. Set limits for:
+
+- request body bytes;
+- header size and count;
+- string length;
+- array length and nesting depth;
+- file bytes and dimensions;
+- pagination page size;
+- decompressed content;
+- regex complexity and processing time.
+
+Reject oversized input before expensive parsing whenever possible.
+
+## Pitfall 8: Inconsistent Error Shapes
+
+One endpoint returns a string, another an array, and a third exposes a stack trace. Clients become complicated and internal details leak.
+
+Adopt a stable error envelope:
+
+```json
+{
+  "type": "validation_error",
+  "message": "The request contains invalid fields.",
+  "errors": [
+    { "field": "email", "code": "invalid_format" }
+  ],
+  "requestId": "req_123"
+}
+```
+
+Do not include passwords, tokens, stack traces, raw SQL, or secret configuration in logs or responses.
+
+## Best Practice: Use Declarative Schemas
+
+Libraries reduce repetitive code and standardize nested error paths. Common options include:
+
+| Ecosystem | Examples |
+| --- | --- |
+| JavaScript/TypeScript | Zod, Joi, Valibot, express-validator |
+| Python | Pydantic, Marshmallow |
+| Java | Jakarta Bean Validation / Hibernate Validator |
+| .NET | Data Annotations, FluentValidation |
+
+The library is not the architecture. Choose one based on runtime support, type inference, async rule strategy, error customization, performance, and team familiarity.
+
+Keep business rules in named service or domain operations instead of hiding every database call inside a field schema.
+
+## Best Practice: Validate Early, Preserve Invariants Deeply
+
+Use layers intentionally:
+
+```text
+HTTP boundary → shape, type, parsing, limits
+Service/domain → business meaning, authorization, state transitions
+Database → uniqueness, references, atomic constraints
+Output boundary → explicit serialization and encoding
+```
+
+This is defense in depth with clear ownership.
+
+## Best Practice: Test the Contract
+
+Useful tests include:
+
+- one below, at, and one above each boundary;
+- omitted, null, empty, and whitespace-only values;
+- wrong primitive and container types;
+- unknown properties;
+- invalid nested elements;
+- Unicode and unusually long values;
+- duplicate and conflicting requests;
+- concurrency-sensitive invariants;
+- authorization differences by actor;
+- stable error codes and field paths.
+
+Fuzz tests can generate unexpected JSON shapes, while contract tests keep clients and servers aligned.
+
+## Best Practice: Observe Rejections Safely
+
+Metrics can reveal broken clients and attacks:
+
+```text
+validation failures by endpoint and code
+payload-too-large rejections
+rate-limit events
+conflict frequency
+unexpected-field frequency
+```
+
+Log request IDs and safe metadata, not full sensitive payloads. Sudden spikes can indicate a deployment mismatch or probing activity.
+
+## Best Practice: Evolve Contracts Deliberately
+
+Tightening validation can break existing clients. Before changing a rule:
+
+```text
+measure current rejected/accepted forms
+document the new contract
+update clients
+consider a transition period or version
+deploy observability
+then enforce the stricter rule
+```
+
+Validation is part of API compatibility.
+
+## A Practical Review Checklist
+
+Before shipping an endpoint, ask:
+
+- Are all client-controlled sources covered?
+- Are unknown fields handled explicitly?
+- Are coercions exact and documented?
+- Are sizes and ranges bounded?
+- Are business invariants protected under concurrency?
+- Are authorization and validation separate?
+- Are database and output boundaries safe?
+- Are errors stable, useful, and non-sensitive?
+- Are boundary and failure cases tested?
+
+## What I Learned
+
+Professional validation is not maximum strictness everywhere. It is a deliberate contract with clear ownership, safe conversion, bounded cost, authoritative constraints, and useful failures.
+
+Part 11 brings Day 6 together into one final model from raw request to trusted response.

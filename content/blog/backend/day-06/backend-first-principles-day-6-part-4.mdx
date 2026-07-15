@@ -1,0 +1,216 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 4)
+description: >-
+  Syntactic validation for request shape, required fields, lengths, formats,
+  patterns, nested objects, and strict handling of unknown properties.
+slug: backend-first-principles-day-6-part-4
+date: '2026-08-09'
+category: Learning Journey
+readingTime: 14 min read
+day: 6
+part: 4
+series: Learning Backend from First Principles
+order: 604
+published: true
+---
+# Backend from First Principles — Day 6 (Part 4)
+
+# Syntactic Validation: Does the Input Look Right?
+
+> *“Syntactic validation checks the shape of a message before the application tries to understand its meaning.”*
+
+---
+
+## Introduction
+
+Syntactic validation checks whether input follows the structure and format promised by an API contract.
+
+It answers questions such as:
+
+- Is the body an object rather than an array?
+- Are the required fields present?
+- Does the string stay within its length limit?
+- Does the identifier follow the expected pattern?
+- Are nested objects shaped correctly?
+
+It is the grammar check of an API request.
+
+## Shape Comes First
+
+Assume an endpoint expects:
+
+```json
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "address": {
+    "country": "SO",
+    "city": "Mogadishu"
+  },
+  "tags": ["backend", "api"]
+}
+```
+
+Syntactic rules can define:
+
+```text
+body: object
+name: required string, 1–80 characters
+email: required string, email-like format
+address: optional object
+address.country: exactly two letters
+tags: optional array, at most 10 items
+each tag: non-empty string, at most 30 characters
+```
+
+These rules prevent deeper code from repeatedly asking whether `address` exists or whether `tags.map` is safe to call.
+
+## Required Does Not Always Mean Non-Empty
+
+These values are different:
+
+```json
+{}
+{ "name": null }
+{ "name": "" }
+{ "name": "   " }
+```
+
+The field is missing in the first request, explicitly null in the second, empty in the third, and whitespace-only in the fourth. A good schema defines each case rather than collapsing them accidentally.
+
+For a display name, the policy could be:
+
+```text
+required → must exist
+non-null → null is not allowed
+trimmed → surrounding whitespace is removed
+min length 1 → empty after trimming is rejected
+max length 80 → storage and UI limits are respected
+```
+
+## Format Checks
+
+Common format checks include:
+
+| Value | Possible syntactic rule |
+| --- | --- |
+| Email | A practical email parser or library |
+| Phone | An agreed international or local representation |
+| URL | Parsed URL with allowed schemes |
+| UUID | Exact UUID variant/pattern required by the API |
+| Country code | Supported ISO-style code format |
+| Date string | Exact documented representation |
+
+Regex can help with narrow patterns:
+
+```js
+const phonePattern = /^\d{3}-\d{3}-\d{4}$/;
+
+if (!phonePattern.test(input.phone)) {
+  throw new ValidationError("Use XXX-XXX-XXXX format");
+}
+```
+
+But complex standards are rarely served well by a giant hand-written regex. For emails, URLs, international phone numbers, and dates, a tested parser or validation library is usually clearer.
+
+Syntactic validity is also not proof of ownership. A well-formed email must still be verified if the system needs to know that the user controls it.
+
+## Length and Size Limits Are Security Controls
+
+Length validation is not cosmetic. Without limits, a client can submit a 20-megabyte biography where the product expects 500 characters.
+
+Limits should exist at several levels:
+
+```text
+HTTP server/body parser → maximum request size
+schema → maximum string, array, and object size
+database → appropriate column and record constraints
+file pipeline → maximum bytes, dimensions, and processing cost
+```
+
+When Unicode matters, “length” may mean bytes, code points, or user-perceived characters. The contract should choose the measure that matches storage and product behavior.
+
+## Unknown Fields Need a Policy
+
+Suppose registration expects `name` and `email`, but the client sends:
+
+```json
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "role": "admin"
+}
+```
+
+Blindly passing the body to an ORM can create a mass-assignment vulnerability.
+
+Safe strategies are:
+
+- reject unknown fields;
+- strip unknown fields and construct an allowlisted object;
+- explicitly map every accepted field.
+
+For public write APIs, strict objects are often the clearest default. Silent stripping can be useful for compatibility, but it can also hide client bugs. The choice should be documented.
+
+## A Focused JavaScript Example
+
+```js
+function validateProfileSyntax(value) {
+  const errors = [];
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [{ field: "body", code: "expected_object" }];
+  }
+
+  const allowed = new Set(["name", "email", "phone"]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      errors.push({ field: key, code: "unknown_field" });
+    }
+  }
+
+  const name = typeof value.name === "string" ? value.name.trim() : value.name;
+
+  if (name === undefined) {
+    errors.push({ field: "name", code: "required" });
+  } else if (typeof name !== "string" || name.length < 1 || name.length > 80) {
+    errors.push({ field: "name", code: "invalid_length" });
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (typeof value.email !== "string" || !emailPattern.test(value.email)) {
+    errors.push({ field: "email", code: "invalid_format" });
+  }
+
+  return errors;
+}
+```
+
+In production, a schema library can express the same contract more declaratively and return structured paths for nested failures.
+
+## Syntax Is Necessary but Insufficient
+
+This address is syntactically plausible:
+
+```text
+alice@example.com
+```
+
+But syntactic validation cannot tell whether the mailbox exists, belongs to Alice, or is already registered. Those are semantic questions.
+
+Likewise, `2026-12-01` may match the required format but still be disallowed because a booking window ends in November.
+
+## What I Learned
+
+Syntactic validation protects the structural boundary:
+
+```text
+shape
+presence
+format
+length
+nesting
+allowed fields
+```
+
+It ensures that data looks like the documented language of the API. Part 5 goes one level deeper and checks whether every value has the correct runtime type.

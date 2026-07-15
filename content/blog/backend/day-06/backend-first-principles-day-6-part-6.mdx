@@ -1,0 +1,209 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 6)
+description: >-
+  Semantic validation for business rules, uniqueness, existence, permissions,
+  state transitions, transactions, concurrency, and domain invariants.
+slug: backend-first-principles-day-6-part-6
+date: '2026-08-11'
+category: Learning Journey
+readingTime: 15 min read
+day: 6
+part: 6
+series: Learning Backend from First Principles
+order: 606
+published: true
+---
+# Backend from First Principles — Day 6 (Part 6)
+
+# Semantic Validation: Does the Input Make Sense?
+
+> *“Data can be perfectly shaped and still describe an operation the business must reject.”*
+
+---
+
+## Introduction
+
+Semantic validation checks meaning and context.
+
+A value can pass syntax and type checks while still being invalid:
+
+```json
+{
+  "productId": "prod_42",
+  "quantity": 5
+}
+```
+
+The object is shaped correctly. The identifier is a string. The quantity is an integer. Yet the product may not exist, only two units may be available, or the caller may not be allowed to purchase it.
+
+These are semantic rules.
+
+## Common Semantic Checks
+
+| Rule | Example |
+| --- | --- |
+| Existence | The referenced project must exist |
+| Uniqueness | The username must not already be taken |
+| Relationship | The task must belong to the specified project |
+| Range with meaning | A human age must be plausible |
+| State transition | A cancelled order cannot be shipped |
+| Permission | Only an owner may invite members |
+| Cross-field rule | `endDate` must be after `startDate` |
+| Current-state rule | Requested quantity must not exceed available stock |
+
+Unlike basic shape checks, many semantic checks require application state.
+
+## Cross-Field Meaning
+
+Some rules are available entirely within the validated input:
+
+```js
+function validateDateRange({ startDate, endDate }) {
+  if (endDate <= startDate) {
+    return {
+      field: "endDate",
+      code: "must_be_after_start_date",
+    };
+  }
+}
+```
+
+Both dates can be individually valid while the pair is not. This is why validating each field in isolation is insufficient.
+
+## Rules That Need the Database
+
+Other rules depend on current state:
+
+```js
+async function registerUser(input) {
+  const existing = await userRepository.findByEmail(input.email);
+
+  if (existing) {
+    throw new ConflictError("Email is already registered");
+  }
+
+  return userRepository.create(input);
+}
+```
+
+This pre-check supports a helpful error, but it cannot guarantee uniqueness by itself. Two concurrent requests can both observe that the email is free.
+
+The database needs a unique constraint:
+
+```text
+Friendly pre-check in service
+        +
+Authoritative unique index in database
+        +
+Conflict mapping when the index rejects an insert
+```
+
+That combination is both user-friendly and correct under concurrency.
+
+## State Transitions
+
+Semantic rules often describe which transitions are allowed:
+
+```text
+pending → processing → shipped → delivered
+             ↓
+          cancelled
+```
+
+A client should not be able to jump directly from `pending` to `delivered`. The service can model allowed transitions:
+
+```js
+const transitions = {
+  pending: new Set(["processing", "cancelled"]),
+  processing: new Set(["shipped", "cancelled"]),
+  shipped: new Set(["delivered"]),
+  delivered: new Set(),
+  cancelled: new Set(),
+};
+
+function canTransition(from, to) {
+  return transitions[from]?.has(to) ?? false;
+}
+```
+
+This expresses the rule directly and is easier to test than scattered conditionals.
+
+## Validation, Authorization, and Context
+
+Permissions are semantic because validity can depend on the actor:
+
+```text
+The same request body
+is valid for an administrator
+and invalid for a normal member.
+```
+
+For example, `role: "admin"` may be a recognized enum value but forbidden in a public registration operation.
+
+The service needs trusted identity context, not a user ID supplied in the body:
+
+```js
+await teamService.changeMemberRole({
+  actorId: req.user.id,
+  teamId: input.teamId,
+  memberId: input.memberId,
+  role: input.role,
+});
+```
+
+Authentication establishes `actorId`; authorization and business rules decide whether the change is allowed.
+
+## Transactions Protect Time-Sensitive Rules
+
+Consider inventory:
+
+```text
+Read stock: 1
+Request A decides it can buy 1
+Request B decides it can buy 1
+Both decrement stock
+```
+
+The check was logically correct but not concurrency-safe. Time-sensitive semantic validation must live with the state change inside a transaction, atomic update, lock, or other concurrency control.
+
+A stronger repository operation might perform:
+
+```sql
+UPDATE products
+SET stock = stock - 1
+WHERE id = ? AND stock >= 1;
+```
+
+Then the affected-row count tells the service whether the operation succeeded. The invariant and mutation are one atomic decision.
+
+## Error Categories Matter
+
+Different semantic failures deserve different responses:
+
+| Situation | Common HTTP response |
+| --- | --- |
+| Input cannot satisfy the documented value rules | `400 Bad Request` or `422 Unprocessable Content` |
+| Caller lacks permission | `403 Forbidden` |
+| Referenced resource does not exist | `404 Not Found` |
+| Unique or state conflict | `409 Conflict` |
+
+An API should choose a consistent convention. The crucial point is to distinguish client-correctable validation errors from authorization failures and unexpected server errors.
+
+## Avoid Leaking Sensitive Existence
+
+Sometimes an accurate semantic error leaks information. Registration might say “email already exists,” which can allow account enumeration. Password reset should often return a neutral response regardless of whether the account exists.
+
+Security context can therefore shape error detail:
+
+```text
+Internal rule: account not found
+Public response: if the account exists, instructions will be sent
+```
+
+## What I Learned
+
+Semantic validation protects business truth, not merely data shape.
+
+It belongs close to the operation and its authoritative state. Critical invariants must remain correct under alternate callers, transactions, and concurrent requests.
+
+Part 7 turns to transformation: deliberately converting external representations into the types and formats the application wants to use internally.
