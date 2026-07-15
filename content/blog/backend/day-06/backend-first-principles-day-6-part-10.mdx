@@ -1,0 +1,213 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 10)
+description: Defense in depth for size limits, constraints, races, injection contexts, safe errors, testing, observability, and compatibility.
+slug: backend-first-principles-day-6-part-10
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 18 min read
+day: 6
+part: 10
+series: Learning Backend from First Principles
+order: 610
+published: true
+---
+# Production Validation and Defense in Depth
+
+> *“A schema protects a contract. A production system must also protect resources, destinations, concurrency, and stored truth.”*
+
+## Introduction
+
+Part 9 established why the server is authoritative. I could have stopped at the Zod schema and felt safe.
+
+Then a harder question appeared:
+
+> **What happens under concurrency, oversized requests, database conflicts, or dangerous output contexts?**
+
+The answer is defense in depth.
+
+## Reject Excessive Work Early
+
+A value can be correctly typed and still be too expensive.
+
+Production boundaries need limits for:
+
+- total body and header size;
+- string length;
+- array element count;
+- object nesting depth;
+- file size, count, and accepted content;
+- pagination page size;
+- search complexity.
+
+Body-size middleware should reject an oversized payload before fully parsing it. Schema limits protect fields after parsing. Upload infrastructure may stream files while enforcing byte limits and content checks.
+
+```text
+Connection/request limits
+   ↓
+Parser/body limits
+   ↓
+Schema field and collection limits
+   ↓
+Service workload limits
+```
+
+`limit=1000000` may be a valid integer but an unacceptable query. Cap it to a safe public maximum rather than letting callers select arbitrary work.
+
+Unknown fields also consume work and create ambiguity. Reject them or explicitly strip them according to a documented policy.
+
+## The Uniqueness Race
+
+Two registrations can interleave:
+
+```text
+Request A checks email → available
+Request B checks email → available
+Request A inserts       → success
+Request B inserts       → unique constraint violation
+```
+
+No amount of “check first” service code closes that gap.
+
+The correct cooperation is:
+
+```text
+Service availability check → friendly common-case message
+Database unique index      → final concurrency guarantee
+Error mapping              → safe 409 Conflict
+```
+
+The service must catch the known database conflict and translate it into an application error. It should not expose a vendor constraint name or raw SQL.
+
+## Database Integrity Is Validation Too
+
+The database protects facts that must survive every writer:
+
+- unique indexes prevent duplicate identity values;
+- foreign keys prevent references to missing rows;
+- check constraints restrict stored ranges and relationships;
+- `NOT NULL` protects required stored fields;
+- transactions group changes atomically;
+- atomic updates prevent read-modify-write races.
+
+Application checks provide context and good errors. Database constraints provide authority over stored state. One does not replace the other.
+
+## Validation Is Not Injection Protection
+
+This distinction was one of the most important lessons.
+
+A valid name can contain an apostrophe. A valid comment can contain HTML-looking text. Deleting “dangerous characters” is not a universal solution.
+
+| Destination | Primary protection |
+| --- | --- |
+| SQL | Parameterized queries or safe ORM APIs |
+| HTML | Context-aware output encoding |
+| Shell | Avoid command strings; pass controlled arguments |
+| File storage | Server-controlled paths, size and content checks |
+| Redirect | Allowlisted schemes and destinations |
+
+Validation checks whether data belongs to the business contract. Destination-specific defenses ensure it is used safely in a particular interpreter.
+
+There is no universal sanitizer because SQL, HTML, shells, paths, and URLs use different grammars.
+
+## Safe Error Categories
+
+Status codes communicate different failures:
+
+- `400 Bad Request` — malformed request or chosen contract-validation response;
+- `403 Forbidden` — known caller lacks permission;
+- `404 Not Found` — resource unavailable when disclosure is appropriate;
+- `409 Conflict` — uniqueness or current-state conflict;
+- `422 Unprocessable Content` — an alternative for well-formed but unacceptable input;
+- `500 Internal Server Error` — unexpected server failure.
+
+Teams differ on `400` versus `422`. Consistency and documentation matter more than pretending one universal mapping exists.
+
+Public errors may contain a request ID, safe code, field path, and corrective message. They must not contain stack traces, tokens, passwords, database details, or raw hostile payloads.
+
+## Test the Boundary
+
+Happy-path tests prove very little. For a 1–80 character name:
+
+```text
+0  → fail
+1  → pass
+80 → pass
+81 → fail
+```
+
+Also test:
+
+- missing, `null`, empty, and whitespace-only values;
+- wrong primitive types;
+- arrays where objects are expected;
+- unknown and deeply nested fields;
+- oversized strings, arrays, bodies, and files;
+- Unicode and normalization edge cases;
+- `NaN`, infinity, decimals, and unsafe integers where applicable;
+- strict boolean and partial-number traps;
+- concurrent registrations using the same email;
+- safe responses for known and unexpected errors.
+
+Boundary tests should assert that the service is not called after request parsing fails.
+
+## Observe Without Recording Secrets
+
+Useful telemetry includes endpoint, safe validation code, field category, client version, request ID, response status, and counts over time.
+
+Do not log passwords, access tokens, session cookies, full authorization headers, file contents, or complete sensitive bodies.
+
+```text
+Useful: request_id=abc endpoint=POST_/users code=invalid_type
+Unsafe: full registration body including password and token
+```
+
+Metrics can reveal a broken mobile release or an attack without turning logs into a second sensitive database.
+
+## Validation Rules Are API Compatibility
+
+Changing `name.max(80)` to `name.max(40)` can break deployed clients. Rejecting previously ignored unknown fields can do the same.
+
+Before tightening a contract:
+
+1. measure current inputs safely;
+2. document the new rule;
+3. coordinate client releases;
+4. add observability;
+5. version the API when the change is breaking.
+
+Validation is executable API behavior, not an internal implementation detail.
+
+## Senior-Engineer Questions
+
+```text
+What can the caller control?
+What is the maximum work one request can cause?
+Which guarantee needs current state?
+Which invariant must survive concurrency?
+Which interpreter receives this value next?
+What could an error or log expose?
+Will a stricter rule break an old client?
+```
+
+These questions move validation from a field checklist to system design.
+
+## Checkpoint Questions
+
+### 1. Why keep both a service uniqueness check and a unique index?
+
+The service check improves normal error experience; only the database constraint closes the concurrency race.
+
+### 2. Does a validated string prevent SQL injection?
+
+No. SQL safety requires parameterized queries or safe ORM APIs. Validation and destination defenses solve different problems.
+
+### 3. Why are size limits part of validation?
+
+Correctly shaped values can still exhaust memory or cause unreasonable database work. Resource usage is part of a safe public contract.
+
+### 4. How can validation changes break compatibility?
+
+Existing clients may send values that an older contract accepted. Stricter limits or unknown-field rules can turn successful calls into failures.
+
+> **Coming next:** Every protection is now on the table. Part 11 follows the original Create User request from raw bytes to stored user and safe response.
+

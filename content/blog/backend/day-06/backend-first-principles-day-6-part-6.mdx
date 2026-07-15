@@ -1,0 +1,156 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 6)
+description: Why services enforce permissions, ownership, existence, uniqueness, state transitions, and other business rules.
+slug: backend-first-principles-day-6-part-6
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 13 min read
+day: 6
+part: 6
+series: Learning Backend from First Principles
+order: 606
+published: true
+---
+# Semantic Validation and Business Rules
+
+> *“Correctly shaped data can still request the wrong operation.”*
+
+## Introduction
+
+Parts 4 and 5 proved shape and runtime representation. But one question remained:
+
+> **Can data have the correct format and type but still be unacceptable?**
+
+Absolutely. This is where the service layer finally made sense to me.
+
+## Meaning Depends on Context
+
+`belema@example.com` may be a properly formatted string, yet already belong to an account.
+
+A team ID may be a valid UUID, yet refer to no team.
+
+`"shipped"` may be a valid status enum, yet be an illegal transition from `cancelled`.
+
+Semantic rules include:
+
+- age or pricing policies;
+- email uniqueness;
+- foreign resource existence;
+- ownership and permissions;
+- account status;
+- inventory availability;
+- legal order transitions;
+- whether an actor may assign a role.
+
+Many require current state, so a request schema alone cannot decide them.
+
+## The Service Owns the Operation
+
+```ts
+type CreateUserCommand = {
+  name: string;
+  email: string;
+  age: number;
+};
+
+type Actor = {
+  id: string;
+  permissions: Set<string>;
+};
+
+async function createUser(
+  command: CreateUserCommand,
+  actor: Actor,
+) {
+  if (!actor.permissions.has("users:create")) {
+    throw new ForbiddenError();
+  }
+
+  const existing = await userRepository.findByEmail(command.email);
+
+  if (existing) {
+    throw new EmailAlreadyRegisteredError();
+  }
+
+  return userRepository.create(command);
+}
+```
+
+The service receives known values, then asks business questions. It does not inspect `req.body` or decide HTTP status codes.
+
+If role assignment is a separate privileged operation, the Create User boundary rejects `role` before this service. If a protected admin endpoint accepts role, its service still verifies that the actor may assign that role. Field acceptance and permission are different guarantees.
+
+## Rules That Need Current State
+
+Consider an order:
+
+```text
+pending → paid → shipped → delivered
+   └────────────→ cancelled (only before shipping)
+```
+
+`"shipped"` is valid syntax and a valid enum value. The service must load the current order, check ownership or staff permission, and enforce the transition.
+
+Inventory creates another moving rule:
+
+```text
+quantity is integer ✓
+quantity is positive ✓
+enough inventory now? requires current state
+```
+
+Transactions or atomic updates may be required so the answer remains true while the operation completes.
+
+## The Uniqueness Preview
+
+A friendly service check is not the final uniqueness guarantee:
+
+```text
+Request A checks → available
+Request B checks → available
+Request A inserts
+Request B inserts?
+```
+
+The database needs a unique constraint. The service check improves the normal error experience; the constraint protects truth under concurrency. Part 10 follows this race fully.
+
+## Services Must Protect Every Entry Point
+
+HTTP is not always the only caller:
+
+```text
+HTTP controller ─┐
+Background job ──┼→ Service → Repository
+Message consumer ┘
+```
+
+If permission, ownership, or transition rules exist only in one controller, another entry point may bypass them. The service owns the business operation and applies its invariants consistently.
+
+This does not mean one generic service validates everything. Each use case should accept a narrow command and explicit context.
+
+## My Biggest Realization
+
+I used to say, “Services should never validate.” That is misleading.
+
+Now I say:
+
+> **The boundary validates the request contract. The service validates business meaning. The database validates stored invariants.**
+
+Each layer protects a different kind of truth.
+
+## Checkpoint Questions
+
+### 1. Why does email uniqueness belong beyond the request schema?
+
+Because it depends on changing database state, not just the submitted string.
+
+### 2. Why should services protect rules when controllers already checked them?
+
+Services may be called by jobs and message consumers. Business rules must protect the operation across every entry point.
+
+### 3. Is a service uniqueness query enough?
+
+No. Concurrent requests can both observe availability. A database unique constraint provides the final guarantee.
+
+> **Coming next:** Before validating many values, the boundary converts external representations into useful internal forms. Part 7 separates transformation, normalization, and sanitization.
+

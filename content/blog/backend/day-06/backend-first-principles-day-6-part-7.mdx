@@ -1,0 +1,142 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 7)
+description: Turning documented external representations into useful internal values without hiding malformed input.
+slug: backend-first-principles-day-6-part-7
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 15 min read
+day: 6
+part: 7
+series: Learning Backend from First Principles
+order: 607
+published: true
+---
+# Transformation and Normalization
+
+> *“Conversion changes a representation. Validation decides whether the result is accepted.”*
+
+## Introduction
+
+I used to combine checking and cleaning into one vague word: sanitizing.
+
+Then I asked:
+
+> **What is the difference between checking data and converting data?**
+
+Transformation changes an accepted representation. Validation proves a rule. Normalization applies a consistent application policy.
+
+## The Pipeline
+
+```text
+Extract → Transform → Validate → Service
+```
+
+For the recurring request:
+
+```text
+" Belema "         → trim        → "Belema"
+"BELEMA@EMAIL.COM" → email policy→ "belema@email.com"
+"21"               → strict parse→ 21
+```
+
+Then validation checks lengths, email format, integer range, and unknown fields. Conversion can succeed while validation fails:
+
+```text
+"-500" → -500 → integer ✓ → accepted age range ✗
+```
+
+## Common Explicit Transformations
+
+- trim outer whitespace;
+- collapse internal whitespace only where the domain allows it;
+- map case-insensitive enums to canonical values;
+- parse query numbers and booleans strictly;
+- parse documented date representations;
+- apply defaults for missing values;
+- normalize identifiers according to product policy.
+
+Names are not universally lowercase. Passwords should not be silently trimmed. International text makes aggressive whitespace and case rules dangerous. Every transformation needs a domain reason.
+
+## Email Normalization Is Policy
+
+Lowercasing an email is common, but I should not pretend one universal function defines every provider's identity rules. My application can document a canonicalization policy and apply it consistently before uniqueness checks and storage.
+
+```text
+same normalization policy
+   ↓
+registration, login, lookup, unique index value
+```
+
+Provider-specific tricks such as removing dots or `+tag` portions can merge addresses unexpectedly and should not be invented casually.
+
+## Dates Need Meaning
+
+`2001-04-10` is a calendar date. `2026-07-15T09:00:00Z` is an instant. Blindly calling `new Date()` can introduce timezone shifts or accept surprising forms.
+
+The contract should state the format and meaning, parse it strictly, and verify that the result represents a real date. A booking rule such as “end after start” remains semantic validation.
+
+## Defaults: Missing Is Not Malformed
+
+Pagination makes this clear:
+
+```text
+page missing  → default to 1
+page="2"      → transform to 2
+page="banana" → error
+```
+
+Silently turning `page=banana` into page 1 hides a broken client. Defaults normally apply to absence, not invalid presence.
+
+## Normalization Is Not Universal Sanitization
+
+There is no `sanitize(value)` that makes text safe everywhere.
+
+```text
+SQL destination      → parameterized query
+HTML destination     → context-aware output encoding
+Shell destination    → argument APIs, no command construction
+File destination     → server-controlled path and content checks
+Redirect destination → scheme and host allowlist
+```
+
+Trimming an email does not prevent SQL injection. Removing HTML tags does not make text safe as a shell command. Safety depends on the destination.
+
+## Several Pipelines, Same Principle
+
+```text
+Query page
+extract "10" → parse 10 → validate 1..10000 → service
+
+Query active
+extract "false" → parse false → validate boolean → service
+
+Create User age
+extract "21" → parse 21 → validate 0..150 → service
+
+Create User email
+extract text → normalize policy → validate format → service uniqueness
+```
+
+Repeating the pipeline helped me see that transformation is a public API decision, not random cleanup scattered through controllers and repositories.
+
+## My Biggest Realization
+
+Transformation does not earn unlimited trust. It translates from the external language into the internal language so validation can make precise claims.
+
+Deeper layers should not repeatedly guess whether `"false"` means false or whether a date is local time. The boundary decides once according to the contract.
+
+## Checkpoint Questions
+
+### 1. Can transformation succeed while validation fails?
+
+Yes. `"-500"` can become the integer `-500` and still violate an age or pagination range.
+
+### 2. Why should `page=banana` not receive the default page?
+
+The value is present but malformed. Defaulting would hide a contract error; defaults normally represent omission.
+
+### 3. Why is there no universal sanitizer?
+
+Different destinations have different attack grammars. SQL parameters, HTML encoding, safe shell APIs, controlled paths, and redirect allowlists solve different problems.
+
+> **Coming next:** The policies are clear. Part 8 turns them into a reusable Zod 4 and TypeScript boundary without hundreds of manual `if` statements.

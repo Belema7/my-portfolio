@@ -1,0 +1,213 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 8)
+description: Encoding a strict request boundary with Zod 4, safeParse, inferred TypeScript types, and a narrow service command.
+slug: backend-first-principles-day-6-part-8
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 18 min read
+day: 6
+part: 8
+series: Learning Backend from First Principles
+order: 608
+published: true
+---
+# Implementing the Boundary with Zod and TypeScript
+
+> *“Runtime validation earns the TypeScript type that deeper code is allowed to trust.”*
+
+## Introduction
+
+By Part 7, my rules were clear. But manually repeating `if` statements would make the contract scattered and difficult to reuse.
+
+> **How do I turn these rules into code without creating hundreds of manual checks?**
+
+This repository resolves Zod **4.3.6** in its installed dependency tree. The example therefore uses supported Zod 4 APIs: `z.strictObject`, top-level `z.email()`, `safeParse`, transforms, and inferred output types.
+
+## One Complete Boundary
+
+```ts
+import { z } from "zod";
+
+const ageFromRequest = z
+  .union([z.string(), z.number()])
+  .transform((value, context) => {
+    const age =
+      typeof value === "number"
+        ? value
+        : /^\d+$/.test(value)
+          ? Number(value)
+          : Number.NaN;
+
+    if (!Number.isSafeInteger(age)) {
+      context.addIssue({
+        code: "custom",
+        message: "Age must be a whole number.",
+      });
+      return z.NEVER;
+    }
+
+    return age;
+  })
+  .pipe(z.number().int().min(0).max(150));
+
+export const createUserSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .pipe(z.email().max(254)),
+  age: ageFromRequest,
+});
+
+export type CreateUserCommand =
+  z.output<typeof createUserSchema>;
+```
+
+Read it as:
+
+```text
+name  → string → trim → length
+email → string → trim → lowercase → format and length
+age   → documented string/number → strict integer → range
+body  → only known keys
+```
+
+The input type and output type are not identical. Age may enter as digit text, but successful parsing always produces a number.
+
+## Why `safeParse` Fits a Boundary
+
+```ts
+type PublicFieldError = {
+  field: string;
+  code: string;
+  message: string;
+};
+
+function parseCreateUserBody(body: unknown):
+  | { ok: true; command: CreateUserCommand }
+  | { ok: false; errors: PublicFieldError[] } {
+  const result = createUserSchema.safeParse(body);
+
+  if (!result.success) {
+    return {
+      ok: false,
+      errors: result.error.issues.map((issue) => ({
+        field: issue.path.join(".") || "body",
+        code: issue.code,
+        message: issue.message,
+      })),
+    };
+  }
+
+  return { ok: true, command: result.data };
+}
+```
+
+`safeParse` turns expected invalid input into an explicit branch. Unexpected bugs still throw and follow normal error handling.
+
+## Controller Helper and Typed Handoff
+
+```ts
+async function createUserController(
+  req: Request,
+  res: Response,
+) {
+  const parsed = parseCreateUserBody(req.body);
+
+  if (!parsed.ok) {
+    return res.status(400).json({
+      type: "validation_error",
+      message: "The request contains invalid fields.",
+      errors: parsed.errors,
+    });
+  }
+
+  const user = await userService.createUser(
+    parsed.command,
+    req.auth.actor,
+  );
+
+  return res.status(201).json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    age: user.age,
+  });
+}
+```
+
+The controller knows HTTP. The service receives `CreateUserCommand`, not `Request`.
+
+```ts
+async function createUser(
+  command: CreateUserCommand,
+  actor: Actor,
+) {
+  assertCanCreateUsers(actor);
+  await assertEmailAvailable(command.email);
+  return userRepository.create(command);
+}
+```
+
+The schema does not hide permission or database queries. Those are business rules.
+
+## Unknown Fields and the Recurring Request
+
+With a strict object, this request fails because `role` is unrecognized:
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+If the client removes `role`, successful output becomes:
+
+```ts
+{
+  name: "Belema",
+  email: "belema@email.com",
+  age: 21,
+}
+```
+
+That TypeScript type was earned through runtime parsing. It was not asserted.
+
+## Middleware or Controller Helper?
+
+Either can represent the boundary. Middleware can attach validated data for several controllers; a helper can keep flow explicit and local. NestJS may use a DTO and validation pipe.
+
+The choice matters less than these guarantees:
+
+- raw data is typed as unknown at entry;
+- the schema executes at runtime;
+- failures stop before the service;
+- success produces a narrow command;
+- services still enforce business meaning.
+
+## Error Design
+
+Zod's internal issue codes are useful, but a public API may map them to stable application codes. Changing libraries should not silently change the client contract.
+
+The response should expose field, stable code, and safe message. It should not expose stack traces or the entire submitted payload.
+
+## Checkpoint Questions
+
+### 1. Why use `z.output` for the service command?
+
+Because transformations can make the parsed output different from raw input. The service needs the guaranteed post-transformation type.
+
+### 2. Why keep uniqueness out of this schema?
+
+Uniqueness depends on changing database state and belongs to the business operation, backed by a database constraint.
+
+### 3. What does strict object parsing protect?
+
+It rejects unknown fields, exposes contract drift, and helps prevent over-posting such as public `role` assignment.
+
+> **Coming next:** If the frontend performs similar checks, why must the backend repeat them? Part 9 separates user experience from authority.
+

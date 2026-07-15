@@ -1,0 +1,182 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 2)
+description: Following raw values through the request boundary, controller, service, repository, and database without mixing responsibilities.
+slug: backend-first-principles-day-6-part-2
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 13 min read
+day: 6
+part: 2
+series: Learning Backend from First Principles
+order: 602
+published: true
+---
+# The Journey of Data and the Application Boundary
+
+> *“Raw requests stop at the boundary. Business logic receives an explicit command.”*
+
+## Introduction
+
+Part 1 taught me why every client is outside the trust boundary. That created a new question:
+
+> **Where should raw request data be inspected before it reaches business logic?**
+
+I first answered, “inside the controller.” That was too narrow. Frameworks use different mechanisms, and deeper layers protect different truths.
+
+## The Layered Picture
+
+```text
+Client
+   ↓
+Request Boundary
+   ↓
+Controller
+   ↓
+Service
+   ↓
+Repository
+   ↓
+Database
+```
+
+Each stage answers something different:
+
+```text
+Boundary:   Does this request satisfy the public contract?
+Controller: Which HTTP response represents the result?
+Service:    Is this operation allowed and meaningful now?
+Repository: How is the persistence operation performed?
+Database:   Which stored facts must always remain true?
+```
+
+This separation stops uncertainty from spreading.
+
+## Input Is More Than `req.body`
+
+An HTTP caller can influence:
+
+- request bodies;
+- query parameters;
+- path parameters;
+- selected headers;
+- cookies;
+- uploaded files;
+- the raw token or session used to establish authentication context.
+
+Verified authentication context is more trustworthy than a body field like `userId` because server middleware established it. But the service must still check ownership and permission for this operation.
+
+## Extract, Transform, Validate
+
+The request boundary performs a deliberate pipeline:
+
+```text
+Extract → Transform → Validate
+```
+
+Our request is:
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+Extraction chooses only fields this operation accepts. Transformation converts documented external representations. Validation proves the public request contract.
+
+```ts
+const candidate = {
+  name: req.body?.name,
+  email: req.body?.email,
+  age: req.body?.age,
+};
+```
+
+The schema must still verify that the body is an object and enforce its unknown-field policy. Explicit mapping is an allowlist, not complete validation.
+
+## Why Passing the Whole Body Is Dangerous
+
+```ts
+await userService.createUser(req.body);
+```
+
+This couples business logic to an open-ended HTTP object. Worse, code may later spread it into an ORM:
+
+```ts
+await database.user.create({ data: req.body });
+```
+
+If the model contains `role`, `isVerified`, or `balance`, callers may assign fields the operation never exposed. This is a mass-assignment risk.
+
+The safer handoff is narrow:
+
+```ts
+type CreateUserCommand = {
+  name: string;
+  email: string;
+  age: number;
+};
+
+await userService.createUser(validatedCommand);
+```
+
+Adding a database column does not silently add an API feature.
+
+## Controller, Service, Repository, Database
+
+The controller handles HTTP: it receives validated data, calls a service, shapes a response, and maps expected errors to status codes.
+
+The service applies business rules: permissions, ownership, existence, uniqueness, state transitions, and orchestration. Services do validate—just not raw HTTP representations.
+
+The repository performs persistence operations. It should not parse query strings or return HTTP responses.
+
+The database enforces stored truth with unique indexes, foreign keys, check constraints, transactions, and atomic operations.
+
+```text
+Request-contract validation → boundary
+Business validation         → service
+Stored-data invariants      → database
+```
+
+## One Boundary, Different Framework Shapes
+
+Express may use body-limit middleware, authentication middleware, a schema parser, and a controller helper.
+
+NestJS may use guards, DTOs, and validation/transformation pipes before the controller method.
+
+Validation does not have to live in one physical file. The accurate principle is:
+
+> **Request-contract validation happens at the application boundary before business logic.**
+
+## The Receptionist Analogy
+
+I picture the boundary as a receptionist. Visitors do not wander into every office carrying unexamined folders. The receptionist checks the destination and required packet, then gives the department known information.
+
+The department still decides whether the request is allowed. The records system still enforces filing rules.
+
+## My Biggest Realization
+
+I used to ask, “Where is the validation file?”
+
+Now I ask, “Which guarantee belongs to which boundary?”
+
+Raw requests must not drift into business logic. The boundary creates a command; the service decides meaning; the repository persists; the database protects stored truth.
+
+## Checkpoint Questions
+
+### 1. Why is `userService.createUser(req.body)` unsafe?
+
+It sends an unknown, open-ended external object into business logic and can enable mass assignment. A validated command gives known fields and types.
+
+### 2. Does all validation belong in a controller?
+
+No. Middleware, schemas, DTOs, pipes, and controller helpers may enforce request contracts. Services enforce business rules, and databases enforce stored invariants.
+
+### 3. What is a repository responsible for?
+
+Persistence operations and database mapping—not HTTP request validation or hidden business workflows.
+
+> **Coming next:** I know where the layers sit, but what does “valid” actually prove? Part 3 separates three meanings I used to combine.
+

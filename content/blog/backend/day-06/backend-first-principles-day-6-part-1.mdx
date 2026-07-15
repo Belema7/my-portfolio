@@ -1,0 +1,212 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 1)
+description: Why even data from an official frontend begins as unknown, and why TypeScript cannot make network JSON trustworthy at runtime.
+slug: backend-first-principles-day-6-part-1
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 12 min read
+day: 6
+part: 1
+series: Learning Backend from First Principles
+order: 601
+published: true
+---
+# Why Your API Cannot Trust Incoming Data
+
+> *“The client may be familiar. The data is still external.”*
+
+## Introduction
+
+At the end of Day 5, I understood much more about how controllers, services, and repositories cooperate. But I was still carrying a dangerous assumption.
+
+I thought the official frontend would send safe data because I wrote the form myself.
+
+The form had required fields. The age input used `type="number"`. The role field was not visible. TypeScript described the body. What else could go wrong?
+
+Then another question came into my mind:
+
+> **Does the browser have to obey my form?**
+
+The answer changed my mental model completely.
+
+## The Request I Expected
+
+My Create User endpoint expects:
+
+```http
+POST /users
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "Belema",
+  "email": "belema@email.com",
+  "age": 21
+}
+```
+
+But an HTTP client can send this:
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+It looks close to the expected request, but four questions appear:
+
+- Should whitespace around the name be preserved?
+- Is email casing significant in this application?
+- Does the endpoint accept an age string or only a JSON number?
+- Why is public registration trying to assign `admin`?
+
+The backend cannot answer those questions by trusting the form that was supposed to send the request. It must inspect the request that actually arrived.
+
+## My Frontend Is Not the Only Client
+
+Before this lesson, I pictured one path:
+
+```text
+My React form → My API
+```
+
+The real picture is wider:
+
+```text
+Browser form ───────┐
+Mobile application ┤
+Old client version ┤
+Partner integration├──→ API
+Postman or curl ────┤
+Automated script ──┤
+Attacker ──────────┘
+```
+
+A person can modify a request in developer tools, disable JavaScript, or ignore the website and use `curl`. A mobile application released months ago may keep sending an old shape.
+
+And not every bad request is an attack.
+
+A frontend bug can send `null`. An integration can misunderstand a date. A copy-and-paste mistake can add invisible whitespace. Defensive code protects the system from accidents as well as hostile callers.
+
+## Authentication Does Not Validate Data
+
+At first, I mixed up two guarantees:
+
+```text
+Authentication: Who is making this request?
+Validation:     What data did this request provide?
+```
+
+A valid token may prove that the caller is User 42. It does not prove that:
+
+- `age` is an integer;
+- an uploaded file is within its limit;
+- the caller owns the resource;
+- `role: "admin"` is permitted;
+- an order transition is legal.
+
+An authenticated user can make a mistake. An authenticated user can also act maliciously. Identity is context for permission checks, not a stamp saying every other value is safe.
+
+## TypeScript Cannot Guard the Network
+
+This was the part that finally clicked for me.
+
+```ts
+type CreateUserInput = {
+  name: string;
+  email: string;
+  age: number;
+};
+
+async function createUser(input: CreateUserInput) {
+  return input.age + 1;
+}
+```
+
+TypeScript checks code while I develop. But JSON arrives after the compiler has finished. The network does not transmit a TypeScript type.
+
+```text
+TypeScript source → compile-time checking → JavaScript
+                                             ↑
+                                       runtime JSON arrives
+```
+
+This assertion validates nothing:
+
+```ts
+const input = req.body as CreateUserInput;
+```
+
+It only tells the compiler to believe me. If `age` is actually `"21"`, the runtime value remains a string.
+
+```ts
+"21" + 1; // "211"
+```
+
+The type annotation disappeared. The value did not change.
+
+External data should therefore begin as `unknown` in my mental model. That does not mean it is malicious. It means the application has not proved what it is yet.
+
+## The Security-Checkpoint Analogy
+
+I now imagine the application boundary like airport security.
+
+A passenger may have bought a ticket through the official website. Security still checks the person and luggage that actually arrive. It does not say, “The booking form looked correct, so every bag must be safe.”
+
+The backend boundary works similarly:
+
+```text
+External request
+      ↓
+Which fields are allowed?
+      ↓
+What runtime values arrived?
+      ↓
+Which representations may be converted?
+      ↓
+Is the operation permitted?
+```
+
+The analogy has a limit. Validated data is not harmless in every future context. A valid comment still needs HTML output encoding. A valid filename still needs a server-controlled path. Trust is earned for a specific contract and use.
+
+## What “Never Trust Client Input” Means
+
+The phrase does not mean every user is an attacker.
+
+It means:
+
+> **The server bases its guarantees on checks it controls, not behavior a caller was expected to follow.**
+
+The client suggests an age; the server decides whether its representation is accepted. The client requests a role; the server decides whether that field belongs to this contract and whether the actor has permission.
+
+## My Biggest Realization
+
+I used to think validation repaired suspicious form values.
+
+Now I understand that validation creates an explicit trust boundary between a system I control and values I do not control.
+
+The official frontend is a helpful client. It is not the authority.
+
+## Checkpoint Questions
+
+### 1. Why validate requests from the official frontend?
+
+Because the endpoint can be called without it, and even the official client can be buggy or outdated. The backend must inspect what arrived, not rely on the interface intended to produce it.
+
+### 2. Does authentication make the request trustworthy?
+
+No. Authentication can identify a caller, but type, contract, permission, ownership, and business-state checks remain necessary.
+
+### 3. Why does `req.body as CreateUserInput` not validate JSON?
+
+Type assertions affect compile-time analysis only. They do not inspect or transform runtime values.
+
+### 4. What does treating input as `unknown` mean?
+
+It means the application has not established useful guarantees yet. Runtime checks must narrow the value before code relies on its shape, type, or meaning.
+
+> **Coming next:** If every incoming value begins as untrusted, where does it become safe application data? To answer that, I need to follow the request across the application boundary.

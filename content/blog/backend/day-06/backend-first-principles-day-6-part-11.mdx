@@ -1,0 +1,380 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 11)
+description: The complete journey from raw Create User request through strict parsing, business rules, persistence, constraints, and safe responses.
+slug: backend-first-principles-day-6-part-11
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 20 min read
+day: 6
+part: 11
+series: Learning Backend from First Principles
+order: 611
+published: true
+---
+# The Complete Validation and Transformation Journey
+
+> *“Do not let raw requests become business data by accident. Make every external value earn trust before it can influence the system.”*
+
+## Introduction
+
+Across ten parts, I examined one boundary from different angles. Each idea made sense alone, but I wanted one final picture.
+
+> **What exactly happens to a Create User request from arrival to storage?**
+
+We begin where Part 1 began:
+
+```http
+POST /users
+Content-Type: application/json
+```
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+## The Complete Architecture
+
+```text
+Client
+  ↓
+Transport and request-size protection
+  ↓
+Request boundary
+  ├─ confirm body shape
+  ├─ enforce accepted fields
+  ├─ transform documented representations
+  └─ validate syntax, runtime types, and ranges
+  ↓
+Controller
+  ├─ receive validated command
+  ├─ call service with verified actor context
+  └─ map results and errors to HTTP
+  ↓
+Service
+  ├─ permissions and ownership
+  ├─ existence, uniqueness, and current state
+  └─ orchestrate the operation
+  ↓
+Repository
+  └─ parameterized persistence operation
+  ↓
+Database
+  ├─ unique index
+  ├─ foreign keys and check constraints
+  └─ transaction / atomic guarantee
+  ↓
+Safe public response
+```
+
+## The Fourteen Steps
+
+### 1. The request arrives
+
+Everything is external. Authentication middleware may verify a token and establish actor context, but the JSON remains unknown.
+
+### 2. Request-size protections run
+
+An oversized body is rejected before expensive parsing. Header, upload, and timeout limits apply at their appropriate layers.
+
+### 3. Accepted fields are identified
+
+The endpoint declares `name`, `email`, and `age`. It never spreads the raw body into persistence.
+
+### 4. Unknown fields follow policy
+
+This strict contract rejects `role`. The client receives a field error and the service is not called.
+
+If the operation documented stripping instead, `role` would be deliberately excluded—not accidentally forwarded. For this walkthrough, assume the client corrects the request and resends without it.
+
+### 5. Strings are normalized
+
+Name is trimmed. Email casing is normalized according to the application's documented policy.
+
+### 6. Age is transformed strictly
+
+`"21"` becomes `21` only because digit strings are documented. `"21abc"` would fail rather than partially parse.
+
+### 7. Syntactic validation runs
+
+Required fields, string lengths, email format, object shape, and unknown keys are checked.
+
+### 8. Runtime type validation runs
+
+Output is now guaranteed to contain strings and a safe integer, not `null`, arrays, `NaN`, or accidental coercions.
+
+### 9. The controller receives validated data
+
+```ts
+{
+  name: "Belema",
+  email: "belema@email.com",
+  age: 21,
+}
+```
+
+### 10. The service applies business rules
+
+It checks permission, relevant account policy, and email availability using current state.
+
+### 11. The repository attempts persistence
+
+It maps the narrow command to explicit database fields using a safe ORM or parameterized query.
+
+### 12. The database enforces constraints
+
+The unique email index makes the final concurrency decision. Foreign keys, checks, and transactions protect other stored invariants.
+
+### 13. Expected errors become safe HTTP responses
+
+Validation may become `400`. Permission may become `403`. A uniqueness race may become `409`. Unexpected failures become a generic `500` with a request ID.
+
+### 14. The client receives the result
+
+Success returns `201 Created` and an allowlisted public user representation. Internal columns and secrets remain private.
+
+## Complete Readable TypeScript Sketch
+
+```ts
+import { z } from "zod";
+
+const ageSchema = z
+  .union([z.string(), z.number()])
+  .transform((value, context) => {
+    const age =
+      typeof value === "number"
+        ? value
+        : /^\d+$/.test(value)
+          ? Number(value)
+          : Number.NaN;
+
+    if (!Number.isSafeInteger(age)) {
+      context.addIssue({
+        code: "custom",
+        message: "Age must be a whole number.",
+      });
+      return z.NEVER;
+    }
+
+    return age;
+  })
+  .pipe(z.number().int().min(0).max(150));
+
+const createUserSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  email: z.string().trim().toLowerCase()
+    .pipe(z.email().max(254)),
+  age: ageSchema,
+});
+
+type CreateUserCommand =
+  z.output<typeof createUserSchema>;
+
+class EmailAlreadyRegisteredError extends Error {}
+
+async function createUserController(
+  req: Request,
+  res: Response,
+) {
+  const parsed = createUserSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      type: "validation_error",
+      message: "The request contains invalid fields.",
+      errors: parsed.error.issues.map((issue) => ({
+        field: issue.path.join(".") || "body",
+        code: issue.code,
+        message: issue.message,
+      })),
+    });
+  }
+
+  try {
+    const user = await userService.createUser(
+      parsed.data,
+      req.auth.actor,
+    );
+
+    return res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      age: user.age,
+    });
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return res.status(403).json({
+        type: "forbidden",
+        message: "You cannot perform this operation.",
+      });
+    }
+
+    if (error instanceof EmailAlreadyRegisteredError) {
+      return res.status(409).json({
+        type: "email_conflict",
+        message: "That email is already registered.",
+      });
+    }
+
+    const requestId = req.requestId;
+    req.log.error({ error, requestId });
+
+    return res.status(500).json({
+      type: "internal_error",
+      message: "The request could not be completed.",
+      requestId,
+    });
+  }
+}
+
+const userService = {
+  async createUser(
+    command: CreateUserCommand,
+    actor: Actor,
+  ) {
+    if (!actor.permissions.has("users:create")) {
+      throw new ForbiddenError();
+    }
+
+    if (await userRepository.findByEmail(command.email)) {
+      throw new EmailAlreadyRegisteredError();
+    }
+
+    try {
+      return await userRepository.create(command);
+    } catch (error) {
+      if (isUniqueEmailViolation(error)) {
+        throw new EmailAlreadyRegisteredError();
+      }
+      throw error;
+    }
+  },
+};
+
+const userRepository = {
+  findByEmail(email: string) {
+    return database.user.findUnique({ where: { email } });
+  },
+
+  create(command: CreateUserCommand) {
+    return database.user.create({
+      data: {
+        name: command.name,
+        email: command.email,
+        age: command.age,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        age: true,
+      },
+    });
+  },
+};
+```
+
+The framework-specific `Request`, `Response`, actor, logger, database client, and error classifiers would come from the real application. The architecture is the point: boundary code owns the public contract; services own business rules; repositories own persistence; the database owns final stored invariants.
+
+## Old Mental Model vs New Mental Model
+
+```text
+OLD
+Frontend validated it
+   ↓
+req.body is probably fine
+   ↓
+service and database
+
+NEW
+External values begin unknown
+   ↓
+size limits and explicit request contract
+   ↓
+documented transformation and runtime proof
+   ↓
+service business decision
+   ↓
+explicit persistence and database constraints
+   ↓
+safe response and observable outcome
+```
+
+## Golden Rules I Will Carry Forward
+
+1. Never trust external input, including authenticated input.
+2. Treat TypeScript types as compile-time help, not runtime validation.
+3. Extract or strictly parse only accepted fields.
+4. Transform only documented representations.
+5. Keep request-contract rules at the boundary.
+6. Keep permissions and current-state rules in services.
+7. Keep persistence concerns in repositories.
+8. Use database constraints for facts that must survive concurrency.
+9. Use destination-specific injection defenses.
+10. Limit work, test boundaries, return safe errors, and log no secrets.
+11. Treat validation changes as API compatibility changes.
+
+## Senior-Engineer Questions
+
+```text
+What can the caller control?
+Where does this value earn its type?
+What does normalization mean for this domain?
+Could an unknown field become mass assignment?
+Which rule needs identity or current state?
+Which guarantee must survive a race?
+Where will this value be interpreted next?
+What will the client see, and what will the logs retain?
+Will this rule break an existing client?
+```
+
+## The Biggest Realization
+
+Before this lesson, I thought validation was a collection of field checks.
+
+Now I understand it as the controlled movement of trust through a system.
+
+The request boundary does not prove that every future use is safe. It proves a specific public contract. The service earns business permission. The database preserves stored truth. Output and query APIs protect their own destinations.
+
+That layered mental model is much stronger than one enormous validator.
+
+## Checkpoint Questions
+
+### 1. Why does the first request fail before normalization reaches the service?
+
+Its unknown `role` field violates the strict Create User contract. Rejecting it prevents privileged over-posting and exposes the broken request.
+
+### 2. What guarantee does the controller receive after parsing?
+
+A narrow command with normalized strings and a runtime-validated safe integer. It does not yet guarantee uniqueness or permission.
+
+### 3. Why handle the database conflict after checking email first?
+
+The check gives a friendly normal path, but only the unique index handles concurrent inserts safely. The conflict must still be translated.
+
+### 4. Why can validated data still need output encoding?
+
+Boundary validation proves business shape, not safety for every interpreter. HTML, SQL, shells, paths, and redirects require destination-specific protections.
+
+### 5. What is the final trust-boundary principle?
+
+Do not let raw requests become business data by accident. Make every external value earn the specific trust it needs before influencing the system.
+
+## Closing Reflection
+
+This series changed my mental model.
+
+I no longer see validation as annoying code between a form and a service. I see it as the moment my application takes responsibility for uncertain data.
+
+The client is allowed to ask. The boundary decides what the request says. The service decides whether the operation is meaningful. The database ensures stored truth survives pressure and concurrency.
+
+That was when it finally clicked:
+
+> **Trust is not received from the client. It is earned, one explicit guarantee at a time.**
+
+Day 6 is complete.

@@ -1,0 +1,161 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 3)
+description: Separating syntactic, runtime type, and semantic validation so every rule can live at the correct layer.
+slug: backend-first-principles-day-6-part-3
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 11 min read
+day: 6
+part: 3
+series: Learning Backend from First Principles
+order: 603
+published: true
+---
+# What Validation Actually Means
+
+> *“A value can look correct, have the correct type, and still be unacceptable.”*
+
+## Introduction
+
+Part 2 gave me the boundary picture. But I kept using one word for several jobs: **valid**.
+
+Was a valid email one with an `@` sign? A JavaScript string? An address that exists? One not already registered?
+
+> **When engineers say data is valid, what exactly have they proven?**
+
+## Three Different Proofs
+
+```text
+1. Syntactic validation → Does it look structurally correct?
+2. Runtime type validation → Is it represented by the expected type?
+3. Semantic validation → Does it make sense under current rules?
+```
+
+| Level | Main question | Example failure | Typical owner |
+| --- | --- | --- | --- |
+| Syntactic | Does it match the shape and format? | Missing name | Boundary |
+| Runtime type | Is its current representation accepted? | `age` is an array | Boundary |
+| Semantic | Is the operation meaningful and allowed? | Email exists | Service and database |
+
+## One Request, Three Levels
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+Syntactic questions ask whether the body is an object, required fields exist, email has an accepted format, and `role` is allowed.
+
+Runtime questions ask whether strings really are strings and whether documented digit text can become a finite safe integer.
+
+Semantic questions ask whether the email already exists, whether the age meets product policy, and whether the actor may assign roles.
+
+## Syntactic Validation
+
+Syntax covers required properties, known object shape, string and array lengths, nested structures, formats, and enum membership.
+
+```json
+{ "email": "belema@" }
+```
+
+This value has the correct string type but incomplete syntax. A format rule cannot prove the mailbox exists. A UUID parser cannot prove the resource exists. Syntax promises only form.
+
+## Runtime Type Validation
+
+Compare:
+
+```json
+{ "age": 21 }
+```
+
+```json
+{ "age": "21" }
+```
+
+Humans see the same number; JavaScript sees different values.
+
+```ts
+21 + 1;    // 22
+"21" + 1; // "211"
+typeof null; // "object"
+typeof NaN;  // "number"
+```
+
+An API may require a strict JSON number or document strict conversion from digit text. Silent, inconsistent coercion is the real danger.
+
+“Number” often needs a longer proof:
+
+```text
+number → finite → integer → safe integer → accepted range
+```
+
+## Semantic Validation
+
+`belema@example.com` may pass format and type checks but fail because it belongs to an existing account.
+
+Other examples:
+
+- a valid UUID refers to no team;
+- a valid enum requests an illegal order transition;
+- an integer quantity exceeds inventory;
+- a valid resource ID belongs to another actor;
+- two valid dates are in the wrong order.
+
+These rules often need database state, identity, time, or a transaction. Services normally own them.
+
+## Passing One Level Does Not Imply the Next
+
+| Value | Syntax | Type | Semantics |
+| --- | --- | --- | --- |
+| `"belema@example.com"` | May pass | String passes | May fail uniqueness |
+| `"21"` for strict age | Looks numeric | Fails number contract | Not evaluated |
+| `21` | Passes | Number passes | May fail age policy |
+| Valid team UUID | Passes | String passes | May refer to nothing |
+
+Transformation sits between representations:
+
+```text
+"21" → strict transformation → 21 → range validation
+"-500" → -500 → transformation succeeds → range fails
+"21years" → reject instead of partially parsing
+```
+
+## Why This Matters
+
+Different failures deserve different handling. A format failure can return field errors immediately. A permission failure may be `403`. Missing state may be `404`. A uniqueness conflict may be `409`. A database outage is not client validation at all.
+
+I should not hide an asynchronous uniqueness query inside a primitive email schema. The schema proves the boundary contract; the service protects the operation.
+
+## My New Mental Model
+
+```text
+Known shape
+   ↓
+Known runtime values
+   ↓
+Accepted business operation
+   ↓
+Database-enforced stored truth
+```
+
+No layer should claim more than it proved.
+
+## Checkpoint Questions
+
+### 1. Can a correctly formatted email fail registration?
+
+Yes. Format does not prove availability, ownership, deliverability, or policy acceptance.
+
+### 2. Why is a valid UUID not proof of existence?
+
+Representation checks do not inspect current database state.
+
+### 3. Does transforming `"21"` into `21` prove a valid age?
+
+No. Transformation proves conversion; range and business rules still decide acceptance.
+
+> **Coming next:** The first proof is syntactic. Part 4 explores shape, formats, unknown fields, allowlisting, mass assignment, and useful errors.

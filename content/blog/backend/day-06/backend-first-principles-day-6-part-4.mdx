@@ -1,0 +1,175 @@
+---
+title: Day 6 — Learning Backend from First Principles (Part 4)
+description: How strict request shapes, field formats, allowlists, and useful errors stop malformed and over-posted data.
+slug: backend-first-principles-day-6-part-4
+date: '2026-07-15'
+category: Learning Journey
+readingTime: 14 min read
+day: 6
+part: 4
+series: Learning Backend from First Principles
+order: 604
+published: true
+---
+# Syntactic Validation: Does the Data Look Correct?
+
+> *“A request should say exactly what the contract allows—no less and no more.”*
+
+## Introduction
+
+Part 3 separated syntax, runtime type, and meaning. Now I want to slow down at the first gate:
+
+> **Does the data have the shape and visible format this operation accepts?**
+
+I used to reduce this question to “does the email match a regex?” Syntactic validation is much wider.
+
+## Start With the Whole Shape
+
+A Create User body should be a plain object, not an array, string, or `null`.
+
+```ts
+import { z } from "zod";
+
+const createUserShape = z
+  .object({
+    name: z.string().min(1).max(80),
+    email: z.email().max(254),
+    age: z.unknown(),
+  })
+  .strict();
+```
+
+Zod 4.3.6 is installed in this repository's dependency tree, so these examples use its top-level `z.email()` API. The complete schema comes in Part 8.
+
+Required fields answer “must this property exist?” Optional and nullable are different:
+
+```text
+missing       → property not supplied
+undefined     → JavaScript value, not valid JSON
+null          → supplied explicit empty value
+""            → supplied empty string
+```
+
+The contract must decide each case intentionally.
+
+## Strings, Formats, and Limits
+
+A string rule usually needs more than `typeof value === "string"`:
+
+- trim policy;
+- minimum and maximum length;
+- whether whitespace-only text counts;
+- accepted Unicode;
+- documented format.
+
+Email validation can reject `belema@`. It cannot prove the inbox exists or belongs to the user.
+
+Phone and URL rules also need product-specific contracts. Phone numbers should usually be parsed by a capable library and stored in a canonical form. A syntactically valid URL is not automatically safe for a redirect or server-side fetch.
+
+## Arrays and Nested Objects
+
+Nested input needs limits at every level.
+
+```ts
+const addressSchema = z
+  .object({
+    street: z.string().trim().min(1).max(120),
+    city: z.string().trim().min(1).max(80),
+  })
+  .strict();
+
+const tagsSchema = z
+  .array(z.string().trim().min(1).max(30))
+  .max(10);
+```
+
+Checking only “is array” misses element types and length. Checking only “is object” misses required nested properties and unknown keys. Deep nesting also consumes parsing work, so global nesting and body-size limits matter in production.
+
+## Unknown Fields Are a Security Decision
+
+Our caller supplied:
+
+```json
+{ "role": "admin" }
+```
+
+The registration contract does not accept `role`. Two defensible policies exist:
+
+```text
+Strict rejection → tell the client the field is unsupported.
+Explicit stripping → ignore it according to a documented policy.
+```
+
+For this series I choose strict rejection because it exposes broken or suspicious clients. Whichever policy I choose, I must never spread the raw body into persistence.
+
+This prevents mass assignment:
+
+```ts
+// Dangerous
+database.user.create({ data: req.body });
+
+// Explicit allowlist
+database.user.create({
+  data: {
+    name: command.name,
+    email: command.email,
+    age: command.age,
+  },
+});
+```
+
+An allowlist remains safe when the database later gains `role` or `isVerified`.
+
+## Errors Should Help Without Leaking
+
+“Invalid request” is safe but frustrating. A field-level response can be both safe and useful:
+
+```json
+{
+  "type": "validation_error",
+  "message": "The request contains invalid fields.",
+  "errors": [
+    {
+      "field": "email",
+      "code": "invalid_format",
+      "message": "Enter a valid email address."
+    },
+    {
+      "field": "role",
+      "code": "unrecognized_key",
+      "message": "This field is not accepted."
+    }
+  ]
+}
+```
+
+Stable codes help clients translate messages. Field paths help forms focus the correct input. Responses should not include stack traces, SQL, secrets, or the complete payload.
+
+## Basic Rule vs Production Concern
+
+| Basic rule | Production concern |
+| --- | --- |
+| Name is non-empty | Limit length and define whitespace/Unicode policy |
+| Email matches format | Do not claim existence; normalize consistently |
+| Body is an object | Reject arrays, `null`, unknown keys, deep nesting |
+| Tags are strings | Limit array and element sizes |
+| URL parses | Apply destination-specific allowlists later |
+
+That was another realization: validation is not one giant regex. It is a precise public contract with resource limits.
+
+## Checkpoint Questions
+
+### 1. Why reject `role` even if it has a valid string value?
+
+Because the field itself is outside this operation's contract. Validating its value would accidentally treat privileged assignment as public functionality.
+
+### 2. What can email syntax validation prove?
+
+Only that text follows an accepted format. It cannot prove existence, ownership, deliverability, or uniqueness.
+
+### 3. Why validate array length as well as element shape?
+
+Correct elements can still form an oversized request that wastes memory or creates expensive database work.
+
+> **Coming next:** A value may look correct, but is it represented by the type the application expects? Part 5 explores JavaScript's most dangerous coercion traps.
+
