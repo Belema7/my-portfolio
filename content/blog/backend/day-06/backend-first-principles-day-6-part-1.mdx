@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-6-part-1
 date: '2026-08-06'
 category: Learning Journey
-readingTime: 14 min read
+readingTime: 20 min read
 day: 6
 part: 1
 series: Learning Backend from First Principles
@@ -23,6 +23,30 @@ published: true
 
 ## Introduction: The Quality-Control Checkpoint
 
+When I first started building backend APIs, I thought receiving data was the easy part.
+
+The frontend sends some JSON. The backend reads it. Then the backend saves it to the database.
+
+In my head, the flow looked like this:
+
+```text
+Form → JSON → Backend → Database
+```
+
+Simple.
+
+But then I started asking uncomfortable questions.
+
+What if the frontend sends a number where I expect a name? What if someone sends a negative price? What if the request contains a field that does not appear anywhere in my form? What if a user changes the request before it reaches the server?
+
+That is when I realized something important:
+
+> **The backend does not receive “good data.” It receives claims made by a client.**
+
+The client may claim that a value is an email. The client may claim that a quantity is valid. The client may claim that a user ID exists.
+
+The backend has to check those claims before believing them.
+
 An API is a boundary between a system I control and clients I do not.
 
 Those clients may be web browsers, mobile apps, command-line tools, third-party services, old application versions, automated bots, or attackers. Even an honest client can send bad data because of a bug, a stale form, a weak network connection, or a misunderstanding of the API contract.
@@ -38,6 +62,42 @@ Day 5 focused on whether a caller is allowed to make a request. Day 6 focuses on
 > **Is the request data safe, correctly shaped, and meaningful enough to process?**
 
 Authentication cannot answer that. A fully authenticated user can still submit an invalid date, a negative quantity, a malformed identifier, or a field they should not be allowed to change.
+
+## First, What Does “Incoming Data” Mean?
+
+As a beginner, I used to hear “validate the request” and immediately think about a form body.
+
+For example:
+
+```json
+{
+  "name": "Belema",
+  "email": "belema@example.com"
+}
+```
+
+That JSON is incoming data, but it is only one source.
+
+Imagine this request:
+
+```http
+GET /api/users/42?page=2
+Authorization: Bearer abc123
+```
+
+The backend receives data in several places:
+
+```text
+/users/42                  → 42 is a path parameter
+?page=2                    → page is a query parameter
+Authorization: Bearer ...  → this is a header
+Cookie: session=...        → this is a cookie
+JSON sent with POST         → this is a request body
+```
+
+Every one of those values came from outside the application.
+
+That means every one of them needs an appropriate check.
 
 ## The Core Problem
 
@@ -87,6 +147,44 @@ Only then call the service
 
 A club bouncer offers another useful analogy. A convincing outfit does not replace an ID check, and a valid ID does not grant access to every private room. In the same way, JSON that *looks* correct still needs validation, and valid data still needs authorization.
 
+### Let Us Follow One Bad Package
+
+Imagine that the factory ordered 50-centimeter metal rods.
+
+A delivery truck arrives with a box labeled:
+
+```text
+50 cm metal rods
+```
+
+Should the factory send the box directly to the machines because the label looks correct?
+
+No.
+
+The inspector opens the box and discovers:
+
+```text
+Some rods are 50 cm.
+Some rods are 5 cm.
+One item is made of plastic.
+One item is broken.
+```
+
+The label was only a claim. Inspection turned the claim into knowledge.
+
+The same thing happens with JSON:
+
+```json
+{
+  "email": "belema@example.com",
+  "age": 24
+}
+```
+
+The property is called `email`, but its name does not prove that the value is a valid email. The property is called `age`, but the client could send `-500`, `"twenty-four"`, or even an array.
+
+Property names are labels on boxes. Validation opens the boxes.
+
 ## Validation and Transformation Are Different
 
 These terms work together, but they are not interchangeable.
@@ -110,6 +208,113 @@ Is the referenced project real?
 Transformation does not prove validity. `Number("hello")` still produces an unusable value. Validation must confirm that the result is acceptable.
 
 The exact order can depend on the contract. A strict JSON API may reject `"20"` when it requires a number. A query parameter API may intentionally convert the string `"20"` into the number `20`. The important thing is to define the policy explicitly instead of relying on JavaScript coercion.
+
+### A Beginner Example
+
+Imagine a user visits:
+
+```http
+GET /products?page=2
+```
+
+The value `2` looks like a number in the URL. But query parameters arrive as text.
+
+```js
+req.query.page; // "2"
+```
+
+The backend may need an actual number for a calculation:
+
+```js
+const offset = (page - 1) * 20;
+```
+
+So two separate jobs happen:
+
+```text
+Transformation: "2" becomes 2
+Validation: 2 must be a positive, safe integer
+```
+
+If the client sends `page=hello`, transformation cannot magically make it valid. The backend should explain that the value is not an accepted page number.
+
+This distinction will appear throughout Day 6:
+
+> **Transformation changes representation. Validation decides whether the result is acceptable.**
+
+## A Small API Without Validation
+
+Here is the kind of controller I might have written when I was starting:
+
+```js
+app.post("/users", async (req, res) => {
+  const user = await database.user.create({
+    data: req.body,
+  });
+
+  res.json(user);
+});
+```
+
+It looks clean. It is also trusting everything.
+
+The client can send:
+
+```json
+{
+  "name": 42,
+  "email": "not-an-email",
+  "isAdmin": true
+}
+```
+
+Now several things can go wrong:
+
+1. The database may reject the value and cause an error.
+2. The database may accept bad data that breaks another screen later.
+3. The unexpected `isAdmin` field may create a security problem.
+4. The client receives an unclear internal error instead of useful feedback.
+
+The code was short because it skipped an entire responsibility.
+
+A safer mental flow is:
+
+```text
+Receive unknown data
+→ select only allowed fields
+→ validate them
+→ transform documented values
+→ create a trusted input object
+→ call the business logic
+```
+
+## Invalid Does Not Always Mean Malicious
+
+It is easy to discuss validation only in the language of attackers. But most invalid input probably comes from normal mistakes:
+
+- a mobile app is still using an older API contract;
+- a frontend developer misspelled `firstName` as `firstname`;
+- a user pasted spaces around an email;
+- a browser resubmitted an old form;
+- another service sent `null` instead of omitting a field;
+- a user typed letters inside a quantity input.
+
+Good validation protects the system **and** helps honest clients understand what went wrong.
+
+That is why an error such as this is useful:
+
+```json
+{
+  "field": "email",
+  "message": "Enter a valid email address."
+}
+```
+
+And an error like this is not:
+
+```text
+Something failed.
+```
 
 ## What Happens Without a Boundary?
 
@@ -163,6 +368,24 @@ The rule I want to carry forward is simple:
 Frontend validation improves user experience, but it can be bypassed. TypeScript improves developer experience, but its types disappear at runtime. An ORM can protect query construction, but it does not know every business rule.
 
 The backend must still enforce its own contract.
+
+## Checkpoint Questions
+
+### Why can the backend not trust data just because it came from my own frontend?
+
+Because the frontend runs on the user's device. A user can change the request, skip the interface, use an older client, or send the request through another tool. Even honest frontend code can contain bugs. The backend must protect its own boundary.
+
+### What is the difference between validation and transformation?
+
+Validation checks whether data follows a rule. Transformation changes data from one representation into another. Turning `"2"` into `2` is transformation. Checking that `2` is a positive integer is validation.
+
+### Which parts of an HTTP request can contain untrusted data?
+
+The body, query parameters, path parameters, headers, cookies, and uploaded files can all contain client-controlled data.
+
+### Does authentication make request data valid?
+
+No. Authentication identifies the caller. An authenticated caller can still make mistakes or deliberately send invalid input.
 
 ## What I Learned
 

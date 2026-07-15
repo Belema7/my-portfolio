@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-6-part-5
 date: '2026-08-10'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 20 min read
 day: 6
 part: 5
 series: Learning Backend from First Principles
@@ -23,6 +23,21 @@ published: true
 
 ## Introduction
 
+JavaScript makes it easy to put almost any value inside a variable.
+
+```js
+let age = 24;
+age = "twenty-four";
+age = false;
+age = [24];
+```
+
+The language allows every assignment. That flexibility is useful, but it means a backend must be careful when values come from the network.
+
+If my service expects a number and receives an array, the program may fail far away from the controller where the bad value entered.
+
+Type validation catches that problem at the entrance.
+
 Type validation ensures that each incoming value uses the representation required by the API contract.
 
 ```text
@@ -34,6 +49,57 @@ address    → object
 ```
 
 This is especially important in JavaScript because values can be coerced in surprising ways, and in TypeScript because network data remains unknown at runtime.
+
+## What Is a Data Type?
+
+A data type is the kind of value a program is handling.
+
+Think of labeled containers in a kitchen:
+
+```text
+Flour container
+Water bottle
+Egg carton
+```
+
+Each container is designed for a particular kind of thing. Pouring water into the flour container may technically fit, but everything that uses the container afterward will behave incorrectly.
+
+Programming types work similarly:
+
+```text
+String  → text such as "Belema"
+Number  → numeric values such as 24 or 9.5
+Boolean → true or false
+Array   → an ordered list of values
+Object  → named properties and values
+Null    → an intentional absence of a value
+```
+
+When an API says `age` is a number, that is part of its contract. The string `"24"` contains numeric characters, but it is still text.
+
+## Why the Difference Matters
+
+Imagine calculating a total:
+
+```js
+const total = price + deliveryFee;
+```
+
+With numbers:
+
+```js
+20 + 5; // 25
+```
+
+With strings:
+
+```js
+"20" + "5"; // "205"
+```
+
+The program does not understand that the developer meant money. It follows the rules of the values it actually received.
+
+That is why checking types early prevents confusing errors later.
 
 ## The Basic Checks
 
@@ -131,6 +197,26 @@ function parseBoolean(value) {
 
 Query and path parameters naturally arrive as text, so deliberate parsing is normal there. JSON already supports native numbers and booleans, so strictness is often preferable.
 
+### What Is Coercion?
+
+Coercion means converting a value from one type to another.
+
+Sometimes the developer performs it explicitly:
+
+```js
+Number("24"); // 24
+```
+
+Sometimes JavaScript performs it automatically:
+
+```js
+"5" * 2; // 10
+```
+
+Automatic coercion can make incorrect input appear to work until one unusual value arrives. Backend code is easier to understand when conversion is intentional.
+
+This is also why I should not transform every value simply because I can. If a JSON API promises that `age` is a number, accepting both `24` and `"24"` makes the contract less clear. For query parameters, text-to-number parsing is natural because URLs carry text.
+
 ## Arrays Need Item Validation
 
 Confirming that a value is an array is only the beginning:
@@ -193,6 +279,26 @@ const input = createUserSchema.parse(req.body);
 // input is now validated and typed
 ```
 
+### Compiler Time vs Runtime
+
+This distinction took me a while to understand.
+
+TypeScript works while developers write and build the application:
+
+```text
+Developer writes code → TypeScript checks code → JavaScript is produced
+```
+
+The HTTP request arrives later, while the program is running:
+
+```text
+Client sends JSON → Running server receives value
+```
+
+TypeScript is no longer standing at the network boundary. Runtime validation must inspect the actual value.
+
+Writing `as CreateUserBody` is like attaching a label that says “safe” to a closed box. A schema actually opens the box and checks what is inside.
+
 ## A Manual Type Validator
 
 ```js
@@ -220,6 +326,54 @@ function validateTypes(data) {
   return errors;
 }
 ```
+
+## Following One Value Through the Type Check
+
+Suppose the request contains:
+
+```json
+{ "age": "24" }
+```
+
+The process is:
+
+```text
+Raw value arrives
+→ typeof value is "string"
+→ contract expects an integer
+→ strict JSON body rejects it
+→ client receives a field-level error
+```
+
+For a query string such as `?age=24`, the contract may intentionally do this:
+
+```text
+Raw text "24"
+→ confirm the complete text represents an integer
+→ transform it into number 24
+→ check the accepted range
+→ continue with number 24
+```
+
+Same visible characters. Different input source. Different documented policy.
+
+## Checkpoint Questions
+
+### What is type validation?
+
+It confirms that a runtime value has the representation the API expects, such as a string, integer, boolean, array, or non-null object.
+
+### Why is `typeof value === "object"` not enough for an object field?
+
+Because arrays and `null` also report `"object"` in JavaScript. The validator must exclude them when it expects a normal object.
+
+### Why is `typeof value === "number"` not always enough?
+
+Because `NaN` and `Infinity` are also numbers in JavaScript. Many contracts require a finite number, a safe integer, and an accepted range.
+
+### What is the danger of `Boolean("false")`?
+
+It produces `true` because every non-empty string is truthy. Boolean text should be parsed through exact accepted values.
 
 ## What I Learned
 

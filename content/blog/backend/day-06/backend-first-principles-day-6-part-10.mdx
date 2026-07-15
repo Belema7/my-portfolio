@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-6-part-10
 date: '2026-08-15'
 category: Learning Journey
-readingTime: 16 min read
+readingTime: 22 min read
 day: 6
 part: 10
 series: Learning Backend from First Principles
@@ -22,6 +22,48 @@ published: true
 ---
 
 ## Introduction
+
+By this point, validation sounds straightforward:
+
+```text
+Write rules.
+Check the request.
+Reject invalid input.
+```
+
+But production bugs often hide in the details.
+
+A developer validates the JSON body but forgets the path parameter. Another developer converts `"false"` using `Boolean()` and gets `true`. A service checks uniqueness but forgets that two requests can run at the same time.
+
+The code contains validation, yet the system is still unsafe.
+
+This part is about those traps—the mistakes that look reasonable when I am starting and the habits that make an API dependable.
+
+## A Beginner Mistake: One Giant Validation Function
+
+When all rules are described as “validation,” it is tempting to create one enormous function:
+
+```js
+async function validateEverything(req) {
+  // body shape
+  // user permissions
+  // database lookups
+  // inventory rules
+  // response formatting
+}
+```
+
+Soon the function knows about HTTP, users, orders, the database, and error status codes. It becomes difficult to test and harder to reuse.
+
+The solution is not to stop validating. It is to give each rule an owner:
+
+```text
+Boundary schema → request structure and types
+Authentication → caller identity
+Service/domain → business meaning
+Database → final storage constraints
+Error mapper → public HTTP response
+```
 
 Validation code can exist and still fail to protect a system. The most dangerous mistakes are often not missing `if` statements. They are unclear ownership, permissive coercion, inconsistent schemas, and false assumptions about what validation can prevent.
 
@@ -81,6 +123,20 @@ Number("")       // 0
 ```
 
 Use exact parsers, document accepted forms, and reject ambiguous input.
+
+### Why “Helpful” Conversion Can Be Unhelpful
+
+Suppose an API silently changes every invalid page number to page 1.
+
+The frontend accidentally sends:
+
+```http
+GET /products?page=undefined
+```
+
+The API returns page 1, so no one notices the frontend bug. Users keep seeing the wrong page while both applications appear successful.
+
+A clear `400 Bad Request` exposes the broken contract early. Strictness can make development easier because failures appear near their cause.
 
 ## Pitfall 5: Confusing Validation With Injection Defense
 
@@ -151,6 +207,22 @@ The library is not the architecture. Choose one based on runtime support, type i
 
 Keep business rules in named service or domain operations instead of hiding every database call inside a field schema.
 
+### Libraries Help, but They Do Not Think for Us
+
+A schema library can check that `quantity` is an integer from 1 to 100.
+
+It cannot decide by itself:
+
+```text
+Whether this product may be sold
+Whether this user has permission
+Whether inventory is current
+Whether an order needs a transaction
+Whether an error reveals sensitive information
+```
+
+Libraries reduce repetitive mechanics. Developers still define the contract and architecture.
+
 ## Best Practice: Validate Early, Preserve Invariants Deeply
 
 Use layers intentionally:
@@ -180,6 +252,32 @@ Useful tests include:
 - stable error codes and field paths.
 
 Fuzz tests can generate unexpected JSON shapes, while contract tests keep clients and servers aligned.
+
+### The Boundary Test Pattern
+
+If a username allows 3–30 characters, do not test only a normal value such as 10.
+
+Test around the edges:
+
+```text
+2 characters  → should fail
+3 characters  → should pass
+30 characters → should pass
+31 characters → should fail
+```
+
+This is boundary-value testing. Many bugs hide one step outside the accepted range.
+
+Also test the forms that humans frequently confuse:
+
+```text
+field missing
+field is null
+field is empty string
+field contains only spaces
+field has wrong type
+field has correct type but wrong meaning
+```
 
 ## Best Practice: Observe Rejections Safely
 
@@ -223,6 +321,63 @@ Before shipping an endpoint, ask:
 - Are database and output boundaries safe?
 - Are errors stable, useful, and non-sensitive?
 - Are boundary and failure cases tested?
+
+## A Small Before-and-After Example
+
+### Before
+
+```js
+app.post("/products", async (req, res) => {
+  const product = await db.product.create({ data: req.body });
+  res.json(product);
+});
+```
+
+This route trusts every field, has no size or type policy, mixes HTTP and persistence, and may return internal database fields.
+
+### After
+
+```js
+app.post("/products", authenticateAdmin, async (req, res, next) => {
+  try {
+    const parsed = createProductSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json(formatValidationErrors(parsed.error));
+    }
+
+    const product = await productService.create(parsed.data);
+
+    return res.status(201).json({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+The second example makes the checkpoints visible. Authentication, boundary validation, business logic, persistence, and response shaping have distinct responsibilities.
+
+## Checkpoint Questions
+
+### Why is spreading `req.body` into a database operation dangerous?
+
+It lets the client influence every matching database field, including fields the public endpoint never intended to expose.
+
+### Does input validation prevent SQL injection by itself?
+
+No. Use parameterized queries or safe ORM APIs for SQL. Validation is an additional contract, not a replacement for destination-specific defenses.
+
+### Why should payload and collection sizes be limited?
+
+A value can be structurally valid while causing excessive memory, CPU, storage, or database work.
+
+### What should be tested around every numeric or length boundary?
+
+One value below the minimum, the minimum itself, the maximum itself, and one value above the maximum.
 
 ## What I Learned
 

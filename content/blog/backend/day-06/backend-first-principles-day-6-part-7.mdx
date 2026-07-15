@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-6-part-7
 date: '2026-08-12'
 category: Learning Journey
-readingTime: 15 min read
+readingTime: 21 min read
 day: 6
 part: 7
 series: Learning Backend from First Principles
@@ -23,6 +23,25 @@ published: true
 
 ## Introduction
 
+When I type this URL into a browser:
+
+```text
+/products?page=2&limit=20
+```
+
+I naturally see two numbers: `2` and `20`.
+
+But the server does not receive the URL through human eyes. Query parameters are represented as text.
+
+```js
+req.query.page;  // "2"
+req.query.limit; // "20"
+```
+
+If the backend wants to calculate an offset, it first needs to turn those strings into numbers.
+
+That sounds easy. Then JavaScript shows us why careless conversion is dangerous.
+
 HTTP often carries values as text, while application logic wants numbers, booleans, dates, normalized identifiers, or richer domain objects.
 
 Transformation converts the external representation into the internal one:
@@ -35,6 +54,30 @@ Transformation converts the external representation into the internal one:
 | Email `" Alice@Example.COM "` | Canonical email form chosen by policy |
 
 But transformation must not guess. A permissive parser can turn malformed input into a different valid-looking value.
+
+## Transformation in Everyday Life
+
+Imagine someone tells me a distance is **one mile**, but my application stores kilometers.
+
+The information is not necessarily wrong. It is represented in a different unit.
+
+```text
+External representation: 1 mile
+Transformation: multiply by 1.60934
+Internal representation: 1.60934 kilometers
+```
+
+Or imagine receiving a date written as text:
+
+```text
+"2026-08-12"
+```
+
+The service may want a validated date value rather than arbitrary text.
+
+Transformation is the translator standing between the client's language and the application's language.
+
+But a translator should not invent meaning. If the client says “banana miles,” the translator should report that the value cannot be understood.
 
 ## Query and Path Parameters Start as Text
 
@@ -120,6 +163,25 @@ function parsePage(value) {
 }
 ```
 
+### Think of Ordering at a Restaurant
+
+A menu says:
+
+```text
+If no drink size is selected, use Medium.
+```
+
+The customer leaves the choice empty. Medium is a reasonable default.
+
+But if the customer writes `spaceship` as the drink size, silently choosing Medium hides the fact that the order is invalid.
+
+The same rule applies to APIs:
+
+```text
+Missing optional value → default may apply
+Present but invalid value → return an error
+```
+
 ## Dates Need a Contract
 
 `new Date(value)` accepts many environment-dependent representations. An API should document an exact format and timezone rule.
@@ -142,6 +204,25 @@ validate exact representation
 ```
 
 Dates are a domain decision, not merely a constructor call.
+
+### Calendar Date vs Exact Moment
+
+This distinction is important for beginners.
+
+A birthday such as `2001-04-10` is a calendar date. It usually should not move to the previous day because a server changed timezone.
+
+A payment time such as `2026-08-12T09:00:00Z` is an exact moment. Different users may display it in different local times, but they refer to the same instant.
+
+Before transforming a date, ask:
+
+```text
+Is this a calendar day?
+Is this an exact instant?
+Which timezone rules apply?
+Which input format is accepted?
+```
+
+Without those answers, `new Date(value)` is guessing at a domain rule.
 
 ## String Normalization
 
@@ -220,6 +301,73 @@ validate input is a string → trim → validate normalized length
 ```
 
 The strongest model is not a slogan about order. It is a staged parser in which every conversion has a defined precondition and every result has a defined postcondition.
+
+## Following a Search Request from Start to Finish
+
+Suppose a client sends:
+
+```http
+GET /products?page=2&limit=20&available=true
+```
+
+The raw values are:
+
+```js
+{
+  page: "2",
+  limit: "20",
+  available: "true"
+}
+```
+
+The transformer works one field at a time:
+
+```text
+page
+→ Is the full string an integer?
+→ Convert "2" to 2
+→ Is 2 at least 1?
+
+limit
+→ Is the full string an integer?
+→ Convert "20" to 20
+→ Is 20 between 1 and 100?
+
+available
+→ Is the value exactly "true" or "false"?
+→ Convert "true" to true
+```
+
+The result is:
+
+```js
+{
+  page: 2,
+  limit: 20,
+  available: true,
+  offset: 20
+}
+```
+
+Now the repository receives values that match its needs. It does not need to know how URL text was represented.
+
+## Checkpoint Questions
+
+### What is transformation?
+
+Transformation converts a value from the client's documented representation into the representation used inside the application.
+
+### Why is `parseInt("20px")` dangerous for strict API parsing?
+
+It returns `20` and ignores the invalid suffix. A strict integer contract should verify the entire string before conversion.
+
+### Why should the API not use `Boolean("false")`?
+
+Because it returns `true`. Exact string values should be mapped deliberately.
+
+### When should a default value apply?
+
+Usually when an optional value is absent. If the client supplies a malformed value, returning a validation error makes the contract clearer.
 
 ## What I Learned
 

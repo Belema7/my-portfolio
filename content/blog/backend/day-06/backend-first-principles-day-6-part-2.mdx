@@ -6,7 +6,7 @@ description: >-
 slug: backend-first-principles-day-6-part-2
 date: '2026-08-07'
 category: Learning Journey
-readingTime: 15 min read
+readingTime: 21 min read
 day: 6
 part: 2
 series: Learning Backend from First Principles
@@ -23,6 +23,22 @@ published: true
 
 ## Introduction
 
+In Part 1, I learned the most important rule of input handling:
+
+> **Do not let untrusted data move through the application without being checked.**
+
+That sounded clear until I opened a real backend project.
+
+I saw controllers, services, repositories, middleware, schemas, models, and database code.
+
+Then a new question appeared:
+
+> **Where exactly should I put the validation?**
+
+Should I write it inside the route? Inside the service? Inside the database function? Should every layer validate the same thing?
+
+As a beginner, this can feel confusing because “the backend” looks like one program. In a well-structured application, however, the backend is divided into layers. Each layer solves a different kind of problem.
+
 Saying “validate on the server” is correct, but incomplete. A backend has several layers. If validation is scattered through controllers, services, and repositories without a clear policy, the code becomes hard to reason about.
 
 The useful question is not only **whether** validation happens. It is:
@@ -30,6 +46,24 @@ The useful question is not only **whether** validation happens. It is:
 > **Which kind of validation belongs at which boundary?**
 
 ## The Three-Layer Model
+
+Before discussing validation, I need to understand the layers themselves.
+
+Imagine a restaurant.
+
+The customer does not walk directly into the kitchen and start talking to the chef. The customer speaks to a waiter. The waiter writes down the order and carries it to the kitchen. The kitchen prepares the meal. Someone may then collect ingredients from storage.
+
+```text
+Customer → Waiter → Kitchen → Storage
+```
+
+A backend can have a similar structure:
+
+```text
+HTTP Client → Controller → Service → Repository → Database
+```
+
+The analogy is not perfect, but it gives every layer a simple job.
 
 | Layer | Main responsibility | Should avoid |
 | --- | --- | --- |
@@ -54,6 +88,92 @@ Controller — map result to HTTP response
 ```
 
 This separation gives each layer a smaller vocabulary. The controller understands headers and status codes. The service understands operations such as “register user” or “place order.” The repository understands records, queries, and transactions.
+
+## The Controller: The Front Desk
+
+The controller is the part of the application closest to HTTP.
+
+It usually knows things like:
+
+```text
+Which route was called?
+What is inside req.body?
+What path parameter was supplied?
+Which status code should be returned?
+What JSON response should the client receive?
+```
+
+For example:
+
+```js
+app.post("/users", createUserController);
+```
+
+The controller receives the request. It should not immediately save `req.body`. It first turns the raw HTTP request into a known input object.
+
+Think of the controller as a receptionist.
+
+The receptionist checks that a visitor has the right appointment information before sending them deeper into the building. The receptionist does not run the whole company. They protect and coordinate the entrance.
+
+## The Service: The Business Expert
+
+The service handles what the application is trying to accomplish.
+
+Examples include:
+
+```text
+Register a new user
+Place an order
+Cancel a booking
+Invite a member to a team
+Publish a blog post
+```
+
+These are not HTTP concepts. A business operation called `placeOrder` still makes sense if it is started by a web request, a mobile app, a scheduled job, or a message from another service.
+
+That is why a service should normally receive this:
+
+```js
+orderService.placeOrder({
+  customerId: "user_15",
+  productId: "product_42",
+  quantity: 2,
+});
+```
+
+Not this:
+
+```js
+orderService.placeOrder(req, res);
+```
+
+Passing `req` and `res` into the service ties business logic to Express and makes the service harder to test or reuse.
+
+## The Repository: The Database Specialist
+
+The repository knows how to communicate with storage.
+
+It may contain operations such as:
+
+```js
+userRepository.findByEmail(email);
+userRepository.create(userData);
+orderRepository.findById(orderId);
+orderRepository.save(order);
+```
+
+The repository should not decide whether a normal user may promote someone to administrator. That is a business and authorization decision.
+
+Instead, it focuses on questions such as:
+
+```text
+Which table should I query?
+Which record should I update?
+Should this operation run inside a transaction?
+Which fields should be returned?
+```
+
+Think of it as the employee who knows exactly where information is stored and how to retrieve it safely.
 
 ## Boundary Validation in the Controller
 
@@ -98,6 +218,33 @@ req.query
 ```
 
 It receives a deliberate command object.
+
+### What Is a “Command Object”?
+
+This phrase can sound advanced. It simply means a small object that clearly describes what the service needs to do.
+
+Raw request:
+
+```js
+req.body
+req.params
+req.query
+req.user
+```
+
+Trusted command:
+
+```js
+{
+  customerId: "user_15",
+  productId: "product_42",
+  quantity: 2
+}
+```
+
+The first collection contains framework-specific data from several places. The second object contains only what the use case needs.
+
+This is one of the biggest reasons boundary validation matters. It turns a large, messy request into a small, understandable instruction.
 
 ## Why Reject Early?
 
@@ -146,6 +293,25 @@ If a critical invariant exists only in an HTTP controller, those callers could b
 
 > **Validate transport shape at the boundary; enforce business invariants in the domain or service operation.**
 
+### What Is an Invariant?
+
+An invariant is a rule that must always remain true for the business.
+
+Examples:
+
+```text
+An account balance must not be changed without recording a transaction.
+An order cannot be shipped after it has been cancelled.
+Stock must not fall below zero.
+A normal member cannot grant administrator access.
+```
+
+These rules are deeper than “quantity must be a number.”
+
+The controller can prove that `quantity` is the integer `2`. Only the service can decide whether buying two items is allowed at this moment.
+
+This explains why not every validation rule belongs in one schema.
+
 ## What the Repository Protects
 
 The repository should not become a general validation layer, but the database must still enforce the invariants it can guarantee reliably.
@@ -171,6 +337,21 @@ Request B inserts
 ```
 
 Only the database constraint can reliably make the final decision. The service catches that conflict and maps it to a meaningful result; the controller maps the result to an HTTP response such as `409 Conflict`.
+
+### Why Check More Than Once?
+
+At first, this looked like unnecessary duplication to me.
+
+Why check email uniqueness in the service if the database already has a unique constraint?
+
+Because the two checks serve different purposes:
+
+```text
+Service pre-check → gives a clear and friendly business error
+Database constraint → guarantees correctness when requests race
+```
+
+The service improves the experience. The database provides the final guarantee.
 
 ## Separation of Concerns in Practice
 
@@ -207,6 +388,44 @@ async function createOrderController(req, res, next) {
 ```
 
 The controller is short because it coordinates the boundary. That is a feature, not missing logic.
+
+## The Full Restaurant Analogy
+
+Let me connect the whole architecture one more time.
+
+Imagine a customer orders ten meals.
+
+**Waiter / Controller**
+
+Checks whether the order is readable, whether the menu item exists in the written format, and whether the quantity is a number. Then the waiter sends a clean order ticket to the kitchen.
+
+**Kitchen / Service**
+
+Decides whether the restaurant can prepare ten meals, whether the order follows restaurant rules, and how the cooking steps should be coordinated.
+
+**Storage / Repository and Database**
+
+Checks and updates the actual ingredient records. It guarantees that stored inventory is updated correctly.
+
+The waiter should not enter the storage database directly. The storage employee should not decide which customer is allowed to order. Clear responsibilities make the restaurant—and the backend—easier to manage.
+
+## Checkpoint Questions
+
+### Why should the service not receive `req` and `res`?
+
+Because those objects belong to HTTP and the web framework. A service should express business operations in plain application data so it can be tested and called from other entry points.
+
+### Which validation belongs at the controller boundary?
+
+Request shape, required fields, primitive types, documented parsing, formats, sizes, and unknown-field policy belong at the boundary.
+
+### If validation happens before the service, why does the service still check rules?
+
+The service protects business meaning and invariants. It may need current database state, permissions, transactions, or information that a request schema cannot know.
+
+### Why are database constraints still necessary?
+
+Because application checks can race or be bypassed by another code path. Database constraints provide the final guarantee for facts such as uniqueness and foreign-key relationships.
 
 ## What I Learned
 
