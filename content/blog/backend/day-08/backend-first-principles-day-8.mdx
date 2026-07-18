@@ -1,0 +1,1137 @@
+---
+title: 'Day 8 — Middleware and Request Context: The Power of the Pipeline'
+description: Learning how middleware turns authentication, logging, validation, rate limiting, CORS, and errors into an ordered request pipeline while carrying safe request context.
+slug: backend-first-principles-day-8
+date: '2026-07-18'
+category: Learning Journey
+readingTime: 31 min read
+day: 8
+series: Learning Backend from First Principles
+order: 800
+published: true
+tags:
+  - Backend Architecture
+  - Middleware
+  - Express
+  - Request Lifecycle
+keywords:
+  - Express middleware explained
+  - request context backend
+  - middleware pipeline
+  - error handling middleware
+  - backend request lifecycle
+---
+# Middleware and Request Context: The Power of the Pipeline
+
+> *“Mastering the code that surrounds a handler so the handler can stay focused on the work only it should do.”*
+
+## The Missing Part of the Request Lifecycle
+
+In the previous lesson, I followed one request through a router, handler, service, repository, and database. That gave me a much cleaner picture of what happens **after a request reaches the right handler**.
+
+But it immediately created another question.
+
+Before the handler creates a user, who checks whether the client is allowed to call it? Who records that the request arrived? Who parses its JSON, rejects too many requests, assigns a traceable ID, validates its shape, and turns unexpected failures into a safe response?
+
+My first answer was: the handler can do all of that.
+
+```js
+app.post("/users", async (req, res) => {
+  // assign request ID
+  // log request
+  // set CORS headers
+  // enforce rate limit
+  // authenticate user
+  // validate body
+  // run business logic
+  // catch and format errors
+});
+```
+
+That is exactly how the endpoint from Day 7 starts trying to do everything again.
+
+These operations are not unique to `POST /users`. Logging may apply to every endpoint. Authentication may protect an entire API. Validation applies to every endpoint that accepts input. Error formatting should remain consistent no matter which handler fails.
+
+I had found a new kind of responsibility: logic that cuts **across** many routes instead of belonging to one business operation.
+
+These are called **cross-cutting concerns**.
+
+```text
+                         ┌─ GET /users
+Logging ─────────────────┼─ POST /users
+Authentication ──────────┼─ GET /orders
+Error handling ──────────┴─ POST /payments
+```
+
+Copying that logic into every handler creates duplication, inconsistent behavior, and handlers that cannot focus on business work. Calling ordinary helper functions is better than copying their internals, but every handler still has to remember which helpers to call, in which order, and what to do when one rejects the request.
+
+What I needed was a reusable pipeline that the request would enter automatically.
+
+That is where middleware fits.
+
+---
+
+## 1. The Airport Checkpoint Mental Model
+
+An airport helped the idea click for me.
+
+A passenger does not walk directly from the entrance onto a plane. The passenger moves through a sequence of checkpoints: document inspection, baggage screening, security, and then the gate. Each checkpoint has a focused job. It can inspect information, attach new information, allow the passenger to continue, or stop the journey.
+
+The gate does not repeat the security scan. It trusts the pipeline that came before it.
+
+A backend request can move the same way:
+
+```text
+HTTP Request
+     ↓
+Request ID
+     ↓
+Logging
+     ↓
+Rate Limit
+     ↓
+Authentication
+     ↓
+Validation
+     ↓
+Handler
+     ↓
+HTTP Response
+```
+
+This finally gave me a useful definition:
+
+> **Middleware is a function placed in the request-response pipeline. It can inspect or enrich the request, affect the response, end the cycle, or pass control to the next step.**
+
+In Express, a normal middleware function receives `req`, `res`, and `next`:
+
+```js
+function requestIdMiddleware(req, res, next) {
+  const requestId = req.get("x-request-id") ?? crypto.randomUUID();
+
+  req.requestId = requestId;
+  res.set("X-Request-ID", requestId);
+
+  next();
+}
+```
+
+- `req` represents the incoming request and the information accumulated about it.
+- `res` represents the outgoing response being constructed.
+- `next` hands control to the next matching middleware or route handler.
+
+The core idea I now keep in mind is simple:
+
+> **Middleware comes in the middle of the request lifecycle. It receives the request and response like a handler, plus a `next` function that can continue the pipeline.**
+
+And the rule that keeps my handlers clean is:
+
+> **Use middleware for cross-cutting concerns such as request IDs, logging, authentication, rate limiting, CORS, boundary validation, and error handling. Keep handlers focused on translating HTTP into a business operation and its result back into HTTP.**
+
+Not every reusable function should become middleware. A password hasher or price calculator is an ordinary dependency. Middleware makes sense when behavior belongs to the HTTP pipeline and should wrap or guard multiple requests.
+
+---
+
+## 2. What `next()` Actually Means
+
+At first, `next()` looked like an unusual return statement. It is not.
+
+Calling `next()` asks Express to find and invoke the next matching layer. If no later layer ends the request, the client may wait until it times out.
+
+A middleware therefore has three meaningful exits:
+
+```text
+1. next()       → continue normally
+2. next(error)  → skip to error-handling middleware
+3. send result  → end the request-response cycle
+```
+
+Here is the decision in code:
+
+```js
+function requireApiKey(req, res, next) {
+  const apiKey = req.get("x-api-key");
+
+  if (!apiKey) {
+    return res.status(401).json({ error: "API key required" });
+  }
+
+  if (!isValidApiKey(apiKey)) {
+    return next(new AuthenticationError("Invalid API key"));
+  }
+
+  next();
+}
+```
+
+If the key is absent, the middleware sends a response and stops. If verification becomes an application error, it delegates to the error path. If the key is valid, it continues.
+
+The `return` before `res.status(...).json(...)` does not send the response. Express already does that. The return exits my function so later lines cannot accidentally call `next()` or try to send a second response.
+
+### What If I Forget `next()`?
+
+Consider this middleware:
+
+```js
+function brokenLogger(req, res, next) {
+  console.log(req.method, req.originalUrl);
+  // Nothing sends a response and next() is never called.
+}
+```
+
+The logger runs, but the handler never receives control. The connection remains open because the pipeline has neither continued nor completed.
+
+This is one of the first middleware bugs I learned to recognize: **a hanging request often means one branch forgot to call `next()` or send a response**.
+
+### Why Sending a Response and Calling `next()` Is Dangerous
+
+This is also wrong:
+
+```js
+function brokenAuth(req, res, next) {
+  if (!req.get("authorization")) {
+    res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+```
+
+After the `401` is sent, the handler can still run and attempt another response. That produces bugs such as “headers already sent.” Each branch needs a clear owner:
+
+```js
+function auth(req, res, next) {
+  if (!req.get("authorization")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+```
+
+---
+
+## 3. The Pipeline Is Ordered
+
+Middleware does not run merely because it exists. Registration builds an ordered stack.
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use(rateLimitMiddleware);
+app.use(express.json());
+app.use("/api", apiRouter);
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+For a matching request, Express works downward through that stack. Code before `next()` runs on the way in. Synchronous code after `next()` resumes as nested calls unwind:
+
+```js
+function first(req, res, next) {
+  console.log("1. first: before");
+  next();
+  console.log("5. first: after");
+}
+
+function second(req, res, next) {
+  console.log("2. second: before");
+  next();
+  console.log("4. second: after");
+}
+
+function handler(req, res) {
+  console.log("3. handler");
+  res.json({ message: "Hello" });
+}
+```
+
+```text
+1. first: before
+2. second: before
+3. handler
+4. second: after
+5. first: after
+```
+
+This resembles nested function calls:
+
+```text
+first before
+  second before
+    handler
+  second after
+first after
+```
+
+There is an important detail, though. “After `next()`” does not necessarily mean “after every response byte reached the client,” especially when downstream work is asynchronous. For reliable completion logging, I should listen for the response's `finish` event:
+
+```js
+function loggingMiddleware(req, res, next) {
+  const startedAt = performance.now();
+
+  res.on("finish", () => {
+    const durationMs = performance.now() - startedAt;
+    console.log({
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Math.round(durationMs),
+    });
+  });
+
+  next();
+}
+```
+
+That distinction corrected my first mental model. The pipeline can wrap execution, but response events tell me what actually happened to the response stream.
+
+### Order Is Part of the Design
+
+If logging needs a request ID, the ID middleware must run first. If authentication expects a parsed JSON body—which it usually should not need, but some schemes may—the body parser must run first. If validation needs `req.user`, authentication must precede validation.
+
+```text
+Request ID  → creates req.requestId
+Logging     → reads req.requestId
+Auth        → creates req.user
+Validation  → validates input for this user
+Handler     → consumes trusted context
+```
+
+Ordering is also a security decision. A rate limiter placed before expensive token verification can reject abusive traffic earlier. A body-size limit can reject a huge payload before the application allocates even more work to it.
+
+There is no universally perfect order, but there must be a reason for the chosen order.
+
+---
+
+## 4. Why Middleware Instead of Ordinary Functions?
+
+The simplest reason middleware exists is the same reason functions exist: I do not want to rewrite the same execution steps everywhere.
+
+Without middleware, two handlers quickly repeat themselves:
+
+```js
+app.get("/api/profile", async (req, res) => {
+  const token = readBearerToken(req);
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  console.log(req.method, req.originalUrl);
+  const user = verifyToken(token);
+  const profile = await profileService.get(user.id);
+  res.json({ profile });
+});
+
+app.get("/api/orders", async (req, res) => {
+  const token = readBearerToken(req);
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  console.log(req.method, req.originalUrl);
+  const user = verifyToken(token);
+  const orders = await orderService.listForUser(user.id);
+  res.json({ orders });
+});
+```
+
+With one hundred handlers, I do not merely have one hundred copies. I have one hundred opportunities for slightly different behavior. One endpoint may accept an expired token. Another may log sensitive headers. A third may return a different error shape.
+
+Middleware centralizes the policy:
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use("/api", authMiddleware);
+
+app.get("/api/profile", async (req, res) => {
+  const profile = await profileService.get(req.user.id);
+  res.json({ profile });
+});
+
+app.get("/api/orders", async (req, res) => {
+  const orders = await orderService.listForUser(req.user.id);
+  res.json({ orders });
+});
+```
+
+Could I call `authenticate(req)` manually in each handler? Yes. Middleware is still made of normal functions, not magic. The useful difference is how the framework composes those functions.
+
+| Ordinary helper | Middleware |
+| --- | --- |
+| Called manually by application code | Invoked by the framework when its layer matches |
+| Usually returns a value | Can enrich `req` and `res`, continue, or terminate |
+| Caller coordinates failures and order | Pipeline registration expresses order and error flow |
+| Best for reusable computation | Best for reusable HTTP pipeline behavior |
+
+Middleware does not remove every function call. It moves orchestration into one visible pipeline so individual handlers do not rebuild it.
+
+---
+
+## 5. Common Jobs in the Pipeline
+
+Once I understood the mechanism, the use cases stopped feeling like unrelated framework features. They are all checkpoints with different policies.
+
+### Request IDs: Giving One Journey a Name
+
+Several users can call the same endpoint at the same moment. A log saying “database timeout” is far more useful when I can connect it to the exact request that failed.
+
+```js
+function requestIdMiddleware(req, res, next) {
+  // In a trusted proxy architecture, an incoming ID may be accepted after
+  // validation. Otherwise, generate one at the application boundary.
+  const incomingId = req.get("x-request-id");
+  const requestId = isValidRequestId(incomingId)
+    ? incomingId
+    : crypto.randomUUID();
+
+  req.requestId = requestId;
+  res.set("X-Request-ID", requestId);
+  next();
+}
+```
+
+Now logs, errors, and the response can share the same correlation value.
+
+### Logging: Observing Both Arrival and Completion
+
+```js
+function loggingMiddleware(req, res, next) {
+  const startedAt = performance.now();
+
+  console.info("request.started", {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.originalUrl,
+  });
+
+  res.on("finish", () => {
+    console.info("request.finished", {
+      requestId: req.requestId,
+      status: res.statusCode,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+  });
+
+  next();
+}
+```
+
+I should avoid blindly logging authorization headers, cookies, passwords, tokens, or entire request bodies. Observability is not permission to copy secrets into long-lived log storage.
+
+### Authentication: Establishing Identity
+
+```js
+function readBearerToken(req) {
+  const authorization = req.get("authorization");
+  const [scheme, token] = authorization?.split(" ") ?? [];
+
+  return scheme?.toLowerCase() === "bearer" ? token : null;
+}
+
+function authMiddleware(req, res, next) {
+  const token = readBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Authentication required",
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    const claims = verifyAccessToken(token);
+    req.user = { id: claims.sub, role: claims.role };
+    next();
+  } catch (error) {
+    next(new AuthenticationError("Invalid or expired access token"));
+  }
+}
+```
+
+Authentication answers **who is making the request?** Authorization answers **may that identity perform this action?** They are related but not identical.
+
+```js
+function requireRole(role) {
+  return function roleMiddleware(req, res, next) {
+    if (req.user?.role !== role) {
+      return res.status(403).json({
+        error: "Forbidden",
+        requestId: req.requestId,
+      });
+    }
+
+    next();
+  };
+}
+```
+
+### Rate Limiting: Protecting a Shared Entrance
+
+A bank does not let one customer occupy every teller indefinitely. A rate limiter applies a similar policy to requests.
+
+```js
+import { rateLimit } from "express-rate-limit";
+
+const apiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+app.use("/api", apiRateLimiter);
+```
+
+Production rate limits need more thought than one code block can show: proxy configuration affects client IP detection, multiple server instances may need a shared store, authenticated users may need different keys, and sensitive routes such as login often need stricter policies.
+
+### CORS: A Browser Permission Policy
+
+I originally thought CORS protected an API from all foreign clients. It does not. CORS tells **browsers** which origins may let frontend JavaScript read a response. A command-line client can still call a public network endpoint.
+
+```js
+import cors from "cors";
+
+app.use(cors({
+  origin: ["https://app.example.com"],
+  methods: ["GET", "POST", "PATCH", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+  credentials: true,
+}));
+```
+
+Using `Access-Control-Allow-Origin: *` is sometimes valid for a truly public, non-credentialed API. It is not a safe default for an application using cookies or other credentials. A maintained CORS package also handles preflight details more reliably than a few handwritten headers.
+
+### Body Parsing: Turning Bytes into a Value
+
+```js
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+```
+
+The parser makes JSON available as `req.body`, but parsing is not validation. It proves that the body can become a JavaScript value, not that the value is safe for a use case.
+
+### Validation: Guarding the Boundary
+
+Day 6 taught me that untrusted input must earn trust. Middleware is a natural place to enforce a route's input contract before the handler runs.
+
+```js
+function validateBody(schema) {
+  return function validationMiddleware(req, res, next) {
+    const result = schema.safeParse(req.body);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: result.error.flatten(),
+        requestId: req.requestId,
+      });
+    }
+
+    req.validatedBody = result.data;
+    next();
+  };
+}
+```
+
+I prefer attaching validated data under an explicit name instead of silently rewriting `req.body`. Then the handler can show that it is consuming a trusted boundary result:
+
+```js
+app.post("/users", validateBody(createUserSchema), async (req, res) => {
+  const user = await userService.create(req.validatedBody);
+  res.status(201).json({ user });
+});
+```
+
+### Compression: Reducing the Response Payload
+
+```js
+import compression from "compression";
+
+app.use(compression());
+```
+
+Compression can reduce transfer size, but it costs CPU and may already be handled by a reverse proxy or CDN. Like every middleware, it belongs in the architecture only when the deployment actually needs it.
+
+---
+
+## 6. Request Context: The Backpack Moving Through the Checkpoints
+
+Middleware becomes much more powerful when one step can produce information for a later step.
+
+I picture the request carrying a backpack. It enters with data supplied by the client: method, path, headers, query parameters, and body. Each trusted checkpoint may inspect that data and add a carefully chosen item.
+
+```text
+Incoming request
+  { headers, path, body }
+          ↓ request ID middleware
+  { ..., requestId }
+          ↓ authentication middleware
+  { ..., requestId, user }
+          ↓ validation middleware
+  { ..., requestId, user, validatedBody }
+          ↓ handler
+```
+
+That accumulated per-request information is **request context**.
+
+Depending on the framework or architecture, context may be stored directly on `req`, on a dedicated context object, or in an async context mechanism. The central idea stays the same:
+
+> **Request context is data scoped to one request and made available to the code participating in that request.**
+
+Middleware can interact with both sides of the cycle:
+
+| Operation | Example |
+| --- | --- |
+| Read client input | `req.get("authorization")` |
+| Add trusted identity | `req.user = verifiedUser` |
+| Add correlation data | `req.requestId = id` |
+| Attach validated input | `req.validatedBody = parsed.data` |
+| Set a response header | `res.set("X-Request-ID", id)` |
+| Observe response status | `res.statusCode` inside `finish` |
+| End the cycle | `res.status(401).json(...)` |
+
+### One Request, End to End
+
+```js
+app.use((req, res, next) => {
+  req.context = {
+    requestId: crypto.randomUUID(),
+    startedAt: performance.now(),
+    user: null,
+  };
+
+  res.set("X-Request-ID", req.context.requestId);
+  next();
+});
+
+app.use(optionalAuthMiddleware);
+
+app.use((req, res, next) => {
+  console.info("request", {
+    requestId: req.context.requestId,
+    userId: req.context.user?.id ?? "anonymous",
+    method: req.method,
+    path: req.originalUrl,
+  });
+
+  next();
+});
+
+app.get("/api/profile", requireAuth, async (req, res) => {
+  const profile = await profileService.get(req.context.user.id);
+
+  res.json({
+    profile,
+    requestId: req.context.requestId,
+  });
+});
+```
+
+Every request gets its own context. Two simultaneous requests must never share mutable context accidentally.
+
+### What Belongs in Context?
+
+Useful context is small, request-scoped, and broadly relevant:
+
+- a request or trace ID;
+- authenticated user identity and permissions;
+- locale or tenant ID after validation;
+- a request-scoped logger;
+- a deadline or cancellation signal;
+- validated route input when that is the project's convention.
+
+What does not belong there?
+
+- plaintext passwords or raw bearer tokens;
+- JWT signing secrets, API secrets, or database credentials;
+- large database results added “just in case”;
+- arbitrary mutable global state;
+- sensitive personal data that downstream code does not need;
+- a hashed password simply because it is hashed—hashes are still sensitive authentication data.
+
+I would also avoid storing a database connection pool *on every request*. A pool is normally an application-scoped dependency. A request-scoped transaction is different: it may belong in an explicit unit-of-work context when several operations must share it.
+
+The security rule is the principle of least privilege applied to data:
+
+> **Put only the minimum trusted information in request context that downstream code genuinely needs.**
+
+### TypeScript Needs to Know About Custom Context
+
+JavaScript lets me attach `req.user` at runtime. TypeScript needs a declaration for it. One option is to extend Express's request type through declaration merging:
+
+```ts
+declare global {
+  namespace Express {
+    interface Request {
+      context: {
+        requestId: string;
+        startedAt: number;
+        user: { id: string; role: string } | null;
+      };
+      validatedBody?: unknown;
+    }
+  }
+}
+
+export {};
+```
+
+Types improve the developer experience, but they do not create runtime guarantees. `req.context.user` is trustworthy only because verified middleware created it, not because an interface claims it exists.
+
+---
+
+## 7. Global, Router-Level, and Route-Specific Middleware
+
+The next question I had was: if middleware is reusable, should every request pass through every middleware?
+
+No. Scope matters as much as order.
+
+### Global Middleware
+
+Global middleware is registered on the application and applies to every matching request after that registration point.
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "1mb" }));
+```
+
+Request IDs and basic logging often make sense globally. Authentication usually does not, because health checks and public pages may intentionally be anonymous.
+
+### Router-Level Middleware
+
+A router can define policy for a group of routes:
+
+```js
+const apiRouter = express.Router();
+
+apiRouter.use(apiRateLimiter);
+apiRouter.use(authMiddleware);
+
+apiRouter.get("/profile", profileHandler);
+apiRouter.get("/orders", orderHandler.list);
+
+app.use("/api", apiRouter);
+```
+
+This is often clearer than one global middleware full of `if (req.path.startsWith(...))` conditions. The route structure expresses the policy.
+
+### Route-Specific Middleware
+
+Some rules belong to one operation:
+
+```js
+app.post(
+  "/users",
+  authMiddleware,
+  requireRole("admin"),
+  validateBody(createUserSchema),
+  userHandler.create,
+);
+```
+
+Reading this route from left to right tells a story:
+
+```text
+authenticate → require admin → validate input → create user
+```
+
+### Combining the Scopes
+
+```js
+// Every request
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+
+// Public route: request ID + logging
+app.get("/health", healthHandler);
+
+// API routes: request ID + logging + rate limit
+app.use("/api", apiRateLimiter, apiRouter);
+
+// Admin router additionally requires authentication and admin role
+adminRouter.use(authMiddleware, requireRole("admin"));
+app.use("/api/admin", adminRouter);
+```
+
+The lesson for me was that conditional application is best expressed structurally when possible. Paths, routers, and route middleware are easier to reason about than one giant conditional middleware.
+
+---
+
+## 8. Error-Handling Middleware: A Separate Track
+
+So far, the happy path moves toward the handler. But any checkpoint or handler can fail.
+
+Without a central error path, each handler makes its own decision about status codes, logging, public messages, and internal details. That recreates the duplication middleware was meant to solve.
+
+Express recognizes error-handling middleware by its four-argument signature:
+
+```js
+function errorMiddleware(err, req, res, next) {
+  // err is the additional first argument
+}
+```
+
+Even if I do not use `next`, I keep all four parameters so Express recognizes the function as an error handler.
+
+Calling `next(error)` skips normal middleware and searches for an error-handling layer:
+
+```text
+Request
+   ↓
+Authentication ── next(error) ─────────┐
+   ↓                                   │
+Validation ────── next(error) ─────────┤
+   ↓                                   │
+Handler ───────── throws error ────────┤
+                                       ↓
+                                Error Middleware
+                                       ↓
+                                Safe HTTP Response
+```
+
+### Typed Application Errors
+
+```js
+class AppError extends Error {
+  constructor(message, status, code) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class ValidationError extends AppError {
+  constructor(message) {
+    super(message, 400, "VALIDATION_ERROR");
+  }
+}
+
+class AuthenticationError extends AppError {
+  constructor(message) {
+    super(message, 401, "AUTHENTICATION_ERROR");
+  }
+}
+
+class NotFoundError extends AppError {
+  constructor(message) {
+    super(message, 404, "NOT_FOUND");
+  }
+}
+```
+
+The service can throw an application error without learning how Express sends JSON:
+
+```js
+async function getUser(userId) {
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError("User not found");
+  }
+
+  return user;
+}
+```
+
+The final middleware owns the HTTP translation:
+
+```js
+function errorMiddleware(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  console.error("request.failed", {
+    requestId: req.requestId,
+    error: err,
+  });
+
+  if (err instanceof AppError) {
+    return res.status(err.status).json({
+      error: err.code,
+      message: err.message,
+      requestId: req.requestId,
+    });
+  }
+
+  res.status(500).json({
+    error: "INTERNAL_SERVER_ERROR",
+    message: "Something went wrong",
+    requestId: req.requestId,
+  });
+}
+```
+
+Unknown errors return a generic message. The client gets the request ID for support, while logs keep the internal details. Returning stack traces, SQL messages, filesystem paths, or secrets would reveal information an attacker can use.
+
+### The 404 Catch-All Is Not Quite an Error Handler
+
+An unmatched route does not automatically mean that JavaScript threw an error. It simply means the normal stack reached the end without finding a response.
+
+I can turn that situation into a normal `404` response:
+
+```js
+function notFoundMiddleware(req, res) {
+  res.status(404).json({
+    error: "NOT_FOUND",
+    message: `Cannot ${req.method} ${req.originalUrl}`,
+    requestId: req.requestId,
+  });
+}
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+The catch-all comes after every real route and before—or independently of—the final error handler.
+
+### Async Errors
+
+In modern Express 5, a rejected promise or thrown error from an `async` middleware or handler is forwarded to error handling automatically:
+
+```js
+app.get("/users/:id", async (req, res) => {
+  const user = await userService.findById(req.params.id);
+  res.json({ user });
+});
+```
+
+Older Express 4 applications commonly use `try/catch` with `next(error)` or an `asyncHandler` wrapper:
+
+```js
+const asyncHandler = (handler) => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+};
+```
+
+The right approach depends on the installed Express version. That small version check can prevent a production request from hanging or becoming an unhandled rejection.
+
+---
+
+## 9. Building the Complete Pipeline
+
+I can now assemble the pieces without losing sight of why each one exists.
+
+```js
+import crypto from "node:crypto";
+import compression from "compression";
+import cors from "cors";
+import express from "express";
+import { rateLimit } from "express-rate-limit";
+
+const app = express();
+
+// 1. Establish context needed by everything after this point.
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.set("X-Request-ID", req.requestId);
+  next();
+});
+
+// 2. Observe every request and its final response.
+app.use(loggingMiddleware);
+
+// 3. Apply broad transport policies.
+app.use(cors({
+  origin: ["https://app.example.com"],
+  credentials: true,
+}));
+app.use(compression());
+
+// 4. Bound and parse request bodies.
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+// 5. Public routes do not require identity.
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    requestId: req.requestId,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 6. API-wide protection.
+const apiRouter = express.Router();
+
+apiRouter.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+}));
+
+// Public API route: rate limited, but no authentication.
+apiRouter.get("/public/info", (req, res) => {
+  res.json({ message: "Public information", requestId: req.requestId });
+});
+
+// Protected routes build on the context created above.
+apiRouter.get("/profile", authMiddleware, async (req, res) => {
+  const profile = await profileService.get(req.user.id);
+  res.json({ profile, requestId: req.requestId });
+});
+
+apiRouter.post(
+  "/users",
+  authMiddleware,
+  requireRole("admin"),
+  validateBody(createUserSchema),
+  async (req, res) => {
+    const user = await userService.create(req.validatedBody);
+    res.status(201).json({ user, requestId: req.requestId });
+  },
+);
+
+app.use("/api", apiRouter);
+
+// 7. Terminal middleware stays last.
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+The final architecture looks like this:
+
+```text
+Incoming HTTP Request
+         ↓
+Request ID ─────────────── adds correlation context
+         ↓
+Logger ─────────────────── observes start and finish
+         ↓
+CORS / Compression ─────── applies transport policy
+         ↓
+Body Parser ─────────────── bytes become an untrusted value
+         ↓
+Router Scope ────────────── selects public or protected policy
+         ↓
+Rate Limiter ────────────── protects shared capacity
+         ↓
+Authentication ──────────── adds verified identity
+         ↓
+Authorization ───────────── checks permission
+         ↓
+Validation ──────────────── adds trusted route input
+         ↓
+Handler ─────────────────── translates HTTP to a use case
+         ↓
+Service → Repository → Database
+         ↓
+HTTP Response
+
+Any failure ───────────────→ Error Middleware → Safe Response
+No route matched ──────────→ 404 Middleware
+```
+
+The handler is finally small for the right reason. It is not hiding work. The surrounding pipeline owns concerns that apply across operations, while the service and repository own the deeper responsibilities from Day 7.
+
+---
+
+## 10. Mistakes I Now Know to Look For
+
+Middleware makes composition easier, but it also introduces its own failure modes.
+
+### Forgetting to Continue or Respond
+
+Every branch must call `next`, delegate an error, or complete the response. Missing all three leaves a hanging request.
+
+### Continuing After Sending a Response
+
+Calling `next()` after a `401` lets downstream code run and may cause a second response. I return immediately from terminal branches.
+
+### Registering Middleware in the Wrong Order
+
+A logger cannot read a request ID that has not been created. An error handler registered before routes cannot catch later route errors. Registration order is behavior.
+
+### Turning One Middleware into a Second Handler
+
+If authentication middleware also queries orders, formats the profile response, and sends analytics events, I have recreated the overloaded handler under a new name. Each checkpoint still needs a focused responsibility.
+
+### Trusting Client-Supplied Context
+
+`X-User-Role: admin` is client input, not verified context. Trusted identity must come from a verified credential or trusted upstream system with a clearly enforced boundary.
+
+### Mutating Input Invisibly
+
+Silently rewriting `req.body` in several middlewares makes data lineage difficult to follow. Explicit names such as `req.validatedBody` make the trust transition visible.
+
+### Logging Too Much
+
+Request bodies, cookies, and authorization headers can contain credentials and personal data. Logs need redaction, retention rules, and intentional fields.
+
+### Treating CORS as Authentication
+
+CORS is enforced by browsers. It does not prove identity and does not stop non-browser clients. Authentication and network controls remain separate concerns.
+
+### Assuming Context Is a Secret Vault
+
+Context is convenient, which makes it tempting to add everything. I keep it minimal because every downstream consumer becomes another place that sensitive data might leak.
+
+### Adding Middleware Without Measuring Its Cost
+
+Every global middleware runs frequently. Synchronous CPU-heavy work blocks other requests, and remote calls add latency. A useful checkpoint can still become a bottleneck.
+
+---
+
+## 11. The Design Questions I Will Ask Next Time
+
+Before adding middleware, I now ask:
+
+1. Is this an HTTP pipeline concern shared by multiple routes?
+2. Should it apply globally, to one router, or to one route?
+3. What information does it read, and can that information be trusted?
+4. What context does it add, and who needs that context?
+5. Can it terminate the request? If so, what response contract does it use?
+6. How does it report errors?
+7. What must run before it, and what depends on it afterward?
+8. Does it log or retain sensitive data?
+9. What latency or resource cost does it add?
+10. Can its behavior be tested independently and through the full pipeline?
+
+These questions turn `app.use(...)` from a convenient line of code into an architectural decision.
+
+---
+
+## What Finally Clicked
+
+Before this lesson, I thought middleware was mostly a framework term for “a function that runs before a route.” That was incomplete.
+
+Middleware is how a backend composes the work surrounding its handlers. It creates an ordered pipeline where one step can observe the request, add trusted context, enforce a policy, stop unsafe work, or pass control forward. Error middleware gives failures their own centralized path.
+
+The complete mental model I am leaving with is:
+
+```text
+Problem:
+Cross-cutting logic is duplicated across handlers.
+
+Solution:
+Compose that logic as an ordered middleware pipeline.
+
+Data model:
+Carry small, trusted, request-scoped context through the pipeline.
+
+Control model:
+next() continues, next(error) changes to the error path,
+and sending a response terminates the cycle.
+
+Design rule:
+Global concerns belong globally; narrow policies belong near their routes;
+handlers stay focused on the use case boundary.
+```
+
+Day 7 showed me the vertical path from handler to database. Day 8 filled in the horizontal concerns wrapped around that path.
+
+```text
+                    Cross-cutting middleware
+              ┌────────────────────────────────┐
+Request ─────→│ Handler → Service → Repository │─────→ Response
+              └────────────────────────────────┘
+```
+
+Now the request lifecycle feels whole.
+
+The router decides where the request goes. Middleware prepares and protects the journey. Request context carries the information learned along the way. The handler translates the HTTP boundary. The service applies business rules. The repository talks to storage. Error middleware makes failure consistent and safe.
+
+That is the power of the pipeline: not adding more code around a request, but giving repeated responsibilities one clear, reliable place to live.
