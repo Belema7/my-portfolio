@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import type { Post, PostMeta } from "./types";
+import type { ContentStatus, ContentType, Post, PostMeta } from "./types";
 
 const CONTENT_DIR = path.join(process.cwd(), "content", "blog");
 
@@ -31,6 +31,20 @@ function parseMeta(data: Record<string, unknown>, filePath: string): PostMeta | 
   const stringList = (key: string) => Array.isArray(data[key]) && data[key].every(isString)
     ? data[key] as string[]
     : undefined;
+  const isLearningNote = data.contentType === "learning-note"
+    || data.series === "Learning Backend from First Principles";
+  const categoryType: Record<string, ContentType> = {
+    "Technical Notes": "technical-article",
+    "Building in Public": "build-log",
+    "Personal Thoughts": "reflection",
+    "Learning Journey": "reflection",
+  };
+  const contentType = isLearningNote
+    ? "learning-note"
+    : categoryType[data.category as string] ?? "technical-article";
+  const status: ContentStatus = data.status === "draft" || data.status === "coming-soon"
+    ? data.status
+    : data.published === false ? "draft" : "published";
 
   return {
     title: data.title as string,
@@ -50,6 +64,13 @@ function parseMeta(data: Record<string, unknown>, filePath: string): PostMeta | 
     keywords: stringList("keywords"),
     published: typeof data.published === "boolean" ? data.published : true,
     featured: typeof data.featured === "boolean" ? data.featured : false,
+    contentType,
+    status,
+    seriesSlug: optionalString("seriesSlug") ?? (isLearningNote ? "backend-first-principles" : undefined),
+    seriesTitle: optionalString("seriesTitle") ?? (isLearningNote ? "Backend from First Principles" : undefined),
+    dayTitle: optionalString("dayTitle"),
+    partSlug: optionalString("partSlug"),
+    learnedAt: optionalString("learnedAt"),
   };
 }
 
@@ -81,11 +102,15 @@ export function getPostBySlug(slug: string): Post | undefined {
 }
 
 export function getLatestPosts(limit = 3): Post[] {
-  return getAllPosts().slice(0, Math.max(0, limit));
+  return getAllWritingPosts().slice(0, Math.max(0, limit));
 }
 
 export function getFeaturedPost(): Post | undefined {
-  return getAllPosts().find(({ meta }) => meta.featured);
+  return getAllWritingPosts().find(({ meta }) => meta.featured);
+}
+
+export function getAllWritingPosts(): Post[] {
+  return getAllPosts().filter(({ meta }) => meta.contentType !== "learning-note");
 }
 
 export function getPostsByCategory(category: string): Post[] {

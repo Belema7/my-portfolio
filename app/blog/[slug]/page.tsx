@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { getAllPostSlugs } from "@/lib/blog/get-all-posts";
 import { getPostBySlug } from "@/lib/blog/get-post-by-slug";
 import { getAdjacentPosts } from "@/lib/blog/get-adjacent-posts";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import { MDXComponents } from "@/components/mdx/MDXComponents";
+import { getLearningPartUrl } from "@/lib/learning/urls";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -21,6 +22,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) return { title: "Post Not Found" };
+  if (post.meta.contentType === "learning-note" && post.meta.seriesSlug && post.meta.day && post.meta.part) {
+    const partSlug = post.meta.partSlug ?? `part-${String(post.meta.part).padStart(2, "0")}`;
+    const destination = getLearningPartUrl(post.meta.seriesSlug, post.meta.day, partSlug);
+    return { title: post.meta.title, alternates: { canonical: destination } };
+  }
   return {
     title: `${post.meta.title} | Belema Girma`,
     description: post.meta.description,
@@ -48,6 +54,9 @@ export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) notFound();
+  if (post.meta.contentType === "learning-note" && post.meta.seriesSlug && post.meta.day && post.meta.part) {
+    permanentRedirect(getLearningPartUrl(post.meta.seriesSlug, post.meta.day, post.meta.partSlug ?? `part-${String(post.meta.part).padStart(2, "0")}`));
+  }
   const adjacent = getAdjacentPosts(slug);
   const sameDay = post.meta.series && post.meta.day !== undefined
     ? getPostsByDay(post.meta.series, post.meta.day)
@@ -63,7 +72,7 @@ export default async function BlogPostPage({ params }: Props) {
     <article className="section">
       <Container className="max-w-3xl">
         <Link
-          href="/library?view=blog"
+          href="/writing"
           className="mb-8 inline-block text-sm font-medium text-[var(--color-accent)]"
         >
           ← Back to Blog

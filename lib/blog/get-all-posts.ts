@@ -1,1 +1,1 @@
-export { getAllPosts, getAllPostSlugs, getFeaturedPost, getLatestPosts } from "./api";
+export { getAllPosts, getAllPostSlugs, getAllWritingPosts, getFeaturedPost, getLatestPosts } from "./api";

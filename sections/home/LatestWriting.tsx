@@ -12,7 +12,7 @@ export function LatestWriting() {
         <SectionHeader
           title="Latest Writing"
           subtitle="Notes on full stack engineering, system design, and building in public."
-          action={{ label: "Read the blog", href: "/library" }}
+          action={{ label: "Read the blog", href: "/writing" }}
           numbered="04"
         />
         <div className="grid gap-px border border-[var(--color-border)] bg-[var(--color-border)] md:grid-cols-3">

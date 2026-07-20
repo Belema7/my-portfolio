@@ -8,15 +8,8 @@ import { BlogCard } from "@/components/cards/BlogCard";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 
-const categories: (PostCategory | "All")[] = [
-  "All",
-  "Technical Notes",
-  "Learning Journey",
-  "Building in Public",
-  "Personal Thoughts",
-];
-
 export function BlogView({ posts, featured }: { posts: Post[], featured?: Post }) {
+  const categories: (PostCategory | "All")[] = ["All", ...new Set(posts.map((post) => post.meta.category))];
   const [active, setActive] = useState<(typeof categories)[number]>("All");
 
   const filtered =
@@ -60,6 +53,7 @@ export function BlogView({ posts, featured }: { posts: Post[], featured?: Post }
           <button
             key={cat}
             type="button"
+            aria-pressed={active === cat}
             onClick={() => setActive(cat)}
             className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium transition-colors cursor-pointer",

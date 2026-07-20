@@ -10,9 +10,15 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/projects", label: "Projects", index: "001" },
-  { href: "/library",  label: "Writing",  index: "002" },
-  { href: "/about",    label: "About",    index: "003" },
-  { href: "/contact",  label: "Contact",  index: "004" },
+  { href: "/learning", label: "Learning", index: "002" },
+  { href: "/writing",  label: "Writing",  index: "003" },
+  { href: "/about",    label: "About",    index: "004" },
+  { href: "/contact",  label: "Contact",  index: "005" },
+];
+
+const mobileNavLinks = [
+  ...navLinks,
+  { href: "/shelf", label: "Shelf", index: "006" },
 ];
 
 /** Geometric logo mark — two horizontal stacked bars like ▣ */
@@ -45,9 +51,6 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Close mobile menu on route change
-  useEffect(() => { setOpen(false); }, [pathname]);
-
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
       <nav className="mx-auto flex h-16 w-full max-w-[82rem] items-center justify-between px-6 md:px-12">
@@ -78,13 +81,13 @@ export function Navbar() {
           style={{ transition: "background 0.3s ease, box-shadow 0.3s ease" }}
         >
           {navLinks.map((link, i) => {
-            const isActive = pathname === link.href;
+            const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-1.5 px-5 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]",
+                  "flex items-center gap-1.5 px-4 py-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors lg:px-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]",
                   i < navLinks.length - 1 && "border-r border-[var(--color-border-strong)]",
                   isActive
                     ? "bg-[var(--color-primary)] text-[var(--color-secondary)]"
@@ -131,8 +134,8 @@ export function Navbar() {
           className="border-t border-[var(--color-border)] bg-[var(--color-bg)] px-6 py-2 md:hidden"
           style={{ backdropFilter: "blur(12px)" }}
         >
-          {navLinks.map((link) => {
-            const isActive = pathname === link.href;
+          {mobileNavLinks.map((link) => {
+            const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}

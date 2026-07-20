@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SiteShell } from "@/components/layout/SiteShell";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://belema.vercel.app"),
   title: "Belema Girma — Full Stack Developer",
   description:
     "Belema Girma is a Full Stack Developer specializing in React, Next.js, Node.js, NestJS, and PostgreSQL, building clean, scalable, and responsive digital products.",

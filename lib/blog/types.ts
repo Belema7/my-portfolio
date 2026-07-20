@@ -5,6 +5,15 @@ export type PostCategory =
   | "Personal Thoughts"
   | string;
 
+export type ContentType =
+  | "learning-note"
+  | "technical-article"
+  | "case-study"
+  | "build-log"
+  | "reflection";
+
+export type ContentStatus = "draft" | "published" | "coming-soon";
+
 export type PostMeta = {
   title: string;
   slug: string;
@@ -14,6 +23,13 @@ export type PostMeta = {
   category: PostCategory;
   readingTime: string;
   featured?: boolean;
+  contentType: ContentType;
+  status: ContentStatus;
+  seriesSlug?: string;
+  seriesTitle?: string;
+  dayTitle?: string;
+  partSlug?: string;
+  learnedAt?: string;
   day?: number;
   part?: number;
   series?: string;
