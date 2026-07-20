@@ -4,7 +4,7 @@ description: How strict request shapes, field formats, allowlists, and useful er
 slug: backend-first-principles-day-6-part-4
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 14 min read
+readingTime: 20 min read
 day: 6
 part: 4
 series: Learning Backend from First Principles
@@ -157,6 +157,111 @@ Stable codes help clients translate messages. Field paths help forms focus the c
 
 That was another realization: validation is not one giant regex. It is a precise public contract with resource limits.
 
+## Presence, Empty, Null, and Whitespace
+
+These inputs are different:
+
+```json
+{}
+{ "name": null }
+{ "name": "" }
+{ "name": "   " }
+```
+
+A rule such as `z.string().trim().min(1).max(100)` defines their outcomes. Missing and `null` fail presence/type; empty and whitespace-only fail the post-trim length rule.
+
+## Regex Is Not Understanding
+
+Email syntax cannot prove deliverability, ownership, or uniqueness. A practical email policy combines reasonable syntax, maximum size, consistent normalization, verification for ownership, and a database constraint for uniqueness.
+
+Trying to encode all of that in one “perfect” regex produces false confidence.
+
+## Unicode and Length
+
+JavaScript string length counts UTF-16 code units, not always user-perceived characters. Emoji and combining marks complicate UI counters and storage limits.
+
+The API, database, and frontend should agree on practical limits and test representative Unicode. Normalization may be appropriate for identifiers, but silently changing user-authored display text requires a real product rule.
+
+## Depth and Complexity Limits
+
+Checking only “is object” misses nested keys. Checking only “is array” misses item types and item count. Deeply nested or enormous valid data can exhaust resources.
+
+A production contract bounds:
+
+- body size;
+- object keys and unknown fields;
+- array count;
+- element size and shape;
+- nesting complexity where relevant.
+
+## Error Paths for Nested Fields
+
+```json
+{
+  "code": "VALIDATION_FAILED",
+  "fields": {
+    "address.countryCode": ["Use a supported country code"],
+    "items.2.quantity": ["Quantity must be at least 1"]
+  }
+}
+```
+
+The response identifies the field without echoing passwords, tokens, file contents, or the entire rejected payload.
+
+## Boundary Test Matrix
+
+For each field I test missing, `null`, empty, whitespace-only, one below minimum, exact minimum, exact maximum, one above maximum, malformed syntax, representative Unicode, and an unknown neighboring field.
+
+These cases expose off-by-one errors and undocumented coercion better than many ordinary happy-path examples.
+
+## Complete Syntactic Schema Example
+
+```ts
+const addressSchema = z.object({
+  line1: z.string().trim().min(1).max(120),
+  line2: z.string().trim().max(120).optional(),
+  city: z.string().trim().min(1).max(80),
+  countryCode: z.string().regex(/^[A-Z]{2}$/),
+}).strict();
+
+const createOrderSchema = z.object({
+  reference: z.string().trim().min(1).max(40),
+  shippingAddress: addressSchema,
+  items: z.array(z.object({
+    productId: z.string().uuid(),
+    quantity: z.number().int().min(1).max(100),
+  }).strict()).min(1).max(50),
+}).strict();
+```
+
+This schema bounds the whole shape, nested objects, collection count, each item, and unknown keys. It still does not prove products exist, stock is available, or the country can receive shipping.
+
+## Format Validation Is Policy
+
+A phone-number field illustrates why regex examples are not universal. International numbers vary, users include spacing and prefixes, and the application may need a canonical E.164 representation.
+
+The contract should define accepted external representations and use a domain-appropriate parser rather than copy a US-only `XXX-XXX-XXXX` regex into a global product.
+
+URLs also need context. General URL syntax validation does not prove an avatar URL uses an allowed scheme or that a server-side fetch is safe from SSRF.
+
+## Schema Error Stability
+
+Validation libraries expose detailed internal issue codes. Public APIs should map them into stable application codes so a library upgrade does not silently break client behavior.
+
+```text
+library too_small → API min_length
+library invalid_type → API invalid_type
+library unrecognized_keys → API unknown_field
+```
+
+The public field path, code, and safe message form the contract.
+
+## Avoid Over-Sanitizing User Text
+
+Removing punctuation, accents, or non-Latin characters from names may damage legitimate data without improving security. SQL safety comes from parameterization; HTML safety comes from output encoding.
+
+Syntax validation should enforce actual product constraints, not convert diverse human input into a narrow developer assumption.
+
 ## Checkpoint Questions
 
 ### 1. Why reject `role` even if it has a valid string value?
@@ -172,4 +277,3 @@ Only that text follows an accepted format. It cannot prove existence, ownership,
 Correct elements can still form an oversized request that wastes memory or creates expensive database work.
 
 > **Coming next:** A value may look correct, but is it represented by the type the application expects? Part 5 explores JavaScript's most dangerous coercion traps.
-

@@ -4,7 +4,7 @@ description: The complete journey from raw Create User request through strict pa
 slug: backend-first-principles-day-6-part-11
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 20 min read
+readingTime: 27 min read
 day: 6
 part: 11
 series: Learning Backend from First Principles
@@ -280,6 +280,132 @@ const userRepository = {
 ```
 
 The framework-specific `Request`, `Response`, actor, logger, database client, and error classifiers would come from the real application. The architecture is the point: boundary code owns the public contract; services own business rules; repositories own persistence; the database owns final stored invariants.
+
+## Following the Recurring Malicious Request
+
+Suppose the client sends:
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": "21",
+  "role": "admin"
+}
+```
+
+Under a strict JSON-body contract expecting numeric age and no role, the request fails for two independent reasons:
+
+```text
+age  → wrong runtime type
+role → unknown forbidden field
+```
+
+The server does not partially create a user. It does not silently trust `role`. It returns a stable field-level error and records only safe diagnostic metadata.
+
+If the API deliberately accepts age as text, a strict transformation may convert exactly digit text to a number. The role still fails. Accepted representation is a contract choice, not automatic JavaScript coercion.
+
+## Following a Successful Request
+
+```json
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "age": 21
+}
+```
+
+```text
+parser
+  object value
+    ↓ strict schema
+  unknown fields checked
+  name trimmed
+  email normalized
+  age proven finite integer in range
+    ↓ command
+  { name: "Belema", email: "belema@email.com", age: 21 }
+    ↓ service
+  permissions and uniqueness checked
+  password/business operations performed
+    ↓ repository
+  parameterized persistence
+    ↓ database
+  constraints enforced
+    ↓ handler
+  safe allowlisted response
+```
+
+Every arrow names a guarantee.
+
+## Following the Concurrency Conflict
+
+Two valid requests arrive together with the same email:
+
+```text
+Request A service check → available
+Request B service check → available
+Request A insert → succeeds
+Request B insert → unique constraint fails
+```
+
+The repository recognizes the database-specific conflict. The service or application error layer translates it to `EMAIL_ALREADY_EXISTS`. The HTTP boundary returns the same `409` contract used by the friendly pre-check.
+
+Validation did not fail. Stored-state concurrency rejected the second operation correctly.
+
+## Full Failure Matrix
+
+| Failure | Owner | Typical response |
+| --- | --- | --- |
+| malformed JSON | parser boundary | `400` |
+| body too large | proxy/parser | `413` |
+| wrong field type | runtime schema | `400` |
+| unknown `role` | strict schema | `400` |
+| unauthenticated | authentication | `401` |
+| forbidden assignment | service/authorization | `403` |
+| referenced resource absent | service | `404` |
+| unique conflict | service/database | `409` |
+| rate exceeded | rate limiter | `429` |
+| database unavailable | infrastructure/error boundary | `503` or safe `500` policy |
+
+Status codes and envelopes are API design decisions, but failures must not collapse into one misleading “invalid data” response.
+
+## Complete Testing Pyramid
+
+```text
+Schema unit tests
+  representations, transformations, unknown keys, limits
+
+Service unit tests
+  permissions, ownership, state, uniqueness meaning
+
+Repository integration tests
+  parameterized operations, mapping, real constraints
+
+HTTP integration tests
+  parser, middleware, error contract, safe response
+
+End-to-end tests
+  one complete request through a test database
+
+Fuzz/property tests
+  unexpected combinations and parser invariants
+```
+
+Each layer tests the guarantee it owns instead of duplicating every test at every level.
+
+## Operational Checklist Before Publish
+
+- Body and collection limits are explicit.
+- Unknown-field policy is deliberate.
+- Runtime schema produces the service command type.
+- Passwords and tokens are redacted from logs.
+- Repository operations are parameterized.
+- Database constraints cover concurrent invariants.
+- Error codes are stable and safe.
+- Frontend and documentation match accepted representations.
+- Rejection metrics avoid high-cardinality private data.
+- Contract tightening has a rollout plan.
 
 ## Old Mental Model vs New Mental Model
 

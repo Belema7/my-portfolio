@@ -4,7 +4,7 @@ description: Strict runtime checks for strings, numbers, booleans, arrays, objec
 slug: backend-first-principles-day-6-part-5
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 15 min read
+readingTime: 21 min read
 day: 6
 part: 5
 series: Learning Backend from First Principles
@@ -156,6 +156,179 @@ Coercion is safe when the accepted representations, failure cases, and output ty
 
 The goal is not “never transform.” The goal is “never let convenient JavaScript coercion design the API by accident.”
 
+## Numbers Need More Than `typeof`
+
+JavaScript has one `number` type for integers, decimals, `NaN`, and infinities.
+
+```ts
+typeof NaN;       // "number"
+typeof Infinity;  // "number"
+```
+
+A count may need this complete proof:
+
+```text
+number → finite → integer → safe integer → accepted range
+```
+
+```ts
+function isValidCount(value: unknown): value is number {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= 10_000;
+}
+```
+
+Money usually should not use unconstrained floating-point arithmetic. An application may store integer minor units or a decimal type according to domain requirements.
+
+## Arrays Are Objects, and Null Is an Object
+
+```ts
+typeof [];   // "object"
+typeof null; // "object"
+```
+
+Therefore a plain-object check needs more:
+
+```ts
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value);
+}
+```
+
+Then every nested property still needs validation. Proving “object” does not prove a useful address or profile shape.
+
+## Query Parameters Are Representation Strings
+
+For a URL such as `?page=2&active=false`, Express normally exposes text representations. A strict parser should accept the entire documented grammar:
+
+```ts
+const positiveIntegerText = /^(?:[1-9]\d*)$/;
+
+function parsePage(value: unknown): number {
+  if (typeof value !== "string" || !positiveIntegerText.test(value)) {
+    throw new ValidationError("page", "invalid_integer");
+  }
+
+  const page = Number(value);
+  if (!Number.isSafeInteger(page) || page > 10_000) {
+    throw new ValidationError("page", "out_of_range");
+  }
+
+  return page;
+}
+```
+
+This rejects `2abc`, decimals, empty strings, negative values, and unsafe integers instead of partially parsing them.
+
+## Boolean Grammars Must Be Explicit
+
+An API may accept exactly `true` and `false`:
+
+```ts
+function parseBoolean(value: unknown): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new ValidationError("active", "invalid_boolean");
+}
+```
+
+Accepting `1`, `yes`, `on`, and different casing is another possible contract, but it should be documented rather than inherited from language coercion.
+
+## Optional, Nullable, and Defaulted
+
+```text
+optional  → property may be absent
+nullable  → explicit null is accepted
+defaulted → omission produces a documented value
+```
+
+For a patch operation:
+
+```json
+{}
+```
+
+may mean leave `avatar` unchanged, while:
+
+```json
+{ "avatar": null }
+```
+
+may mean remove it. Collapsing both into the same value destroys user intent.
+
+## Runtime Type Tests
+
+I test strings where numbers are expected, arrays where objects are expected, `null`, `NaN` in direct JavaScript calls, infinities, unsafe integers, repeated query keys that produce arrays, and missing versus explicit `null`.
+
+The weird edges are exactly where JavaScript's convenient coercion stops being convenient.
+
+## Complete Strict Query Schema
+
+```ts
+const integerText = z.string().regex(/^[1-9]\d*$/);
+
+const listUsersQuerySchema = z.object({
+  page: integerText
+    .transform(Number)
+    .pipe(z.number().safe().int().min(1).max(10_000))
+    .default("1"),
+  limit: integerText
+    .transform(Number)
+    .pipe(z.number().safe().int().min(1).max(100))
+    .default("20"),
+  active: z.union([
+    z.literal("true").transform(() => true),
+    z.literal("false").transform(() => false),
+  ]).optional(),
+}).strict();
+```
+
+One subtlety is library behavior around defaults and transforms, which should be verified against the installed version. The important contract is that missing values default, while present malformed values fail.
+
+## Repeated Query Parameters
+
+`?role=user&role=admin` may produce an array depending on the parser. If the API expects one role, it should reject repeated values rather than let framework configuration choose silently.
+
+```text
+role=user        → "user"
+role=user&role=admin → reject unless arrays are documented
+```
+
+## JSON Cannot Carry Every JavaScript Value
+
+Standard JSON has strings, numbers, booleans, null, arrays, and objects. It cannot directly represent `undefined`, `Date`, `BigInt`, `NaN`, or `Infinity`.
+
+Those values can still appear when a schema is called from non-HTTP code, so reusable runtime validation should not assume JSON was the only producer unless the boundary guarantees it.
+
+## Big Integers and IDs
+
+Database IDs larger than `Number.MAX_SAFE_INTEGER` should remain strings or use a deliberate big-integer representation. Converting them to `number` can silently lose identity precision.
+
+```ts
+Number("9007199254740993"); // loses exactness
+```
+
+Type validation protects meaning, not merely `typeof` output.
+
+## Narrowing Unknown Manually
+
+Libraries are convenient, but first principles still matter:
+
+```ts
+function assertString(value: unknown, field: string): asserts value is string {
+  if (typeof value !== "string") {
+    throw new ValidationError(field, "invalid_type");
+  }
+}
+```
+
+Understanding narrowing makes schema behavior easier to review and avoids treating a library as magic.
+
 ## Checkpoint Questions
 
 ### 1. Why does `parseInt("21abc", 10)` create risk?
@@ -171,4 +344,3 @@ Because JavaScript converts every non-empty string to true; it does not interpre
 Optional means the property may be missing. Nullable means an explicitly supplied `null` is allowed. They can represent different update intentions.
 
 > **Coming next:** Correct shape and type still do not prove business meaning. Part 6 asks whether the operation is allowed under current state.
-

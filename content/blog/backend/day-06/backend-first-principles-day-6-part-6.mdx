@@ -4,7 +4,7 @@ description: Why services enforce permissions, ownership, existence, uniqueness,
 slug: backend-first-principles-day-6-part-6
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 20 min read
 day: 6
 part: 6
 series: Learning Backend from First Principles
@@ -128,6 +128,174 @@ If permission, ownership, or transition rules exist only in one controller, anot
 
 This does not mean one generic service validates everything. Each use case should accept a narrow command and explicit context.
 
+## State Machines Make Transitions Explicit
+
+Order status is not merely an enum. The current state constrains the next state:
+
+```text
+pending → processing → shipped → delivered
+    ↘ cancelled    ↘ cancelled
+```
+
+```ts
+const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["processing", "cancelled"],
+  processing: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+};
+```
+
+A schema can prove `"shipped"` is an accepted status string. Only the service, after loading the order, can prove the transition is permitted now.
+
+## Ownership and Tenant Boundaries
+
+A valid UUID can identify another user's document. The service must combine verified actor context with loaded resource state:
+
+```ts
+const project = await projects.findById(command.projectId);
+if (!project) throw new ProjectNotFoundError();
+
+if (project.tenantId !== command.actor.tenantId) {
+  throw new PermissionDeniedError();
+}
+```
+
+Some systems deliberately return `404` instead of `403` to avoid revealing that a resource exists. That is an API and threat-model decision above the repository.
+
+## Existence Checks and Foreign Keys
+
+The service may check that a referenced team exists for a useful error, while a foreign key protects stored integrity against races and other writers.
+
+```text
+Service existence check → friendly business meaning
+Database foreign key    → authoritative stored guarantee
+```
+
+The pattern mirrors uniqueness: application checks improve normal behavior; constraints protect truth.
+
+## Time-Based Rules Need a Clock
+
+“Coupon is not expired” depends on current time. Injecting a clock makes the rule testable:
+
+```ts
+if (coupon.expiresAt <= clock.now()) {
+  throw new CouponExpiredError();
+}
+```
+
+Tests can set exact boundary times without sleeping or mocking global `Date` behavior.
+
+Time zones also matter. An input date without an offset may be ambiguous. The request boundary parses the documented representation; the service interprets business deadlines in the chosen time model.
+
+## Inventory and Concurrency
+
+This is unsafe by itself:
+
+```text
+read stock = 1
+if stock >= 1, create order
+```
+
+Two requests can both read `1`. Atomic database updates, row locks, version checks, or reservation systems protect the concurrent rule.
+
+```sql
+UPDATE inventory
+SET available = available - 1
+WHERE product_id = $1 AND available >= 1;
+```
+
+The affected row count tells the repository whether the reservation succeeded. The service maps failure to “out of stock.”
+
+## Business Errors Need Stable Meaning
+
+```ts
+class IllegalOrderTransitionError extends Error {
+  readonly code = "ILLEGAL_ORDER_TRANSITION";
+}
+```
+
+The service throws application meaning, not an HTTP response. Express may map it to `409`; a message consumer may reject or dead-letter the message under a different policy.
+
+## Semantic Test Matrix
+
+```text
+resource absent
+resource belongs to another actor
+operation permitted
+operation forbidden by role
+legal state transition
+illegal transition
+rule exactly at time boundary
+concurrent uniqueness/inventory conflict
+```
+
+These tests use repository fakes for service behavior and database integration tests for real concurrency guarantees.
+
+## Complete Service Example
+
+```ts
+async function changeOrderStatus(command: ChangeOrderStatusCommand) {
+  const order = await orders.findById(command.orderId);
+  if (!order) throw new OrderNotFoundError();
+
+  if (order.tenantId !== command.actor.tenantId) {
+    throw new PermissionDeniedError();
+  }
+
+  if (!command.actor.permissions.includes("order:change-status")) {
+    throw new PermissionDeniedError();
+  }
+
+  if (!allowedTransitions[order.status].includes(command.nextStatus)) {
+    throw new IllegalOrderTransitionError(order.status, command.nextStatus);
+  }
+
+  const updated = await orders.updateStatus({
+    orderId: order.id,
+    expectedVersion: order.version,
+    nextStatus: command.nextStatus,
+  });
+
+  if (!updated) throw new ConcurrentOrderUpdateError();
+  return updated;
+}
+```
+
+The request schema proves `nextStatus` is a valid enum value. The service proves permission and transition meaning. The repository/database protects concurrent version state.
+
+## Uniqueness Normalization Must Match
+
+If the application lowercases email but the database unique index compares differently, two layers may disagree. The normalization and constraint policy must align.
+
+Options include storing a canonical normalized column, using a case-insensitive database type/collation, or defining an expression index. The choice needs migration and internationalization care.
+
+## Authorization Cannot Depend on Hidden UI
+
+Removing a “Delete” button from the frontend improves UX but does not enforce permission. The service or a guaranteed application authorization boundary must reject unauthorized operations regardless of caller.
+
+Critical service rules also protect administrative scripts and message consumers, which may otherwise bypass HTTP middleware.
+
+## Business Rule Documentation
+
+Rules benefit from named errors and tests that read like policy:
+
+```text
+cannot ship a cancelled order
+cannot delete an admin with active responsibilities
+cannot redeem an expired invitation
+cannot reserve more inventory than available
+```
+
+This is clearer than one generic “semantic validation failed” response hiding every reason.
+
+## TOCTOU: Time of Check to Time of Use
+
+Whenever a rule says “check, then write,” I ask what can change in between. Unique email, available inventory, account balance, and version state all have this race.
+
+Transactions, constraints, atomic updates, and locks close the gap. Application checks alone do not freeze the world.
+
 ## My Biggest Realization
 
 I used to say, “Services should never validate.” That is misleading.
@@ -153,4 +321,3 @@ Services may be called by jobs and message consumers. Business rules must protec
 No. Concurrent requests can both observe availability. A database unique constraint provides the final guarantee.
 
 > **Coming next:** Before validating many values, the boundary converts external representations into useful internal forms. Part 7 separates transformation, normalization, and sanitization.
-

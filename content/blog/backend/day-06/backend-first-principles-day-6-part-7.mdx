@@ -4,7 +4,7 @@ description: Turning documented external representations into useful internal va
 slug: backend-first-principles-day-6-part-7
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 15 min read
+readingTime: 21 min read
 day: 6
 part: 7
 series: Learning Backend from First Principles
@@ -118,6 +118,164 @@ extract text → normalize policy → validate format → service uniqueness
 ```
 
 Repeating the pipeline helped me see that transformation is a public API decision, not random cleanup scattered through controllers and repositories.
+
+## Transformation Order Can Change Meaning
+
+Should the application trim before checking maximum length? Usually the normalized value should satisfy the internal contract, but raw size limits must still stop abusive input before normalization.
+
+```text
+raw transport size limit
+  ↓
+parse representation
+  ↓
+normalize according to field policy
+  ↓
+validate normalized value
+```
+
+The exact order must be documented. Otherwise frontend and backend can disagree about whether a whitespace-padded value is accepted.
+
+## Strict Dates
+
+`new Date(value)` accepts more formats than many APIs intend, and date-only strings have different semantics from instants.
+
+```text
+2026-07-20          calendar date
+2026-07-20T10:00Z   instant in UTC
+2026-07-20T10:00    local date-time with missing zone
+```
+
+A birthday is often a calendar date, not midnight UTC. An event timestamp should include an offset or use a documented timezone. The boundary should parse the exact representation and reject impossible dates rather than relying on permissive rollover.
+
+## Canonical Identifiers
+
+Normalization can help compare identifiers consistently:
+
+```text
+email case/whitespace policy
+Unicode normalization for selected identifiers
+country codes converted to uppercase
+phone numbers converted to an agreed canonical format
+```
+
+These are domain policies. A username may be case-sensitive even when an email lookup is not. Normalizing everything to lowercase would destroy intended distinctions.
+
+## Defaults Belong to Omission
+
+```text
+page missing  → default 1
+page=""       → malformed
+page="banana" → malformed
+page="0"      → parsed, then out of range
+```
+
+Silently defaulting malformed values hides broken clients and makes debugging difficult. A default answers “what if the caller omitted this?” not “what if conversion failed?”
+
+## Transformations Must Be Idempotent When Possible
+
+Applying a normalizer twice should ideally produce the same result:
+
+```ts
+normalizeEmail(normalizeEmail(value)) === normalizeEmail(value)
+```
+
+Idempotence makes repeated boundaries and retries easier to reason about. Destructive transformations such as repeatedly stripping or encoding content can corrupt data.
+
+## Sanitization Depends on the Sink
+
+```text
+SQL destination      → parameterized query
+HTML text context    → output encoding
+HTML attribute       → attribute-aware encoding
+Shell command        → avoid shell; pass argument array
+Filesystem path      → server-controlled root + safe resolved path
+Redirect URL         → scheme/host allowlist
+```
+
+Storing “sanitized HTML” may be wrong if the same value is later used in JSON, plain text, or another context. Preserve the intended data and apply destination-aware protection at the sink.
+
+## Property-Based Transformation Tests
+
+Beyond examples, transformations can be tested for properties:
+
+- output always matches its TypeScript/runtime type;
+- normalization is idempotent;
+- malformed input never partially parses;
+- values outside range never become defaults;
+- raw input is not mutated unexpectedly.
+
+## Complete Pagination Transformation
+
+```ts
+function parsePositiveIntegerText(
+  value: unknown,
+  field: string,
+  maximum: number,
+): number {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+    throw new ValidationError(field, "invalid_integer");
+  }
+
+  const output = Number(value);
+  if (!Number.isSafeInteger(output) || output > maximum) {
+    throw new ValidationError(field, "out_of_range");
+  }
+
+  return output;
+}
+
+const page = req.query.page === undefined
+  ? 1
+  : parsePositiveIntegerText(req.query.page, "page", 10_000);
+
+const limit = req.query.limit === undefined
+  ? 20
+  : parsePositiveIntegerText(req.query.limit, "limit", 100);
+```
+
+The code distinguishes omission from malformed presence and validates before computing an offset.
+
+## Transformation Can Lose Information
+
+Converting a phone number or identifier to a number can remove leading zeros. Parsing a date into UTC can lose the original timezone intent. Lowercasing a case-sensitive identifier changes identity.
+
+Before transforming, I ask:
+
+- Is this truly a number used in arithmetic, or an identifier made of digits?
+- Is this a calendar date, local time, or instant?
+- Is comparison case-sensitive by domain policy?
+- Must the original representation be preserved for audit or display?
+
+## Canonicalization and Signatures
+
+Webhook signatures are often computed over exact raw bytes. Parsing and reserializing JSON can change whitespace or key order, invalidating verification.
+
+The signature boundary may need the raw body first, followed by parsing and validation only after authenticity is established.
+
+```text
+raw bytes → signature verification → parse → validate → transform
+```
+
+This is an example where the general pipeline order changes for a specific protocol.
+
+## Avoid Mutating Raw Input
+
+Creating a new command is easier to audit than changing `req.body` throughout several functions:
+
+```ts
+const command = {
+  email: normalizeEmail(raw.email),
+  age: parseAge(raw.age),
+};
+```
+
+The original remains available for controlled diagnostics, while deeper layers receive one canonical representation.
+
+## Locale-Sensitive Transformation
+
+Numbers such as `1,234` and dates such as `07/08/2026` are ambiguous across locales. APIs should prefer locale-independent wire formats or include explicit locale context rather than guess.
+
+Friendly frontend input can be localized and then converted into the documented API representation before submission; the server still validates that representation.
 
 ## My Biggest Realization
 

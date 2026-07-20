@@ -4,7 +4,7 @@ description: Following raw values through the request boundary, controller, serv
 slug: backend-first-principles-day-6-part-2
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 13 min read
+readingTime: 19 min read
 day: 6
 part: 2
 series: Learning Backend from First Principles
@@ -150,6 +150,173 @@ Validation does not have to live in one physical file. The accurate principle is
 
 > **Request-contract validation happens at the application boundary before business logic.**
 
+## Boundary Rules and Business Rules
+
+The statement “validate before the service” applies to request representation. It does not mean the service protects no rules.
+
+```text
+Request boundary
+  Is email a bounded string with accepted syntax?
+  Is age a runtime integer?
+  Are unknown fields forbidden?
+
+Service
+  Is registration open?
+  May this actor assign this role?
+  Is the invitation valid for this email?
+
+Database
+  Is normalized email unique at commit time?
+  Does the foreign key remain valid?
+```
+
+All are sometimes called validation, but they establish different guarantees.
+
+## Explicit Command Construction
+
+```ts
+const parsed = createUserSchema.parse(req.body);
+
+const command: CreateUserCommand = {
+  name: parsed.name,
+  email: parsed.email,
+  password: parsed.password,
+  age: parsed.age,
+};
+```
+
+The command has no `role`, `id`, `isVerified`, or `passwordHash`. Explicit mapping documents what the service is allowed to receive and prevents future database columns from becoming API features accidentally.
+
+## Reject Cheaply Before Expensive Work
+
+Defense is strongest when inexpensive checks reject invalid work early:
+
+```text
+network/proxy body limit
+  ↓
+parser body limit
+  ↓
+shape and type validation
+  ↓
+identity and permission checks
+  ↓
+stateful database rules
+  ↓
+persistence
+```
+
+Exact order depends on the endpoint, but there is no reason to query whether `not-an-email` is unique.
+
+## Other Adapters Need Boundaries Too
+
+A queue consumer does not go through an Express controller:
+
+```ts
+async function consumeImport(message: unknown) {
+  const command = importUserMessageSchema.parse(message);
+  await createUserService.execute(command);
+}
+```
+
+The consumer is another application boundary. This explains why critical business rules remain inside the service even when HTTP input was already validated.
+
+## Output Is Also a Boundary
+
+```ts
+function toUserResponse(user: User) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
+```
+
+A database record may contain password hashes, tokens, risk flags, and storage naming. The public response should allowlist safe fields rather than serialize internal data directly.
+
+## Guarantees at Every Handoff
+
+| Handoff | Guarantee |
+| --- | --- |
+| Parser → boundary | representation became a runtime value |
+| Boundary → service | shape, type, and transformations proven |
+| Service → repository | business operation accepted |
+| Repository → database | destination-safe query and mapping |
+| Database → application | stored constraints enforced |
+| Handler → client | public fields only |
+
+## Complete Create User Boundary Example
+
+```ts
+const createUserSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(12).max(128),
+  age: z.number().int().min(0).max(150).optional(),
+}).strict();
+
+async function createUserHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = createUserSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: {
+          code: "VALIDATION_FAILED",
+          fields: mapIssues(parsed.error.issues),
+        },
+      });
+    }
+
+    const command: CreateUserCommand = {
+      name: parsed.data.name,
+      email: parsed.data.email,
+      password: parsed.data.password,
+      age: parsed.data.age,
+    };
+
+    const user = await createUserService.execute(command);
+    res.status(201).json({ user: toUserResponse(user) });
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+The handler exposes the application boundary clearly. Raw `req.body` never reaches the service.
+
+## What if Validation Lives in Middleware?
+
+```ts
+router.post(
+  "/users",
+  validateBody(createUserSchema),
+  createUserHandler,
+);
+```
+
+This can reduce repeated parsing code, but it introduces an ordering contract: the handler must only run after validation. The validated property needs an honest TypeScript type, and integration tests must prove route composition.
+
+Neither middleware nor local helper is universally better. The guarantee matters:
+
+```text
+failure stops before business logic
+success produces a narrow typed command
+```
+
+## Avoid Passing Validation-Library Objects Inward
+
+The service should not depend on Zod issues or Express validation results. The boundary maps library output into the API's stable error format and passes only application data inward.
+
+This keeps a future validation-library change from becoming a service rewrite.
+
+## Boundary Performance Is Observable
+
+Metrics can distinguish parser rejection, schema rejection, business conflict, and database failure. If a new mobile release suddenly increases `unknown_field` errors, the contract and client likely drifted.
+
+Observability should record route templates and stable error codes, not rejected passwords, tokens, or entire request bodies.
+
 ## The Receptionist Analogy
 
 I picture the boundary as a receptionist. Visitors do not wander into every office carrying unexamined folders. The receptionist checks the destination and required packet, then gives the department known information.
@@ -179,4 +346,3 @@ No. Middleware, schemas, DTOs, pipes, and controller helpers may enforce request
 Persistence operations and database mapping—not HTTP request validation or hidden business workflows.
 
 > **Coming next:** I know where the layers sit, but what does “valid” actually prove? Part 3 separates three meanings I used to combine.
-

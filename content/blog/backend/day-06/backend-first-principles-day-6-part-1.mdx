@@ -4,7 +4,7 @@ description: Why even data from an official frontend begins as unknown, and why 
 slug: backend-first-principles-day-6-part-1
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 12 min read
+readingTime: 19 min read
 day: 6
 part: 1
 series: Learning Backend from First Principles
@@ -182,6 +182,130 @@ It means:
 > **The server bases its guarantees on checks it controls, not behavior a caller was expected to follow.**
 
 The client suggests an age; the server decides whether its representation is accepted. The client requests a role; the server decides whether that field belongs to this contract and whether the actor has permission.
+
+## Every Input Channel Crosses the Boundary
+
+I originally focused only on JSON bodies. Then I listed everything an endpoint can read:
+
+```text
+req.body          JSON or form data
+req.params        path identifiers
+req.query         filters, sorting, pagination
+req.headers       credentials, locale, negotiation
+req.cookies       sessions and preferences
+uploaded files    names, sizes, MIME claims, bytes
+webhook payloads  third-party events and signatures
+```
+
+Every value came from outside the running application process. A cookie may have been created by the server, but a browser can replay, omit, or alter it unless the server verifies its integrity.
+
+The boundary is not “frontend versus backend.” It is **outside data becoming application data**.
+
+## Trusted Client Is Not Trusted Data
+
+An official authenticated app can still send bad data because it is outdated, buggy, modified, using a stale retry, or running with a stolen credential.
+
+```text
+Authentication: Who presented this credential?
+Authorization:  May this identity perform the action?
+Validation:     Does the input satisfy the contract?
+Business rule:  Is the action allowed in current state?
+```
+
+Each question needs separate evidence.
+
+## What Failure Looks Like Without Validation
+
+### Runtime crashes
+
+```ts
+req.body.name.trim();
+```
+
+If `name` is `null`, this throws before the application can return a useful response.
+
+### Mass assignment
+
+```json
+{ "name": "Alice", "role": "admin", "isVerified": true }
+```
+
+Passing an open body directly to an ORM can expose fields the operation never intended to accept.
+
+### Resource exhaustion
+
+A ten-million-item array may be valid JSON while consuming excessive memory, validation time, and database work.
+
+### Injection
+
+A string can pass a length check and still be dangerous if concatenated into SQL, HTML, a shell command, a file path, or a redirect URL. Validation is not a universal destination-specific defense.
+
+## Trust Is Earned in Stages
+
+```text
+unknown bytes
+  ↓ parser
+unknown runtime value
+  ↓ shape and type validation
+boundary DTO
+  ↓ explicit transformation
+application command
+  ↓ business checks
+authorized operation
+  ↓ database constraints
+persisted valid state
+```
+
+No stage proves everything. JSON parsing does not prove an email. A schema does not prove database uniqueness. A pre-check does not defeat concurrency. A database constraint does not decide whether the actor has permission.
+
+## A Threat Model for Create User
+
+| Failure or threat | Protection |
+| --- | --- |
+| Missing name | schema field error |
+| Oversized password | size limit before hashing |
+| Unknown `role` | strict unknown-field policy |
+| Duplicate email | service check plus unique index |
+| Direct `curl` call | same server-side boundary |
+| SQL-like text | parameterized repository query |
+| Huge body | proxy and parser limits |
+
+This turns “never trust input” from a slogan into concrete controls.
+
+## Trust Boundary Review Questions
+
+Before accepting any new input, I ask:
+
+1. Who can send it, including clients I did not build?
+2. What exact representations are accepted?
+3. What are the maximum sizes and collection counts?
+4. Which fields are allowlisted, and what happens to unknown fields?
+5. Which transformations occur, and can they hide malformed values?
+6. Which rules require identity or current database state?
+7. Which destination-specific defenses still apply later?
+8. What safe error contract describes rejection?
+9. What must never enter logs?
+10. Which database constraint protects the final invariant?
+
+These questions scale from a query parameter to a webhook or file upload. They make trust an engineering decision rather than a feeling about the caller.
+
+## Testing the Untrusted Boundary
+
+I do not test only “valid form submits.” I send requests the UI never creates:
+
+```text
+missing body
+JSON array instead of object
+null fields
+wrong types
+unknown privileged fields
+oversized strings and arrays
+malformed encodings
+old-client field names
+direct requests without frontend headers
+```
+
+The API should reject them predictably without crashing, persisting partial data, or revealing internal details.
 
 ## My Biggest Realization
 

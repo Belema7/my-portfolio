@@ -4,7 +4,7 @@ description: Defense in depth for size limits, constraints, races, injection con
 slug: backend-first-principles-day-6-part-10
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 18 min read
+readingTime: 24 min read
 day: 6
 part: 10
 series: Learning Backend from First Principles
@@ -177,6 +177,136 @@ Before tightening a contract:
 
 Validation is executable API behavior, not an internal implementation detail.
 
+## File Upload Defense
+
+Multipart parsing is only the first checkpoint. Secure upload handling considers:
+
+```text
+request and file count limits
+  ↓
+declared MIME and extension policy
+  ↓
+content-based type detection
+  ↓
+malware scanning where required
+  ↓
+generated server filename
+  ↓
+isolated storage and access control
+```
+
+Client filenames must not become filesystem paths. Image decoders and archive extraction can consume huge resources even when compressed input is small.
+
+## URL and SSRF Validation
+
+A syntactically valid URL can still target internal infrastructure:
+
+```text
+http://127.0.0.1/admin
+http://169.254.169.254/
+http://internal-service/
+```
+
+If the server fetches user-supplied URLs, protection may require allowed schemes, host policy, DNS/IP checks, redirect revalidation, network egress controls, timeouts, and response-size limits.
+
+“Valid URL” is not the same as “safe server fetch destination.”
+
+## Resource Limits at Several Layers
+
+```text
+CDN/gateway limit
+reverse-proxy limit
+application parser limit
+schema string/array limits
+database statement timeout
+downstream response limit
+```
+
+Layered limits prevent one bypass or configuration mismatch from carrying unlimited work deeper into the system. Limits need metrics so legitimate clients are not rejected silently.
+
+## Rate and Complexity Limits
+
+An individually valid request can become abusive when repeated or when it requests expensive expansion.
+
+```text
+?include=orders,items,product,reviews,...
+```
+
+Pagination caps, query complexity budgets, rate limiting, timeouts, and authorization complement validation. The system protects both data integrity and finite resources.
+
+## Fuzzing and Property-Based Tests
+
+Example tests cover known cases. Fuzzing and property-based tests explore combinations humans may not imagine:
+
+- arbitrary Unicode and control characters;
+- deeply nested arrays and objects;
+- repeated query parameters;
+- numeric extremes and scientific notation;
+- unexpected content types;
+- malformed encodings;
+- combinations of optional and nullable fields.
+
+Useful properties include “parser never throws an unhandled exception,” “accepted output always satisfies the internal type,” and “unknown fields never reach persistence.”
+
+## Observability Without High-Cardinality Leaks
+
+Metrics can count rejections by route and stable error code:
+
+```text
+validation_failures_total{route="POST /users",code="unknown_field"}
+```
+
+They should not use email addresses, user IDs, raw URLs, or rejected values as metric labels. Logs can carry limited request-specific context under redaction and retention controls.
+
+## Rolling Out Stricter Rules
+
+Before tightening a production contract, I can:
+
+1. measure how often old-but-accepted forms appear;
+2. warn or log in a non-blocking phase;
+3. update official clients and documentation;
+4. add the new enforcement;
+5. monitor rejection changes;
+6. version the API when compatibility requires it.
+
+Security emergencies may require immediate rejection, but ordinary contract evolution benefits from evidence and coordination.
+
+## Validation Dependency Failure
+
+If a semantic check calls a dependency and that dependency is unavailable, the request is not necessarily invalid.
+
+```text
+email malformed       → 400 client error
+identity store down   → 503 dependency failure
+uniqueness query down → 503/500 policy, not “email invalid”
+```
+
+Keeping stateful checks outside primitive schemas makes this classification clearer.
+
+## Fail Open or Fail Closed?
+
+Security-sensitive checks such as authorization should normally fail closed when their decision cannot be established. Optional personalization may fail open to a default experience.
+
+The choice should be explicit per feature. Accidentally treating a timeout as permission is a serious vulnerability.
+
+## Review Checklist for a New Endpoint
+
+```text
+all input sources inventoried
+body/content-type/collection limits set
+unknown fields handled
+strict transformations documented
+boundary schema tested
+business rules owned by service
+database constraints identified
+destination defenses applied
+public errors stable and safe
+logs redacted
+compatibility and observability planned
+```
+
+This checklist connects validation to architecture, security, operations, and API evolution.
+
 ## Senior-Engineer Questions
 
 ```text
@@ -210,4 +340,3 @@ Correctly shaped values can still exhaust memory or cause unreasonable database 
 Existing clients may send values that an older contract accepted. Stricter limits or unknown-field rules can turn successful calls into failures.
 
 > **Coming next:** Every protection is now on the table. Part 11 follows the original Create User request from raw bytes to stored user and safe response.
-

@@ -4,7 +4,7 @@ description: Encoding a strict request boundary with Zod 4, safeParse, inferred 
 slug: backend-first-principles-day-6-part-8
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 18 min read
+readingTime: 23 min read
 day: 6
 part: 8
 series: Learning Backend from First Principles
@@ -189,11 +189,167 @@ The choice matters less than these guarantees:
 - success produces a narrow command;
 - services still enforce business meaning.
 
+## Input and Output Types Can Differ
+
+Zod transformations have an input type and an output type:
+
+```ts
+const pageSchema = z
+  .string()
+  .regex(/^[1-9]\d*$/)
+  .transform(Number)
+  .pipe(z.number().int().max(10_000));
+
+type RawPage = z.input<typeof pageSchema>;   // string
+type Page = z.output<typeof pageSchema>;     // number
+```
+
+The service needs `Page`, not the raw representation. This is why `z.output` communicates the post-transformation guarantee.
+
+## Preprocess Versus Coerce Versus Transform
+
+Broad coercion such as `z.coerce.boolean()` can inherit surprising JavaScript truthiness. Explicit preprocessing or transformation is safer when only a narrow grammar is accepted.
+
+```ts
+const queryBooleanSchema = z.union([
+  z.literal("true").transform(() => true),
+  z.literal("false").transform(() => false),
+]);
+```
+
+The schema documents exactly which external values exist.
+
+## Reusable Schemas Without One Giant Schema
+
+Small field schemas can be composed:
+
+```ts
+const emailSchema = z.string().trim().toLowerCase().email().max(254);
+const displayNameSchema = z.string().trim().min(1).max(100);
+
+const createUserSchema = z.object({
+  name: displayNameSchema,
+  email: emailSchema,
+  password: passwordSchema,
+}).strict();
+```
+
+But operations still need distinct object schemas. Extending a stored `UserSchema` and omitting a few fields can accidentally inherit rules inappropriate for a public request.
+
+## Async Refinements Need Care
+
+Zod can run async refinements, but putting database uniqueness inside a schema mixes a changing business rule with a representation contract.
+
+Use async refinements for boundary concerns only when their ownership and failure behavior are clear. Network or database outages should not be mislabeled as “invalid email.”
+
+## A Typed Middleware Handoff
+
+```ts
+function validateBody<TSchema extends z.ZodTypeAny>(schema: TSchema) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.body);
+    if (!result.success) return sendValidationError(res, result.error);
+
+    req.validatedBody = result.data;
+    next();
+  };
+}
+```
+
+TypeScript cannot automatically prove every handler was registered after this middleware. Route composition and integration tests must support the runtime guarantee. Some projects prefer a local `parseBody(schema, req)` helper because the data flow stays explicit.
+
+## Schema Versioning
+
+Tightening a schema can break old clients. Adding a required field, rejecting previously stripped keys, or changing coercion is an API contract change.
+
+Versioned endpoints, transition periods, metrics on rejected fields, and coordinated client releases may be needed. Runtime schemas are executable API specifications, so changes deserve review.
+
 ## Error Design
 
 Zod's internal issue codes are useful, but a public API may map them to stable application codes. Changing libraries should not silently change the client contract.
 
 The response should expose field, stable code, and safe message. It should not expose stack traces or the entire submitted payload.
+
+## Boundary Tests for the Schema
+
+```text
+valid canonical body
+valid body requiring normalization
+missing field
+null field
+wrong runtime type
+unknown role field
+overlong strings
+age boundaries
+malformed query representations
+multiple simultaneous field errors
+```
+
+The test should assert both rejection and the exact parsed output handed to the service.
+
+## Complete Route Composition
+
+```ts
+const validateCreateUser = validateBody(createUserSchema);
+
+router.post(
+  "/users",
+  requestIdMiddleware,
+  createUserRateLimiter,
+  validateCreateUser,
+  createUserHandler,
+);
+```
+
+The effective order is part of correctness. Rate limiting protects expensive work. Validation prevents malformed input from reaching the handler/service. The handler consumes the parsed output, not `req.body`.
+
+## Mapping Zod Issues
+
+```ts
+function mapIssues(error: z.ZodError) {
+  return error.issues.map((issue) => ({
+    field: issue.path.join(".") || "body",
+    code: mapIssueCode(issue.code),
+    message: safeIssueMessage(issue),
+  }));
+}
+```
+
+The mapper stabilizes the public contract. It should avoid including rejected secret values or schema internals clients do not need.
+
+## Type Inference Without Type Leakage
+
+```ts
+type CreateUserCommand = z.output<typeof createUserSchema>;
+```
+
+This can prevent schema/type drift. In larger architectures, the application command may be declared independently and the adapter maps schema output into it so the service does not import Zod at all.
+
+Both designs are valid if runtime proof and dependency direction remain clear.
+
+## Refinement Ordering
+
+Transformations and refinements execute in library-defined order. A trim, lowercase, format check, and custom refinement can behave differently depending on composition.
+
+Tests should prove the exact accepted raw values and output, especially after upgrading Zod. The project instruction to read installed-version documentation matters because schema APIs and behavior evolve.
+
+## Error Localization
+
+Stable codes belong in the API. Human messages may be localized by the frontend or server according to product design. Clients should not branch on English text.
+
+```json
+{
+  "field": "email",
+  "code": "invalid_format",
+  "message": "Enter a valid email address."
+}
+```
+
+## Schema Performance
+
+Deep unions, large arrays, and expensive refinements can consume CPU. Body and collection limits should run before or alongside schema validation. Benchmarking matters for hot or adversarial endpoints.
+
+Validation libraries reduce boilerplate; they do not eliminate resource engineering.
 
 ## Checkpoint Questions
 
@@ -210,4 +366,3 @@ Uniqueness depends on changing database state and belongs to the business operat
 It rejects unknown fields, exposes contract drift, and helps prevent over-posting such as public `role` assignment.
 
 > **Coming next:** If the frontend performs similar checks, why must the backend repeat them? Part 9 separates user experience from authority.
-

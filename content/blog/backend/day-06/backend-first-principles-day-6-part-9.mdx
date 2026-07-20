@@ -4,7 +4,7 @@ description: Why frontend validation improves experience while backend validatio
 slug: backend-first-principles-day-6-part-9
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 11 min read
+readingTime: 19 min read
 day: 6
 part: 9
 series: Learning Backend from First Principles
@@ -99,6 +99,190 @@ The frontend may check email format immediately. The backend checks again at rec
 - database constraints.
 
 The frontend may optimistically check availability, but that answer can become stale before submission.
+
+## How Frontend Rules Are Bypassed
+
+The frontend is code running on a device the server does not control. A caller can:
+
+- send a request with `curl`, Postman, or a script;
+- edit form attributes in developer tools;
+- disable JavaScript;
+- intercept and modify a request through a proxy;
+- run an old mobile app;
+- call the API through another integration;
+- replay a previously valid request after state changes.
+
+The server sees HTTP, not the form that was supposed to create it.
+
+```bash
+curl -X POST https://api.example.com/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":null,"role":"admin"}'
+```
+
+No HTML `required` attribute can stop this request from reaching a public endpoint.
+
+## Frontend Validation Has Real Value
+
+Saying frontend validation is not security does not make it useless. It improves:
+
+- immediate feedback without a network round trip;
+- accessibility when errors are associated with inputs;
+- reduced accidental invalid traffic;
+- password guidance and character counters;
+- preserving form state when fields fail;
+- user understanding of expected formats.
+
+The frontend should not wait for a server response to tell a user an obviously empty required field needs attention.
+
+## The Backend Is the Authority
+
+Only server-side validation can protect:
+
+- every client and client version;
+- database integrity;
+- permissions and ownership;
+- current business state;
+- resource limits;
+- server-controlled transformations;
+- safe persistence under concurrency.
+
+The server may trust another internal service only through a defined authenticated contract. “Internal” alone is not runtime proof.
+
+## Shared Schemas Reduce Drift, Not Trust
+
+A monorepo can share a Zod schema between React and the API. This is useful because both sides communicate the same field names, limits, and messages.
+
+```text
+Shared contract package
+  ├─ frontend executes for immediate UX
+  └─ backend executes again for authority
+```
+
+The frontend's successful parse is not transmitted as proof. The server reruns the schema against the actual bytes it received.
+
+Shared code also has risks:
+
+- frontend bundles must not include server secrets or server-only dependencies;
+- backend deployment may lag behind frontend deployment;
+- business rules that require database state cannot live in a browser schema;
+- schema updates are compatibility changes.
+
+## Client and Server Can Validate at Different Times
+
+```text
+Typing
+  frontend checks format gently
+
+Submit
+  frontend checks full local contract
+
+Request arrives
+  server checks authoritative boundary
+
+Use case executes
+  service checks current business state
+
+Database commits
+  constraints enforce stored truth
+```
+
+The checks are not wasteful duplication; they serve different audiences and trust levels.
+
+## Handling Server Errors in the Form
+
+Even after frontend validation passes, the server may return:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "fields": {
+      "email": ["Email must be valid"]
+    }
+  }
+}
+```
+
+The frontend should map stable field paths and codes into accessible errors, focus the first invalid field where appropriate, and preserve user input except secrets that should be cleared.
+
+A uniqueness conflict may appear only after submission because availability changed between typing and persistence.
+
+## Never Put Secrets in Client-Only Rules
+
+Client code is inspectable. A rule such as “accept admin code if it equals this hard-coded string” exposes the secret. Security decisions need server-controlled state and verified authorization.
+
+Similarly, hiding an admin field in the UI does not prevent a caller from sending the field. The backend contract must reject it or ignore it safely.
+
+## Contract Testing Across Clients
+
+Shared fixtures can verify that frontend and backend agree on examples:
+
+```text
+valid normalized email
+missing name
+password at exact boundary
+unknown role
+age wrong type
+```
+
+The server still has additional tests for authentication, stateful rules, database constraints, and direct raw requests.
+
+## Accessible Frontend Error Design
+
+Useful validation is not only red borders. Forms should associate messages with controls, announce summary errors when appropriate, preserve typed values, and avoid relying on color alone.
+
+Server field paths can map to frontend fields, while non-field errors such as conflicts or permission failures appear in a form-level region.
+
+```text
+email invalid → focus/describe email input
+email conflict → email field or form summary
+service unavailable → form-level retry guidance
+```
+
+## Async Frontend Checks Are Still Hints
+
+A registration form may check email availability while the user types. Another registration can claim the email a millisecond later.
+
+```text
+frontend availability check → available
+another request registers
+current submit → database conflict
+```
+
+The final server operation and unique constraint remain authoritative. The UI must handle `409` even after showing a green availability indicator.
+
+## Offline and Optimistic Clients
+
+Mobile apps may queue writes while offline and submit later. Data that was locally valid can conflict with new server state. Version fields, idempotency keys, and conflict responses help clients reconcile rather than assuming frontend validation made the request timelessly valid.
+
+## Never Expose Server-Only Schema Details
+
+Shared packages should separate public request contracts from internal database and administrative schemas. Shipping an internal schema to the browser can reveal fields, rules, or structures the client does not need.
+
+```text
+public contract package → safe to bundle
+server application rules → server only
+database schema/types    → infrastructure only
+```
+
+## Client Version Compatibility
+
+The server may need to accept old and new representations during a migration. It should transform each documented version deliberately, not guess based on random missing fields.
+
+Telemetry can measure remaining old-client traffic before removing compatibility code.
+
+## Frontend/Backend Responsibility Table
+
+| Concern | Frontend | Backend |
+| --- | --- | --- |
+| Instant required feedback | Yes | Yes on submit |
+| Runtime request authority | No | Yes |
+| Database uniqueness | Hint only | Service + constraint |
+| Accessibility | Yes | Supplies usable error contract |
+| Permission enforcement | UI visibility only | Authoritative |
+| Resource limits | UX guidance | Authoritative |
+| Direct-client protection | No | Yes |
 
 ## My Biggest Realization
 

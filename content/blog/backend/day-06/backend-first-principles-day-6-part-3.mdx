@@ -4,7 +4,7 @@ description: Separating syntactic, runtime type, and semantic validation so ever
 slug: backend-first-principles-day-6-part-3
 date: '2026-07-15'
 category: Learning Journey
-readingTime: 11 min read
+readingTime: 18 min read
 day: 6
 part: 3
 series: Learning Backend from First Principles
@@ -123,6 +123,147 @@ Transformation sits between representations:
 "-500" → -500 → transformation succeeds → range fails
 "21years" → reject instead of partially parsing
 ```
+
+## Structural and Stateful Rules
+
+Structural rules use the value itself:
+
+```text
+name length ≤ 100
+age is a finite integer
+items contains at most 50 entries
+```
+
+Stateful rules need application context:
+
+```text
+email is unused
+coupon has not expired
+inventory is available
+order belongs to actor
+status transition is legal now
+```
+
+Schemas are excellent for deterministic structural proof. Services and databases own current-state meaning.
+
+## Validation Depends on the Operation
+
+The same field follows different contracts:
+
+```text
+registration email → required
+profile patch email → optional
+admin import email  → perhaps follows a separate verification workflow
+```
+
+One universal `UserSchema` often becomes too strict or too permissive. Use-case-specific schemas make intent clear:
+
+```text
+CreateUserSchema
+UpdateProfileSchema
+AdminChangeRoleSchema
+ImportUserMessageSchema
+```
+
+The stored entity is not the request contract.
+
+## Authorization Is Semantic
+
+`"admin"` may be a valid enum member. That does not prove the caller may assign it. The semantic decision needs verified identity, permissions, endpoint purpose, and perhaps target state.
+
+For public registration, the safest schema omits `role`. For an administrative operation, the service still enforces permission so a second transport cannot bypass it.
+
+## Validation Order and Cost
+
+```text
+required shape
+  ↓
+runtime type
+  ↓
+format, length, range
+  ↓
+authorization and existence
+  ↓
+uniqueness and current state
+```
+
+Cheap deterministic checks should normally precede database and network checks. This improves performance and error clarity.
+
+## Collect Errors or Fail Fast?
+
+Form endpoints often return several independent field errors so users can fix them together. Authorization usually fails immediately to avoid expensive work or disclosing sensitive facts.
+
+```json
+{
+  "fields": {
+    "name": ["Name is required"],
+    "email": ["Email must be valid"]
+  }
+}
+```
+
+Error collection is a UX, performance, and threat-model decision—not merely a library option.
+
+## A Validation Matrix
+
+| Value | Syntax | Type | Semantics |
+| --- | --- | --- | --- |
+| Email | email-shaped, bounded | string | unused/allowed |
+| Tenant ID | UUID-shaped | string | tenant exists and actor belongs |
+| Role | enum member | string | actor may assign |
+| Order status | accepted enum | string | transition allowed now |
+
+## One Order Request End to End
+
+```json
+{
+  "productId": "550e8400-e29b-41d4-a716-446655440000",
+  "quantity": 2,
+  "shippingMethod": "express"
+}
+```
+
+### Syntactic proof
+
+The body has exactly the required fields. The UUID and shipping method match accepted representations. Quantity falls within an input range.
+
+### Type proof
+
+`productId` and `shippingMethod` are strings. `quantity` is a finite safe integer, not `"2"`, `2.5`, or `NaN`.
+
+### Semantic proof
+
+The product exists, is available to the actor's region, has at least two reservable units, and supports express shipping. The actor is allowed to order for this account.
+
+### Database proof
+
+An atomic reservation prevents two concurrent orders from consuming the same last units.
+
+The request is not “validated” at one moment. It accumulates specific proofs across the operation.
+
+## What Should Error Codes Describe?
+
+```text
+invalid_uuid             representation problem
+quantity_out_of_range    boundary constraint
+product_not_found        current-state absence
+shipping_not_available   business rule
+inventory_conflict       concurrent state conflict
+```
+
+Stable categories help clients respond appropriately. A retry may help an inventory conflict but not a malformed UUID.
+
+## Avoiding Information Disclosure
+
+Semantic checks sometimes know sensitive facts. A caller without tenant access should not learn whether a resource exists. The service can evaluate authorization before returning absence details or deliberately map both outcomes to the same public response.
+
+Validation order therefore affects security, not only speed.
+
+## Testing Each Proof Separately
+
+Schema tests cover shape and runtime values. Service tests cover permissions and state using repository fakes. Database tests cover constraints and concurrency. HTTP tests verify public error mapping.
+
+When every layer owns its proof, tests become focused instead of one enormous end-to-end suite trying to explain every failure.
 
 ## Why This Matters
 
