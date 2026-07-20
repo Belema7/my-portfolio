@@ -1,0 +1,314 @@
+---
+title: Day 9 — REST API Design (Part 4)
+description: Using GET, HEAD, POST, PUT, PATCH, DELETE, and OPTIONS according to HTTP safety, idempotency, replacement, partial-update, and conditional-request semantics.
+slug: backend-first-principles-day-9-part-4
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 9
+part: 4
+series: Learning Backend from First Principles
+order: 904
+published: true
+tags: [HTTP Methods, REST, API Semantics]
+keywords: [HTTP methods REST, PUT vs PATCH, safe idempotent methods]
+---
+# HTTP Methods: Expressing Intent With Shared Semantics
+
+> *“The URI says what resource I am addressing; the method says what kind of interaction I am requesting.”*
+
+## The Verb Question
+
+Part 3 gave resources stable addresses. Now the client needs to express intent.
+
+```text
+GET    /books/book_123
+PUT    /books/book_123
+PATCH  /books/book_123
+DELETE /books/book_123
+```
+
+Using HTTP methods consistently lets caches, gateways, browsers, monitoring tools, and developers understand behavior.
+
+## Three Method Properties
+
+### Safe
+
+A safe method requests information without asking the server to change resource state. GET, HEAD, and OPTIONS are safe by defined semantics.
+
+Safe does not mean “no side effects whatsoever.” A GET can produce logs, metrics, or cache entries. It must not be designed to charge a card or delete a user.
+
+### Idempotent
+
+Repeating the same intended request has the same intended effect as sending it once. PUT and DELETE are idempotent by semantics; POST generally is not; PATCH depends on its patch document and operation.
+
+### Cacheable
+
+HTTP defines caching semantics by method and response metadata. GET and HEAD are the normal cacheable methods. POST responses can be cached under explicit conditions, though support and practice vary.
+
+## GET: Retrieve a Representation
+
+```http
+GET /books/book_123
+Accept: application/json
+```
+
+GET should not perform a requested state mutation.
+
+Avoid:
+
+```text
+GET /users/user_123/delete
+GET /payments/charge?amount=100
+```
+
+Browsers, link previews, crawlers, caches, and prefetchers may issue GET automatically. Unsafe behavior behind GET can cause serious damage.
+
+Request content on GET has no generally defined semantics in HTTP and may be rejected or ignored by intermediaries. Use query parameters for retrieval controls or another method when a complex request body is genuinely necessary.
+
+## HEAD: GET Metadata Without Content
+
+HEAD requests the same headers a corresponding GET would return, without response content.
+
+```http
+HEAD /files/file_123
+```
+
+It can check existence, validators, content length, or modification metadata without transferring the representation body.
+
+## POST: Let a Resource Process a Representation
+
+POST is broader than “create.” It asks the target resource to process the enclosed representation according to its own semantics.
+
+Creating within a collection is common:
+
+```http
+POST /books
+Content-Type: application/json
+
+{ "title": "Designing Data-Intensive Applications" }
+```
+
+The server assigns an identifier:
+
+```http
+HTTP/1.1 201 Created
+Location: /books/book_456
+```
+
+POST can also submit a command, start a job, or create a subordinate action resource.
+
+## PUT: Replace State at a Known URI
+
+PUT requests creation or replacement of the state at the target URI:
+
+```http
+PUT /profiles/user_123
+Content-Type: application/json
+
+{
+  "displayName": "Belema",
+  "bio": "Backend learner"
+}
+```
+
+The client knows the target URI. Repeating the same representation should leave the resource in the same intended state.
+
+PUT replacement semantics require a clear policy for omitted fields. If the API treats PUT as partial update, it is really using PATCH-like semantics under another name.
+
+Depending on API policy, PUT to an absent client-chosen URI may create it or return an error.
+
+## PATCH: Apply a Partial Modification
+
+PATCH applies a patch document. Its idempotency depends on the patch format and operation.
+
+Merge-patch-like document:
+
+```http
+PATCH /users/user_123
+Content-Type: application/merge-patch+json
+
+{ "displayName": "New Name", "avatarUrl": null }
+```
+
+Setting a field to the same value repeatedly is idempotent.
+
+An increment operation may not be:
+
+```json
+{ "operation": "increment", "field": "points", "amount": 10 }
+```
+
+Repeated delivery increments repeatedly.
+
+JSON Patch expresses operations explicitly:
+
+```json
+[
+  { "op": "replace", "path": "/displayName", "value": "New Name" }
+]
+```
+
+The API must document its patch media type, missing/null semantics, allowed fields, validation, and concurrency policy.
+
+## DELETE: Request Removal
+
+```http
+DELETE /books/book_123
+```
+
+DELETE is idempotent in intended server effect. After the first successful removal, later calls should not remove additional resources.
+
+Responses do not need to be identical. The first call might return `204`; a later call may return `404` because the resource is already absent. Idempotency concerns intended effect, not byte-for-byte response sameness.
+
+Soft delete, asynchronous deletion, retention, and legal erasure policies should be documented.
+
+## OPTIONS: Discover Communication Options
+
+OPTIONS can describe communication options and participates in browser CORS preflight.
+
+```http
+OPTIONS /books
+Access-Control-Request-Method: POST
+```
+
+An `Allow` header may list supported methods in relevant responses:
+
+```http
+Allow: GET, HEAD, PUT, PATCH, DELETE
+```
+
+## CRUD Mapping With Important Nuance
+
+| Operation | Method | URI |
+| --- | --- | --- |
+| List books | GET | `/books` |
+| Read book | GET | `/books/{id}` |
+| Create server-ID book | POST | `/books` |
+| Replace known book | PUT | `/books/{id}` |
+| Partially modify book | PATCH | `/books/{id}` |
+| Remove book | DELETE | `/books/{id}` |
+
+CRUD is a helpful starting map, but HTTP methods carry richer semantics than database operations.
+
+## Conditional Requests Prevent Lost Updates
+
+Two clients can update the same resource. An ETag supports optimistic concurrency:
+
+```http
+GET /books/book_123
+ETag: "v7"
+```
+
+The update supplies the version:
+
+```http
+PATCH /books/book_123
+If-Match: "v7"
+```
+
+If the current version differs, the server can reject with `412 Precondition Failed` rather than silently overwrite another client's change.
+
+## Method Override Is an Adapter Concern
+
+Some HTML forms or constrained clients historically support only GET and POST. A method-override mechanism can translate a POST into PUT/PATCH/DELETE at a trusted boundary, but public APIs should document the actual contract and avoid accepting spoofable override headers indiscriminately.
+
+## Handler Map
+
+```ts
+router.get("/books", listBooks);
+router.post("/books", createBook);
+router.get("/books/:bookId", getBook);
+router.put("/books/:bookId", replaceBook);
+router.patch("/books/:bookId", patchBook);
+router.delete("/books/:bookId", deleteBook);
+```
+
+Handlers still delegate validation, business rules, and persistence according to Days 6–8.
+
+## POST Versus PUT for Creation
+
+Use POST when the server assigns the subordinate URI:
+
+```http
+POST /uploads
+→ Location: /uploads/upload_123
+```
+
+PUT can fit when the client chooses the target URI and the operation is replacement/idempotent:
+
+```http
+PUT /user-preferences/user_123
+```
+
+The contract must define whether creation at an absent URI is permitted and which status is returned.
+
+## PATCH Media Type Matters
+
+This body has no universal PATCH meaning:
+
+```json
+{ "tags": ["api"] }
+```
+
+Does it replace all tags, append one, or merge a set? The media type and endpoint contract decide. JSON Merge Patch generally treats object members as replacements and `null` as removal. JSON Patch expresses operations and paths.
+
+## DELETE With Asynchronous Work
+
+Deleting a large account may require a job:
+
+```http
+DELETE /accounts/account_123
+→ 202 Accepted
+Location: /deletion-jobs/job_456
+```
+
+The resource may enter `deletion-pending` before final removal. Repeated DELETE should refer to the same logical deletion or otherwise follow a documented idempotent effect.
+
+## Method Semantics and CSRF
+
+Cookie-authenticated APIs need CSRF protection for unsafe methods. Correctly marking reads as GET and writes as POST/PUT/PATCH/DELETE lets browser and security policies distinguish intent.
+
+Using GET for mutation defeats those assumptions and can trigger state changes through links or prefetching.
+
+## Preconditions Beyond ETags
+
+`If-Unmodified-Since` and `If-None-Match` can also control requests. `If-None-Match: *` can request creation only if no current representation exists, depending on method/resource semantics.
+
+Strong ETags are appropriate for byte-equivalent representations and concurrency; weak validators have different comparison semantics. The API should generate validators consistently.
+
+## Method Contract Test Matrix
+
+```text
+GET never changes domain state
+HEAD returns GET-equivalent headers without body
+PUT repeated with same body leaves same state
+PATCH follows documented media type and null behavior
+DELETE repeated removes no additional resource
+unsupported method returns 405 + Allow
+conditional stale update returns 412
+```
+
+## Checkpoint Questions
+
+### What is the difference between safe and idempotent?
+
+Safe means the client did not request a state change. Idempotent means repeating the request has the same intended effect as one request. DELETE is idempotent but not safe.
+
+### Is POST only for creation?
+
+No. POST asks the target resource to process the representation; collection creation is a common use.
+
+### Is PATCH idempotent?
+
+It depends on the patch semantics. Replacing a value can be idempotent; incrementing a value is not.
+
+### Must repeated DELETE requests return the same status?
+
+No. The intended state effect should be the same; responses may differ after the resource is already absent.
+
+## What I Learned in Part 4
+
+HTTP methods are contracts understood beyond my application. Choosing them correctly communicates safety, repeatability, caching, and state-change intent.
+
+Part 5 studies the status codes that describe the result.

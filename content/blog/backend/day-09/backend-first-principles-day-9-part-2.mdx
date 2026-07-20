@@ -1,0 +1,328 @@
+---
+title: Day 9 — REST API Design (Part 2)
+description: The history behind the web and REST, plus a detailed explanation of client-server, statelessness, cacheability, uniform interface, layering, and code on demand.
+slug: backend-first-principles-day-9-part-2
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 9
+part: 2
+series: Learning Backend from First Principles
+order: 902
+published: true
+tags: [REST History, Web Architecture, Roy Fielding, HTTP]
+keywords: [REST constraints, Roy Fielding REST, history of REST]
+---
+# The Web Architecture Behind REST
+
+> *“REST is easier to understand when I see each constraint as a tradeoff chosen to make a distributed system scale and evolve.”*
+
+## From Resources to History
+
+Part 1 taught me that REST is an architectural style built around resources and representations. But why these particular constraints?
+
+The answer begins with the web.
+
+## Tim Berners-Lee and the Web
+
+At CERN around 1989–1990, Tim Berners-Lee proposed and implemented a system for linking and retrieving information across networked computers.
+
+The important contribution was not one isolated invention. Several pieces worked together:
+
+| Piece | Role |
+| --- | --- |
+| URI/URL | identifies or locates resources |
+| HTTP | transfers requests and representations |
+| HTML | describes linked hypertext documents |
+| Web server | serves resources over HTTP |
+| Browser/editor | retrieves and presents/edits hypertext |
+| Hyperlinks | connect resources into a navigable web |
+| World Wide Web | the global system formed by these pieces |
+
+Lists sometimes include WYSIWYG editing as a separate “technology,” but the historically important architectural insight is the integration of identifiers, protocol, hypertext representations, server, and client.
+
+REST APIs inherit this foundation: identified resources, standardized messages, transferable representations, and links between possible states.
+
+## Roy Fielding and REST
+
+Roy Fielding described REST in his 2000 dissertation, *Architectural Styles and the Design of Network-based Software Architectures*. The style was derived from constraints visible in the web's architecture.
+
+REST's constraints are:
+
+1. client-server;
+2. stateless;
+3. cache;
+4. uniform interface;
+5. layered system;
+6. code on demand, which is optional.
+
+Combining constraints creates tradeoffs. Statelessness improves visibility and scalability but may increase repeated request data. Uniform interfaces improve generality but can be less efficient than a highly specialized protocol.
+
+## 1. Client-Server
+
+Client and server have separate concerns:
+
+```text
+Client
+  presentation and interaction
+      ↕ standardized interface
+Server
+  resources, business policy, persistence
+```
+
+The separation allows a web app, mobile client, CLI, and partner integration to use the same server interface. The server can change its database without requiring the client to know.
+
+This is a logical separation, not a rule that only one physical server or frontend may exist.
+
+## 2. Stateless
+
+Each request contains the information necessary for the server to understand it. The server does not rely on conversational context stored from a prior request.
+
+```text
+Request 1: Authorization + resource request
+Request 2: Authorization + next resource request
+```
+
+Stateless does **not** mean the server stores no state. Databases obviously store resource state. It means application request processing does not depend on server-side client session context between requests.
+
+Benefits include:
+
+- any suitable instance can handle the next request;
+- scaling and failover are simpler;
+- logs can understand a request independently;
+- fewer hidden conversational dependencies exist.
+
+Costs include repeated credentials/context and sometimes larger requests.
+
+Cookie-based authentication can still participate in stateless interactions if the cookie carries or identifies the necessary credential and the architecture does not depend on affinity to one server instance. A centralized session store introduces session state but can still support scalable HTTP APIs pragmatically.
+
+## 3. Cacheable
+
+Responses indicate whether they may be reused. Caching can reduce latency, server load, and network traffic.
+
+```http
+Cache-Control: public, max-age=300
+ETag: "book-123-v7"
+```
+
+A later client can validate freshness:
+
+```http
+If-None-Match: "book-123-v7"
+```
+
+If unchanged, the server can respond:
+
+```http
+HTTP/1.1 304 Not Modified
+```
+
+Incorrect caching can expose private data or serve stale authorization-sensitive state. Cache policy is part of the API contract.
+
+## 4. Uniform Interface
+
+This is the central REST constraint. Fielding describes four subconstraints.
+
+### Identification of resources
+
+Resources have identifiers such as URIs:
+
+```text
+/books/book_123
+```
+
+### Manipulation through representations
+
+Clients use representations to request state changes rather than modifying server storage directly.
+
+### Self-descriptive messages
+
+Messages carry enough metadata to describe how they should be interpreted: method, media type, caching headers, status, and other controls.
+
+```http
+Content-Type: application/json
+Accept: application/json
+```
+
+### Hypermedia as the engine of application state
+
+Responses can include links or controls describing available next actions:
+
+```json
+{
+  "id": "order_123",
+  "status": "processing",
+  "links": {
+    "self": "/orders/order_123",
+    "cancel": "/orders/order_123/cancellation"
+  }
+}
+```
+
+Many practical JSON APIs do not implement rich hypermedia and are better described as REST-inspired or resource-oriented HTTP APIs.
+
+## 5. Layered System
+
+A client does not need to know whether it talks directly to the origin server or through intermediaries:
+
+```text
+Client
+  ↓
+CDN
+  ↓
+API gateway / load balancer
+  ↓
+Application
+  ↓
+services and database
+```
+
+Layers support caching, security policy, routing, protocol termination, observability, and scaling. They can also add latency and operational complexity.
+
+Self-descriptive messages and statelessness make intermediaries more effective.
+
+## 6. Code on Demand (Optional)
+
+The server may extend client behavior by transferring executable code, such as JavaScript to a browser. This is optional because it reduces visibility: an intermediary may not fully understand behavior that downloaded code will perform.
+
+Most JSON API discussions barely mention it, but it belongs to the formal REST style.
+
+## Representational State Transfer, Word by Word
+
+```text
+Representational
+  information is exchanged as representations
+
+State
+  resource state and client application state
+
+Transfer
+  representations move through standardized messages
+```
+
+The phrase is richer than “send JSON.” Hypermedia lets a representation include controls that move the client through application states.
+
+## Constraint Tradeoff Table
+
+| Constraint | Gives | Costs/risks |
+| --- | --- | --- |
+| Client-server | independent evolution | interface coordination |
+| Stateless | scalability, visibility | repeated context |
+| Cacheable | latency/load reduction | staleness/privacy design |
+| Uniform interface | generality, interoperability | less specialized efficiency |
+| Layered system | intermediaries and scaling | added complexity/latency |
+| Code on demand | client extensibility | reduced visibility |
+
+## REST Maturity Is Not a Scorecard for Every System
+
+An internal operation-heavy API may intentionally use RPC. A GraphQL API may expose one endpoint with a graph query language. A hypermedia REST system may guide clients through links.
+
+The important lesson is to know which properties the chosen constraints provide, not to use “RESTful” as a prestige label.
+
+## Statelessness and Authentication Examples
+
+Bearer-token requests commonly carry credentials each time:
+
+```http
+GET /account
+Authorization: Bearer eyJ...
+```
+
+The server may validate the token locally or through shared identity infrastructure. A server-side session referenced by a cookie introduces session state, but can still be a pragmatic scalable architecture when stored centrally.
+
+The critical failure is hidden instance-local conversation state:
+
+```text
+Request 1 handled by instance A, stores “step 2” only in memory
+Request 2 handled by instance B, cannot understand request
+```
+
+Explicit workflow resources such as `/checkout-sessions/{id}` make state durable and addressable.
+
+## Cache-Control Examples
+
+Public immutable asset-like representation:
+
+```http
+Cache-Control: public, max-age=31536000, immutable
+```
+
+Private account data:
+
+```http
+Cache-Control: private, no-store
+```
+
+Revalidatable resource:
+
+```http
+Cache-Control: public, max-age=60, stale-while-revalidate=30
+ETag: "v12"
+```
+
+The right policy depends on privacy and freshness. `Vary` tells caches which request headers affect representation selection, but varying on high-cardinality headers can destroy cache usefulness.
+
+## Layered Trust
+
+If a gateway authenticates requests and adds identity headers, the application must ensure public clients cannot bypass the gateway or forge those headers.
+
+```text
+Internet client
+  ↓ trusted gateway strips client identity headers
+  ↓ gateway authenticates and adds verified identity
+application accepts only gateway traffic
+```
+
+Layering creates opportunities and trust-boundary obligations.
+
+## Hypermedia in Practice
+
+A client that knows only an entry URI and media type can follow links:
+
+```json
+{
+  "status": "pending",
+  "actions": [
+    { "rel": "pay", "href": "/orders/123/payment", "method": "POST" }
+  ]
+}
+```
+
+When the order is paid, the `pay` control disappears and perhaps `cancel` appears. This reduces hard-coded workflow knowledge, though both server and client must understand link relation semantics.
+
+## Constraint Interaction
+
+Constraints reinforce each other:
+
+```text
+stateless messages → intermediaries can route any request
+self-descriptive messages → layers understand behavior
+cacheable responses → intermediaries reuse representations
+client-server separation → implementations evolve independently
+```
+
+Removing a constraint changes system properties. That is more useful to understand than arguing over labels.
+
+## Checkpoint Questions
+
+### Does stateless mean no database?
+
+No. It means requests do not depend on hidden server-side client conversation state. Resource state remains stored.
+
+### What are the four uniform-interface subconstraints?
+
+Resource identification, manipulation through representations, self-descriptive messages, and hypermedia as the engine of application state.
+
+### Is code on demand required?
+
+No. It is the optional REST constraint.
+
+### Why do layered systems work well with REST?
+
+Standardized self-descriptive messages, caching semantics, and stateless requests allow gateways, proxies, and caches to participate.
+
+## What I Learned in Part 2
+
+REST constraints are deliberate distributed-systems tradeoffs. They are not merely a route naming style.
+
+Part 3 turns to the most visible design surface: resource identifiers and URI structure.

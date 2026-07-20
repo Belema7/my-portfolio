@@ -1,0 +1,280 @@
+---
+title: Day 9 — REST API Design (Part 1)
+description: Understanding REST as an architectural style, representations and resources, why constraints matter, and the nine practical API-design pillars in this series.
+slug: backend-first-principles-day-9-part-1
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 18 min read
+day: 9
+part: 1
+series: Learning Backend from First Principles
+order: 901
+published: true
+tags: [REST, API Design, HTTP, Backend Architecture]
+keywords: [what is REST, REST API design, REST architectural style]
+---
+# REST API Design Begins With Resources, Not Endpoints
+
+> *“A predictable API lets the client reason from shared HTTP semantics instead of memorizing a new protocol for every route.”*
+
+## The Question After the Request Pipeline
+
+Day 8 taught me how middleware prepares and protects a request before the handler runs. I could now trace authentication, validation, request context, service calls, persistence, errors, and the response.
+
+But one question remained above all those implementation details:
+
+> **How should I design the public HTTP interface in the first place?**
+
+I could make every route work like a remote function:
+
+```text
+POST /getAllBooks
+POST /createBook
+POST /updateBook
+POST /deleteBook
+```
+
+That is callable, but it ignores most of the vocabulary HTTP already provides. A client must memorize custom verbs in paths, custom success rules, and custom caching behavior.
+
+REST gave me a different mental model.
+
+## REST Is an Architectural Style
+
+REST stands for **Representational State Transfer**. Roy Fielding introduced the term in his 2000 doctoral dissertation while describing an architectural style for distributed hypermedia systems.
+
+REST is not:
+
+- a wire protocol competing with HTTP;
+- a JSON specification;
+- a CRUD framework;
+- a naming convention for URLs;
+- a library I install.
+
+It is a set of architectural constraints. Those constraints explain properties such as scalability, evolvability, visibility, and independent client/server development.
+
+Most web APIs called “REST APIs” use some REST ideas over HTTP without implementing every constraint fully—especially hypermedia as the engine of application state. I will distinguish strict REST constraints from pragmatic resource-oriented HTTP API conventions.
+
+## Resource, State, and Representation
+
+A **resource** is an identified concept: user `123`, the collection of books, an order, or the current account profile.
+
+The resource is not identical to one database row or JSON object. Its current state may be stored across tables and services.
+
+A **representation** is one transferable description of that resource's state:
+
+```json
+{
+  "id": "book_123",
+  "title": "The Pragmatic Programmer",
+  "status": "published"
+}
+```
+
+The same resource could have another representation, such as HTML, JSON, or a compact media type, selected through content negotiation.
+
+```text
+Resource
+  “book_123”
+       ↓ represented as
+JSON / HTML / another media type
+       ↓ transferred through HTTP
+Client
+```
+
+The client can send a representation to request a state change, and the server can send a representation of the resulting state.
+
+## The House Analogy
+
+I picture a house. The house is the resource. Its current paint, rooms, and ownership are state. A photograph or blueprint is a representation.
+
+Sending a photograph does not move the physical house. It transfers information about its state.
+
+The analogy also exposes a limit: a representation may not reveal every internal detail. An API's public book representation does not need database indexes, moderation scores, or storage fields.
+
+## Why REST Matters
+
+When an API uses HTTP semantics consistently, clients can predict behavior:
+
+```text
+GET /books/123     retrieve a representation
+POST /books        create within the books collection
+PUT /books/123     replace the resource representation
+PATCH /books/123   apply a partial change
+DELETE /books/123  request removal
+```
+
+Shared semantics improve:
+
+- **understandability**—method and URI communicate intent;
+- **interoperability**—browsers, proxies, caches, gateways, and tools understand HTTP;
+- **scalability**—stateless requests and caching reduce coordination;
+- **evolvability**—client and server can change behind stable contracts;
+- **observability**—methods, status codes, and headers tell a consistent story;
+- **developer experience**—fewer route-specific rules need memorization.
+
+REST does not automatically make an API secure, fast, or well designed. Authentication, validation, authorization, database constraints, documentation, and operations from earlier days still apply.
+
+## The Two Historical Figures
+
+Tim Berners-Lee created the foundational web system at CERN: resource identifiers, HTTP, HTML, the first web server, and the first browser/editor working together as the World Wide Web.
+
+Roy Fielding later articulated REST as an architectural style and helped explain why the web could scale through constraints rather than a central session-aware architecture.
+
+```text
+Tim Berners-Lee → built the web's foundational system
+Roy Fielding    → described REST constraints behind web architecture
+```
+
+Part 2 examines that history and the constraints carefully.
+
+## Nine Practical Pillars for This Series
+
+The brief organizes REST API design into nine practical pillars:
+
+1. resource URI design;
+2. HTTP methods;
+3. status codes;
+4. idempotency;
+5. request and response representations;
+6. pagination;
+7. filtering;
+8. sorting;
+9. custom actions.
+
+These are not Roy Fielding's formal nine REST constraints. They are a useful curriculum for resource-oriented HTTP API design.
+
+## REST, RPC, and GraphQL
+
+REST is not the only valid API style.
+
+```text
+Resource-oriented HTTP
+  GET /orders/123
+  POST /orders
+
+RPC
+  POST /calculateShippingQuote
+
+GraphQL
+  POST /graphql with a query document
+```
+
+RPC can express operation-heavy systems clearly. GraphQL gives clients flexible graph selection. Event and streaming protocols solve other problems.
+
+The senior decision is not “REST everywhere.” It is selecting a style intentionally and keeping its contract consistent.
+
+## A First Resource Model
+
+For a bookstore:
+
+```text
+/books                 collection resource
+/books/book_123        individual book
+/books/book_123/reviews review collection related to book
+/reviews/review_456    individual review
+/users/user_789/orders user's order collection
+```
+
+Notice that paths name things, not handler functions. HTTP methods express the general operation.
+
+## Constraints Versus Conventions
+
+I now separate three kinds of guidance:
+
+```text
+REST constraint
+  stateless interaction, cacheability, uniform interface
+
+HTTP semantics
+  GET is safe, PUT is idempotent, 201 means created
+
+API convention
+  plural nouns, /v1 path, api.example.com, error envelope
+```
+
+Conventions can be valuable without being mandatory REST rules. Calling them requirements makes it harder to reason about tradeoffs.
+
+## Richardson Maturity as a Learning Tool
+
+A commonly discussed maturity model describes progression:
+
+```text
+Level 0: one endpoint, remote procedure calls
+Level 1: multiple resource URIs
+Level 2: HTTP methods and status codes used semantically
+Level 3: hypermedia controls guide transitions
+```
+
+This is not part of Fielding's REST definition and should not be treated as an official compliance score. It is useful for noticing how an API moves from an HTTP transport tunnel toward the web's uniform interface.
+
+## A Resource Is Not Necessarily a Database Table
+
+Resources can be computed or process-oriented:
+
+```text
+/weather/current
+/account-balance
+/report-exports/export_123
+/orders/order_123/cancellation
+```
+
+The server may assemble a representation from several services. Resource modeling follows the public domain, not the storage schema.
+
+Likewise, one table can support several resources or projections. Exposing one endpoint per table leaks internal data design and often produces weak authorization boundaries.
+
+## State on Client and Server
+
+REST discussions use “state” in two related ways:
+
+- **resource state** lives on the server and is represented to clients;
+- **application state** describes where the client is in a workflow.
+
+Hypermedia controls can tell the client which transitions are currently available. The server still remains authoritative if a client attempts an unadvertised action.
+
+## What REST Does Not Guarantee
+
+An API can have beautiful resource URIs and still be:
+
+- insecure because authorization is missing;
+- slow because list queries are unbounded;
+- unreliable because retries duplicate payments;
+- difficult because errors are inconsistent;
+- tightly coupled because representations mirror database rows;
+- impossible to evolve because compatibility is undocumented.
+
+REST constraints and the nine practical pillars provide a foundation. Days 6–8 still supply validation, layering, middleware, context, and errors.
+
+## Design Exercise: From Procedures to Resources
+
+```text
+/getUserOrders?userId=123 → GET /users/123/orders
+/createOrder              → POST /orders
+/cancelOrder              → POST /orders/456/cancellations
+/checkExportStatus        → GET /report-exports/export_789
+```
+
+The resource design makes identities and state observable. It does not mean every verb disappears; domain operations can become subordinate resources or explicit commands.
+
+## Checkpoint Questions
+
+### Is REST a protocol?
+
+No. REST is an architectural style. HTTP is the application protocol commonly used to implement RESTful systems.
+
+### Is a resource the same as a JSON object?
+
+No. JSON is one representation of resource state. The resource is the identified concept.
+
+### Does using nouns and HTTP methods make an API fully RESTful?
+
+No. It is resource-oriented HTTP design, but REST also includes client-server separation, statelessness, cacheability, layered systems, a uniform interface, and optional code on demand.
+
+### Must every API use REST?
+
+No. REST, RPC, GraphQL, events, and streaming each fit different interaction needs.
+
+## What I Learned in Part 1
+
+REST begins with resources and transferable representations, not a collection of controller URLs. Its constraints give the web useful architectural properties, while practical API conventions make HTTP interfaces predictable.
+
+Part 2 returns to the birth of the web and examines the six REST constraints in detail.

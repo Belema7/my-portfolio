@@ -1,0 +1,301 @@
+---
+title: Day 9 — REST API Design (Part 3)
+description: Designing stable resource URIs, collection and item paths, nested relationships, versioning strategies, identifiers, query parameters, and canonical links.
+slug: backend-first-principles-day-9-part-3
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 9
+part: 3
+series: Learning Backend from First Principles
+order: 903
+published: true
+tags: [URI Design, REST, API Versioning, Resources]
+keywords: [REST URI design, API URL naming, nested REST routes]
+---
+# URI Design: Giving Every Resource a Stable Address
+
+> *“A URI should identify what the client is addressing; the HTTP method should describe the general intent.”*
+
+## The Address Question
+
+Part 2 explained resource identification as part of REST's uniform interface. Now I need to design those identifiers.
+
+For a bookstore, compare:
+
+```text
+/getBook?id=123
+/books/123
+```
+
+The first path names a procedure. The second identifies a resource. `GET` already expresses retrieval.
+
+## URI, URL, and Resource Identity
+
+A URI identifies a resource. A URL is a URI that also describes a location/access mechanism. In everyday HTTP API work, people often say URL for the full address and URI for the resource identifier.
+
+```text
+https://api.example.com/v1/books/book_123
+│       │               │  │     │
+scheme  host            │  │     identifier
+                        │  collection
+                        version segment
+```
+
+The resource is the conceptual book, not the string or database row. The URI is its public identifier.
+
+## Resource-Oriented Naming
+
+Prefer nouns that describe collections and items:
+
+```text
+GET    /books
+POST   /books
+GET    /books/book_123
+PATCH  /books/book_123
+DELETE /books/book_123
+```
+
+Plural nouns are a common consistency convention, not a formal REST constraint. Consistency is more valuable than debating whether `/people` or `/person` sounds grammatically elegant.
+
+## Lowercase, Hyphens, and File Extensions
+
+Common readable conventions are:
+
+- lowercase path segments;
+- hyphens for multiword segments;
+- no representation-specific file extensions;
+- percent-encode values correctly;
+- avoid unstable implementation terms.
+
+```text
+/shipping-addresses
+/books/book_123
+```
+
+Instead of:
+
+```text
+/ShippingAddresses
+/book_records/123.json
+```
+
+No `.json` extension is needed because representation format can be negotiated through `Accept` and described by `Content-Type`.
+
+## HTTPS Is a Deployment Requirement
+
+Production APIs should use HTTPS to protect credentials and data in transit and authenticate the server endpoint.
+
+HTTPS does not make input trusted, replace authorization, or prevent application vulnerabilities. It secures the transport channel.
+
+## Is an `api.` Subdomain Mandatory?
+
+No. Both can be valid:
+
+```text
+https://api.example.com/books
+https://example.com/api/books
+```
+
+A subdomain can isolate routing, cookies, deployments, and operations. A path can simplify same-origin browser behavior and infrastructure. REST does not require either.
+
+## API Versioning Is a Strategy, Not One Rule
+
+Path versioning is visible and simple:
+
+```text
+/v1/books
+/v2/books
+```
+
+Other strategies include media-type negotiation, headers, or evolving a compatible contract without a global version.
+
+Versioning from day one can clarify lifecycle policy, but every new version creates maintenance cost. The deeper rule is:
+
+> **Avoid breaking existing clients accidentally, define compatibility policy, and version deliberately when incompatible change is necessary.**
+
+Changes that may be breaking include removing fields, changing meanings or types, tightening previously accepted input, and changing error codes. Adding an optional response field is often compatible for tolerant clients, but assumptions should be documented.
+
+## Collection and Item Resources
+
+```text
+/books           the collection
+/books/book_123  one member
+```
+
+The collection is a resource too. `GET /books` retrieves a collection representation. `POST /books` asks the collection to create a subordinate resource.
+
+The created resource can be identified in `Location`:
+
+```http
+HTTP/1.1 201 Created
+Location: /books/book_123
+```
+
+## Nested Relationships
+
+```text
+/books/book_123/reviews
+/users/user_123/orders
+```
+
+Nested paths express a relationship or scope. They are useful when the child collection is understood through the parent.
+
+Avoid excessive depth:
+
+```text
+/companies/1/departments/2/teams/3/users/4/orders/5
+```
+
+Deep nesting is hard to route, move, cache, and reason about. A child with independent identity can have a canonical top-level URI:
+
+```text
+/orders/order_5
+```
+
+The nested collection can remain a query context:
+
+```text
+/users/user_4/orders
+```
+
+## Path Parameters Versus Query Parameters
+
+Path segments normally identify the addressed resource or hierarchy. Query parameters modify the view of a resource:
+
+```text
+/books/book_123                 item identity
+/books?status=published         filtered collection
+/books?sort=-publishedAt        ordered collection
+/books?limit=20&cursor=abc      paginated collection
+```
+
+The filtered collection is still a resource representation and can have caching semantics.
+
+## Stable Public Identifiers
+
+Exposing sequential database IDs can be acceptable, but it can reveal counts and enables easy enumeration. Random or opaque public IDs can reduce those leaks, though authorization remains mandatory.
+
+```text
+book_01J...   readable type prefix + opaque ID
+UUID          widely supported opaque identifier
+slug          human-readable but mutable/collision-sensitive
+```
+
+A slug may change when a title changes. If URI stability matters, use a stable ID and treat slugs as aliases or cosmetic segments.
+
+## Canonical URIs and Aliases
+
+A resource may be reachable through several relationship paths, but documentation should identify a canonical URI.
+
+```json
+{
+  "id": "order_456",
+  "links": {
+    "self": "/orders/order_456",
+    "customer": "/users/user_123"
+  }
+}
+```
+
+Canonical links help clients and caches avoid treating aliases as separate identities.
+
+## Do Not Leak Implementation Structure
+
+Avoid paths such as:
+
+```text
+/postgres/users_table/123
+/microservice-a/get-book
+```
+
+Clients need stable domain resources, not deployment topology. Internal services and storage can change behind the interface.
+
+## URI Design Checklist
+
+1. What resource or collection does the path identify?
+2. Does the method express the general operation?
+3. Is naming consistent across the API?
+4. Is nesting shallow and meaningful?
+5. Does the child need a canonical top-level URI?
+6. Are filters and views represented as query parameters?
+7. Is the public identifier stable and authorization-safe?
+8. What compatibility/version strategy applies?
+9. Is HTTPS enforced in production?
+10. Does the URI avoid database and service implementation details?
+
+## URI Templates and Encoding
+
+Documentation may use templates:
+
+```text
+/books/{bookId}
+/products{?category,limit,cursor}
+```
+
+Actual values must be percent-encoded in the correct URI component. A slash inside an identifier cannot be inserted raw without changing path structure. Framework-decoded parameters remain untrusted and need runtime validation.
+
+Never concatenate untrusted input into a server-side fetch URL without destination validation; a syntactically correct URI can still create SSRF.
+
+## Trailing Slash and Case Policy
+
+`/books` and `/books/` may be treated as the same or distinct depending on routing and caches. Pick a canonical policy and redirect carefully if needed.
+
+Paths are generally case-sensitive. Lowercase conventions avoid `/Books` and `/books` becoming accidental distinct resources.
+
+## Tenant Scope
+
+Multi-tenant designs may use:
+
+```text
+/tenants/{tenantId}/projects/{projectId}
+```
+
+or derive tenant from authenticated context/host. A tenant ID in the path is not proof of membership. Authorization must connect the verified actor to that tenant.
+
+Deeply repeating tenant paths can be verbose, but hidden tenant context can make caching and debugging less obvious. The choice is a contract and infrastructure tradeoff.
+
+## URI Changes Are Compatibility Changes
+
+Once clients bookmark or embed a URI, changing it can break integrations. Permanent redirects may help for GET, but non-GET redirect handling requires careful method-preserving behavior and client testing.
+
+Stable resource identity suggests avoiding temporary organizational words and names likely to change.
+
+## Query Parameter Canonicalization
+
+These may mean the same filter:
+
+```text
+?category=books&sort=name
+?sort=name&category=books
+```
+
+Caches can treat raw URLs as distinct. A canonical ordering/normalization policy can improve cache effectiveness, but signatures and clients must agree on it.
+
+## URI Security Misconceptions
+
+Opaque IDs reduce enumeration but do not authorize access. Version segments do not protect old insecure endpoints. HTTPS protects transport but not a vulnerable handler. An `api.` subdomain does not create isolation unless cookies, CORS, routing, and infrastructure are configured accordingly.
+
+## Checkpoint Questions
+
+### Must a REST API use `api.example.com`?
+
+No. A subdomain is an infrastructure convention. A same-host path can also be valid.
+
+### Must every API put `/v1` in the path?
+
+No. Path versioning is one strategy. The requirement is deliberate compatibility and evolution.
+
+### When is nesting useful?
+
+When it expresses ownership, scope, or a relationship such as a user's orders. Deep nesting should be avoided, and independently identified children benefit from canonical URIs.
+
+### Why avoid `.json`?
+
+The resource identity should not be tied unnecessarily to one representation. HTTP headers can negotiate and describe the media type.
+
+## What I Learned in Part 3
+
+URI design identifies stable resources and relationships. It should not duplicate method intent or expose implementation details.
+
+Part 4 combines those addresses with HTTP methods and their safety, idempotency, and request semantics.

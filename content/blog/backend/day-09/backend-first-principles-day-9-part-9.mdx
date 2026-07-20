@@ -1,0 +1,316 @@
+---
+title: Day 9 — REST API Design (Part 9)
+description: Modeling non-CRUD domain operations as action, command, job, and subresources with correct methods, state transitions, idempotency, asynchronous processing, and discoverability.
+slug: backend-first-principles-day-9-part-9
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 21 min read
+day: 9
+part: 9
+series: Learning Backend from First Principles
+order: 909
+published: true
+tags: [REST Actions, Domain Modeling, API Design]
+keywords: [REST custom actions, non CRUD REST API, action endpoints]
+---
+# Custom Actions: When the Domain Is More Than CRUD
+
+> *“If an operation matters to the business, hiding it behind a vague update can make the API less—not more—resource-oriented.”*
+
+## The CRUD Limit
+
+Part 8 designed collection queries. But real domains contain verbs:
+
+- cancel an order;
+- publish a post;
+- approve an application;
+- resend verification;
+- export a report;
+- capture a payment.
+
+Forcing every operation into `PATCH { "status": "cancelled" }` can bypass required inputs and hide workflow meaning.
+
+## First Ask: Is There a Resource?
+
+Cancellation can be modeled as a subordinate resource:
+
+```http
+POST /orders/order_123/cancellations
+Content-Type: application/json
+
+{ "reason": "ordered-by-mistake" }
+```
+
+The created cancellation has identity and state:
+
+```http
+HTTP/1.1 201 Created
+Location: /orders/order_123/cancellations/cancel_456
+```
+
+This is often richer than a verb path because cancellation may be pending, approved, rejected, audited, or retried.
+
+## Action-Oriented Endpoint
+
+A pragmatic command endpoint can also be clear:
+
+```http
+POST /orders/order_123/cancel
+```
+
+REST does not ban all verbs in paths. The design question is whether the operation has meaningful resource identity and state, and whether the API convention is consistent.
+
+The blanket rule “all custom actions must use POST” is too broad. POST is common when the operation is non-idempotent or creates a command/job. PUT may fit when the client addresses and replaces a known action resource; DELETE may reverse/removes a subordinate resource under clearly defined semantics.
+
+## PATCH Status Versus Explicit Command
+
+```http
+PATCH /orders/order_123
+
+{ "status": "cancelled" }
+```
+
+This may be appropriate for a simple state field. It becomes weak when cancellation requires reason, refund selection, inventory release, audit information, and state-transition rules.
+
+An explicit cancellation contract communicates the use case and can evolve independently.
+
+## State Machines Still Own Meaning
+
+```text
+pending → processing → shipped → delivered
+    ↘ cancelled    ↘ cancelled
+```
+
+The server must reject cancelling a delivered order even if the action representation is valid.
+
+```text
+boundary: reason is accepted enum/string
+service: actor may cancel and status permits it
+database: version/transaction prevents races
+```
+
+## Synchronous Action Example
+
+```ts
+router.post(
+  "/orders/:orderId/cancellations",
+  authenticate,
+  validateBody(createCancellationSchema),
+  asyncHandler(async (req, res) => {
+    const cancellation = await cancelOrderService.execute({
+      actor: req.context.user,
+      orderId: req.params.orderId,
+      reason: req.validatedBody.reason,
+      refundMethod: req.validatedBody.refundMethod,
+    });
+
+    res
+      .status(201)
+      .location(`/orders/${req.params.orderId}/cancellations/${cancellation.id}`)
+      .json({ data: toCancellationResponse(cancellation) });
+  }),
+);
+```
+
+Business logic remains in the service, not the action handler.
+
+## Asynchronous Actions Become Jobs
+
+Report export may take minutes:
+
+```http
+POST /report-exports
+
+{ "report": "monthly-sales", "format": "csv" }
+```
+
+```http
+HTTP/1.1 202 Accepted
+Location: /report-exports/export_123
+```
+
+The job resource progresses:
+
+```json
+{
+  "id": "export_123",
+  "status": "processing",
+  "links": {
+    "self": "/report-exports/export_123"
+  }
+}
+```
+
+When complete, it can link to a short-lived authorized download resource.
+
+## Idempotency for Actions
+
+Cancel, charge, export, and send-email commands can be retried. Define whether the operation is naturally idempotent or requires an idempotency key.
+
+```text
+activate already-active user → may return current state/conflict by policy
+send reset email twice       → two side effects unless deduplicated/rate-limited
+cancel same order twice      → one cancellation resource or conflict
+```
+
+The URI alone does not solve duplicate effects.
+
+## Naming Actions
+
+Prefer domain language:
+
+```text
+/orders/{id}/cancellations
+/posts/{id}/publication
+/payment-intents/{id}/captures
+/report-exports
+```
+
+Avoid implementation verbs:
+
+```text
+/runCancelOrderService
+/invokeLambdaForExport
+/updateStatusAndRefund
+```
+
+Public APIs describe domain capability, not backend function names.
+
+## Bulk Actions
+
+```http
+POST /book-imports
+POST /bulk-user-deactivations
+```
+
+Bulk work often deserves a job resource with per-item outcomes rather than one enormous synchronous request.
+
+Atomicity must be documented:
+
+```text
+all-or-nothing transaction
+best effort with item results
+accepted asynchronous job
+```
+
+## Hypermedia Can Advertise Available Actions
+
+An order representation can expose controls based on current state and permissions:
+
+```json
+{
+  "id": "order_123",
+  "status": "processing",
+  "links": {
+    "self": { "href": "/orders/order_123" },
+    "cancel": {
+      "href": "/orders/order_123/cancellations",
+      "method": "POST"
+    }
+  }
+}
+```
+
+The server remains authoritative even if a client constructs a hidden action URL directly.
+
+## Audit and Security
+
+High-impact actions need:
+
+- verified actor and authorization;
+- reason/context when appropriate;
+- state-transition enforcement;
+- transactional persistence;
+- audit events;
+- idempotency/replay policy;
+- rate limits for email or expensive jobs;
+- safe response and error contracts.
+
+## Choosing a Design
+
+Ask:
+
+1. Is the operation ordinary creation, replacement, modification, or deletion?
+2. Does the action produce a concept with its own identity/state?
+3. Is it synchronous or a job?
+4. Is repeated delivery safe?
+5. What business state transitions apply?
+6. What should clients observe afterward?
+7. Can hypermedia advertise availability?
+
+## Activation Case Study
+
+Three possible designs are:
+
+```text
+PATCH /users/123 { "active": true }
+POST  /users/123/activate
+PUT   /users/123/activation { "active": true }
+```
+
+PATCH fits a simple mutable property. POST command fits a workflow with side effects and no separately observed activation. A singular activation resource fits when activation has its own timestamp, actor, evidence, or revocation semantics.
+
+The best design depends on the domain, not a universal ban on verbs.
+
+## Payment Capture Case Study
+
+```http
+POST /payment-intents/pi_123/captures
+Idempotency-Key: ...
+
+{ "amount": 5000 }
+```
+
+The capture can have an ID, status, provider reference, and failure history. Modeling it as a resource supports partial captures and reconciliation better than `PATCH { "status": "captured" }`.
+
+## Action Error Matrix
+
+```text
+invalid action body      → 400
+missing identity         → 401
+actor not permitted      → 403
+target absent            → 404
+illegal current state    → 409
+stale expected version   → 412
+duplicate safe retry     → replay prior outcome
+accepted async operation → 202 + job URI
+provider unavailable     → 503 or pending/reconciliation policy
+```
+
+## Command Resources and Retention
+
+If commands are stored as resources, define how long they remain queryable, whether sensitive payloads are retained, and whether clients can cancel them. Job histories can grow without bounds and may contain private data.
+
+## Webhook or Polling Completion
+
+Async jobs can expose polling links, send authenticated webhooks, or both. Webhooks require signature verification, retries, deduplication, and delivery observability. Polling needs cache/interval guidance and stable terminal states.
+
+## Test the Workflow, Not Only the Route
+
+Tests cover every allowed and forbidden state transition, concurrent action attempts, duplicate delivery, authorization, audit event creation, external provider failure, compensation/reconciliation, and response links.
+
+The endpoint is only the adapter; the state machine is the real feature.
+
+## Checkpoint Questions
+
+### Must every custom action use POST?
+
+POST is common for commands and action-resource creation, but method choice should follow the modeled resource and semantics rather than a blanket rule.
+
+### When is PATCH status appropriate?
+
+When the operation is genuinely a partial state update with clear patch semantics. Rich workflows often deserve an explicit command or subordinate resource.
+
+### Why model an export as a job resource?
+
+The client can observe pending, processing, completed, and failed states after a `202 Accepted` response.
+
+### Do hidden UI actions provide authorization?
+
+No. The server must enforce permission and state regardless of links or buttons shown by a client.
+
+## What I Learned in Part 9
+
+Non-CRUD operations are not failures of REST. Good design models domain concepts, state transitions, commands, and jobs honestly instead of hiding every workflow in a generic update.
+
+Part 10 assembles the complete REST API design checklist and follows one API end to end.

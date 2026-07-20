@@ -1,0 +1,369 @@
+---
+title: Day 9 — REST API Design (Part 10)
+description: A complete production REST API design walkthrough covering resources, methods, statuses, caching, idempotency, representations, collection queries, actions, security, documentation, and evolution.
+slug: backend-first-principles-day-9-part-10
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 25 min read
+day: 9
+part: 10
+series: Learning Backend from First Principles
+order: 910
+published: true
+tags: [REST, API Design, OpenAPI, Backend Architecture]
+keywords: [complete REST API guide, REST API checklist, scalable API design]
+---
+# Putting the Complete REST API Together
+
+> *“A professional API is not a pile of correct endpoints; it is one coherent contract that survives retries, growth, change, and multiple clients.”*
+
+## The Journey Across Day 9
+
+Part 1 defined resources and representations. Part 2 explained REST constraints. Part 3 designed URIs. Part 4 applied HTTP methods. Part 5 mapped outcomes to status codes. Part 6 made retries safe. Part 7 shaped representations. Part 8 scaled collections. Part 9 modeled domain actions.
+
+Now I can design one bookstore/order API as a coherent whole.
+
+## Resource Map
+
+```text
+/books
+/books/{bookId}
+/books/{bookId}/reviews
+/reviews/{reviewId}
+/orders
+/orders/{orderId}
+/orders/{orderId}/cancellations
+/report-exports
+/report-exports/{exportId}
+```
+
+The resource map uses stable public concepts, shallow relationships, and canonical item URIs.
+
+## Method and Outcome Map
+
+| Interaction | Method/URI | Success |
+| --- | --- | --- |
+| List books | `GET /books` | `200` collection |
+| Read book | `GET /books/{id}` | `200` + ETag |
+| Create book | `POST /books` | `201` + Location |
+| Replace book | `PUT /books/{id}` | `200/204`, or `201` if created by contract |
+| Patch book | `PATCH /books/{id}` | `200` updated representation |
+| Delete book | `DELETE /books/{id}` | `204` |
+| Cancel order | `POST /orders/{id}/cancellations` | `201` cancellation |
+| Start export | `POST /report-exports` | `202` + job Location |
+
+## Create Book Request
+
+```http
+POST /v1/books HTTP/1.1
+Host: api.example.com
+Authorization: Bearer ...
+Content-Type: application/json
+Accept: application/json
+Idempotency-Key: 8a0d...
+
+{
+  "title": "Designing Data-Intensive Applications",
+  "authorId": "author_123",
+  "price": { "amount": 4599, "currency": "USD" }
+}
+```
+
+The server pipeline from earlier days applies:
+
+```text
+HTTPS/gateway limits
+  ↓ middleware request context, auth, rate limit
+  ↓ strict runtime validation
+  ↓ idempotency claim
+  ↓ handler command mapping
+  ↓ service business rules
+  ↓ repository/database constraints
+  ↓ safe response mapping
+```
+
+## Create Book Response
+
+```http
+HTTP/1.1 201 Created
+Location: /v1/books/book_456
+Content-Type: application/json
+ETag: "book_456-v1"
+
+{
+  "data": {
+    "id": "book_456",
+    "title": "Designing Data-Intensive Applications",
+    "authorId": "author_123",
+    "price": { "amount": 4599, "currency": "USD" },
+    "createdAt": "2026-07-20T10:30:00Z"
+  },
+  "links": {
+    "self": "/v1/books/book_456",
+    "reviews": "/v1/books/book_456/reviews"
+  }
+}
+```
+
+The response identifies the resource, provides a current validator, and exposes safe public fields.
+
+## Conditional Update
+
+```http
+PATCH /v1/books/book_456
+If-Match: "book_456-v1"
+Content-Type: application/merge-patch+json
+
+{ "price": { "amount": 4299, "currency": "USD" } }
+```
+
+If another client already updated the book, the server returns:
+
+```http
+HTTP/1.1 412 Precondition Failed
+```
+
+This prevents silent lost updates.
+
+## Cached Read
+
+```http
+GET /v1/books/book_456
+If-None-Match: "book_456-v2"
+```
+
+If unchanged:
+
+```http
+HTTP/1.1 304 Not Modified
+ETag: "book_456-v2"
+```
+
+Private or user-specific resources need an appropriate cache policy and `Vary` behavior.
+
+## Scalable Collection
+
+```http
+GET /v1/books?status=published&sort=-publishedAt,title&limit=20&after=opaque
+```
+
+The boundary validates every query field. The repository uses stable ordering with a unique tie-breaker and an aligned index. The response includes an opaque next cursor/link without promising an expensive exact total.
+
+## Action and Job
+
+Order cancellation creates a subordinate resource. Report export creates a job and returns `202`. Both have explicit state, authorization, validation, idempotency, and observation paths.
+
+## Consistent Error Contract
+
+```json
+{
+  "type": "https://api.example.com/problems/conflict",
+  "title": "The request conflicts with current state",
+  "status": 409,
+  "detail": "A book with this ISBN already exists.",
+  "code": "ISBN_ALREADY_EXISTS",
+  "requestId": "abc-123"
+}
+```
+
+Known client-safe details are returned. Internal constraint names and stack traces remain in protected logs.
+
+## Security Checklist
+
+- HTTPS is enforced.
+- Authentication and authorization are independent of URI obscurity.
+- Every input source is validated and bounded.
+- Unknown fields follow a deliberate policy.
+- Repository queries parameterize values and allowlist identifiers.
+- Responses allowlist fields and prevent cache leakage.
+- Rate limits protect expensive and abuse-prone operations.
+- Idempotency protects retryable non-idempotent work.
+- SSRF, file, HTML, shell, and redirect sinks receive destination-specific defenses.
+- Errors and logs redact secrets.
+
+REST does not replace any of these controls.
+
+## Reliability Checklist
+
+- Timeouts and cancellation are coordinated across gateway and dependencies.
+- Idempotency records survive restart and concurrency.
+- Database constraints protect races.
+- Background jobs use retries, idempotency, and dead-letter handling.
+- Health/readiness endpoints have deliberate dependency semantics.
+- Status codes distinguish client conflict from service unavailability.
+- Caches have validators and invalidation/freshness policy.
+
+## Evolution and Versioning
+
+Before a breaking change:
+
+1. classify the change as compatible or incompatible;
+2. measure client usage;
+3. publish deprecation and migration guidance;
+4. support an overlap period when possible;
+5. version the interface deliberately;
+6. monitor old and new behavior;
+7. retire according to policy.
+
+Do not create `/v2` for every additive field. Do not silently change a field's meaning in `/v1`.
+
+## Documentation and OpenAPI
+
+An OpenAPI document can describe paths, methods, parameters, schemas, status responses, authentication, and examples.
+
+It should match runtime behavior through contract tests and generation/checking workflows. Documentation that says `200` while production returns ad hoc `500` bodies is not a contract.
+
+Document semantics that schemas cannot express fully:
+
+- idempotency key scope and lifetime;
+- sort order and cursor stability;
+- eventual consistency;
+- rate-limit policy;
+- state transitions;
+- retry guidance;
+- deprecation lifecycle.
+
+## Observability
+
+Measure:
+
+- request rate and latency by method/route template;
+- status families and stable error codes;
+- cache hit/revalidation rate;
+- idempotency replays and conflicts;
+- pagination query latency and database plans;
+- job completion/failure time;
+- deprecated version usage.
+
+Avoid raw IDs and URLs in metric labels.
+
+## Testing Strategy
+
+```text
+Contract/schema tests
+  requests, responses, errors, examples
+
+Handler/service tests
+  method outcomes and business rules
+
+Repository integration tests
+  filters, stable ordering, constraints
+
+HTTP integration tests
+  headers, statuses, caching, auth
+
+Concurrency tests
+  idempotency, ETags, unique conflicts
+
+Consumer/compatibility tests
+  important client expectations
+
+Load tests
+  collection bounds and expensive queries
+```
+
+## The Practical Nine-Pillar Checklist
+
+| Pillar | Questions |
+| --- | --- |
+| URI design | Does it identify stable resources and relationships? |
+| Methods | Are safety and idempotency semantics accurate? |
+| Status codes | Does the status tell the broad truth? |
+| Idempotency | Can uncertain retries duplicate effects? |
+| Representations | Are formats consistent, safe, and evolvable? |
+| Pagination | Is list work bounded and ordering stable? |
+| Filtering | Are filters explicit, validated, and indexed? |
+| Sorting | Are fields allowlisted with a unique tie-breaker? |
+| Custom actions | Is domain workflow modeled honestly as action/resource/job? |
+
+## Senior-Engineer Questions
+
+1. What happens when the response is lost after work commits?
+2. Can two clients overwrite each other?
+3. Can a list query request unbounded or unindexed work?
+4. Can a cache serve one user's private data to another?
+5. Which changes break existing clients?
+6. Does the error contract support correct retry behavior?
+7. Are action workflows observable and auditable?
+8. Does the API expose domain resources or implementation topology?
+9. Are HTTP semantics helping intermediaries or being bypassed?
+10. Is REST actually the right style for this interaction?
+
+## API Review Walkthrough
+
+When reviewing a proposed endpoint such as `POST /updateOrderStatus`, I proceed in order:
+
+1. Identify the resource and domain transition.
+2. Decide whether it is a patch, subordinate action resource, or job.
+3. Define URI and canonical related links.
+4. Choose method based on semantics and repeatability.
+5. Define request media type and strict schema.
+6. Define success statuses, headers, and representation.
+7. Define every expected error category.
+8. Add authorization and concurrency policy.
+9. Decide idempotency and retry behavior.
+10. Document/cache/observe/test the full contract.
+
+This sequence prevents the handler function from deciding the public design accidentally.
+
+## Definition of Done for an Endpoint
+
+```text
+resource model reviewed
+OpenAPI/contract updated
+runtime validation implemented
+authorization threat model covered
+success and error examples included
+idempotency/concurrency defined
+database query and index reviewed
+cache policy explicit
+structured observability added
+unit, integration, concurrency, and compatibility tests pass
+deprecation/version impact assessed
+```
+
+## Common REST Design Smells
+
+- every operation uses POST;
+- paths expose controller function names;
+- GET changes state;
+- PUT behaves as undocumented partial patch;
+- every response is `200` with custom success flags;
+- unbounded `GET /items` returns all rows;
+- query parameters pass directly into ORM filters/sorts;
+- retries can duplicate charges;
+- resource responses mirror database entities;
+- custom actions ignore state machines;
+- `/v2` appears without a compatibility/deprecation plan;
+- “RESTful” is claimed while HTTP caching and semantics are ignored.
+
+## Pragmatism Without Inconsistency
+
+Real APIs sometimes choose RPC-like commands, omit hypermedia, use path versioning, or accept POST for complex searches. Pragmatism is healthy when the tradeoff is documented.
+
+Inconsistency is different: clients should not discover that one collection uses `page`, another uses `offset`, a third returns status inside JSON, and a fourth treats GET as mutation without a deliberate reason.
+
+The goal is not ritual purity. It is a coherent interface whose exceptions are intentional and explainable.
+
+## What Finally Clicked
+
+Before Day 9, I thought REST API design was mostly plural nouns and correct status codes.
+
+Now my mental model is larger:
+
+```text
+Resources have stable identities.
+Representations cross a trust boundary.
+Methods express shared intent.
+Statuses summarize outcomes.
+Headers control caching, concurrency, media, and retries.
+Collections are bounded query contracts.
+Actions model domain workflows honestly.
+Constraints create distributed-system properties.
+```
+
+The golden rule I am leaving with is:
+
+> **Design the API so clients can predict behavior from consistent domain concepts and standard HTTP semantics, while documenting every place where business policy adds more meaning.**
+
+That is what makes an API scalable and maintainable—not merely that the routes look RESTful, but that the entire contract remains coherent under growth, failure, retries, concurrency, and change.

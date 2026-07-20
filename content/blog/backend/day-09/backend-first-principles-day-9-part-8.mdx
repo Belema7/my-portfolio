@@ -1,0 +1,364 @@
+---
+title: Day 9 — REST API Design (Part 8)
+description: Designing scalable list APIs with bounded pagination, offset and cursor tradeoffs, validated filters, stable sorting, database indexes, links, counts, and consistency.
+slug: backend-first-principles-day-9-part-8
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 24 min read
+day: 9
+part: 8
+series: Learning Backend from First Principles
+order: 908
+published: true
+tags: [Pagination, Filtering, Sorting, REST, Database Performance]
+keywords: [REST API pagination, cursor pagination, API filtering sorting]
+---
+# Pagination, Filtering, and Sorting: Designing Collection Resources That Scale
+
+> *“A list endpoint is a query contract, not permission to expose the database query language.”*
+
+## The Unbounded List Problem
+
+Part 7 designed collection representations. But this endpoint becomes dangerous as data grows:
+
+```http
+GET /products
+```
+
+If it returns every product, response time, memory, database load, serialization, and bandwidth grow without a bound.
+
+Every production list endpoint needs a deliberate maximum result size, even if the first database contains only twenty rows.
+
+## Offset Pagination
+
+```http
+GET /products?limit=20&offset=40
+```
+
+or page-based representation:
+
+```http
+GET /products?page=3&pageSize=20
+```
+
+Page translates to offset:
+
+```text
+offset = (page - 1) × pageSize
+```
+
+Benefits:
+
+- simple mental model;
+- supports jumping to a page;
+- works well for smaller stable datasets.
+
+Costs:
+
+- large offsets can become slow;
+- inserts/deletes between requests cause duplicates or skips;
+- exact total counts can be expensive.
+
+## Cursor Pagination
+
+Cursor pagination uses a stable position:
+
+```http
+GET /products?limit=20&after=eyJwcmljZSI6MTA5OSwiaWQiOiJwXzEyMyJ9
+```
+
+The cursor encodes the last sort values needed to continue:
+
+```text
+ORDER BY price ASC, id ASC
+cursor = { price: 1099, id: "p_123" }
+```
+
+Next query conceptually asks for rows after that tuple.
+
+Benefits:
+
+- efficient with appropriate indexes;
+- more stable under inserts;
+- avoids scanning huge offsets.
+
+Costs:
+
+- no simple arbitrary page jump;
+- cursor format and sort must align;
+- backward navigation is more complex;
+- cursors need validation and versioning.
+
+Opaque means clients should not edit the cursor, not that Base64 makes it secure. Sign cursors if tampering matters.
+
+## Stable Sorting Is Mandatory
+
+Pagination without deterministic ordering is broken.
+
+```sql
+ORDER BY created_at DESC, id DESC
+```
+
+The unique tie-breaker `id` prevents rows with equal timestamps from moving unpredictably between pages.
+
+## Filtering Is an Allowlisted Contract
+
+```http
+GET /products?category=electronics&inStock=true&minPrice=1000&maxPrice=5000
+```
+
+The boundary validates:
+
+- known filter names;
+- strict number and boolean representations;
+- accepted enum values;
+- range relationships (`minPrice <= maxPrice`);
+- maximum list sizes for multi-value filters;
+- permission to use sensitive filters.
+
+Do not pass `req.query` directly into an ORM.
+
+```ts
+const query: ProductQuery = {
+  category: parsed.category,
+  inStock: parsed.inStock,
+  minPrice: parsed.minPrice,
+  maxPrice: parsed.maxPrice,
+  limit: parsed.limit,
+  cursor: parsed.cursor,
+  sort: parsed.sort,
+};
+```
+
+## Sorting Grammar
+
+One convention is comma-separated fields with `-` for descending:
+
+```text
+?sort=name,-price
+```
+
+The API maps public names to trusted database columns:
+
+```ts
+const sortFields = {
+  name: "product_name",
+  price: "price_minor",
+  createdAt: "created_at",
+} as const;
+```
+
+Column names cannot be treated like normal parameter values, so allowlisting prevents SQL injection and unsupported expensive sorts.
+
+Always append a unique tie-breaker if the requested sort is not unique.
+
+## Partial Match and Search
+
+```text
+?nameContains=phone
+?q=wireless+headphones
+```
+
+Substring filtering and full-text search have different semantics. Case folding, language, stemming, ranking, indexes, and typo tolerance should be documented.
+
+Unescaped wildcard behavior and leading-wildcard queries can be expensive. A search service may be more appropriate than pretending every query is a simple SQL filter.
+
+## Multi-Value Filters
+
+```text
+?category=books,electronics
+```
+
+or repeated keys:
+
+```text
+?category=books&category=electronics
+```
+
+Choose one grammar, bound the number of values, validate every value, and document whether multiple filters use AND or OR semantics.
+
+## Counts Are Not Free
+
+An offset response might include:
+
+```json
+{
+  "page": {
+    "limit": 20,
+    "offset": 40,
+    "total": 145032
+  }
+}
+```
+
+Exact filtered counts can require expensive work. Alternatives include `hasMore`, an approximate count, a separately requested count, or no total.
+
+Do not promise `totalPages` merely because examples look convenient.
+
+## Consistency Under Change
+
+Suppose page one is read, then a new product is inserted before page two. Offset pagination may shift rows, causing duplicates or skips.
+
+Cursor pagination improves traversal stability under matching sort order but does not automatically provide a database snapshot across all pages.
+
+If snapshot consistency is required, the API may need snapshot tokens, time boundaries, or application-specific export jobs.
+
+## Database Indexes Follow the Query Contract
+
+An API that promises filtering by category and sorting by price needs supporting indexes and query plans.
+
+```text
+WHERE category = ?
+ORDER BY price, id
+```
+
+may benefit from an index aligned with category, price, and tie-breaker.
+
+API design creates database workload. Adding arbitrary sort/filter fields without performance review can expose denial-of-service queries.
+
+## Response Links
+
+```json
+{
+  "data": [],
+  "page": {
+    "limit": 20,
+    "hasMore": true,
+    "nextCursor": "opaque"
+  },
+  "links": {
+    "self": "/products?limit=20&category=electronics",
+    "next": "/products?limit=20&category=electronics&after=opaque"
+  }
+}
+```
+
+The next link must preserve filters and sort. Letting clients reconstruct it incorrectly creates subtle pagination bugs.
+
+## A Complete Validated Query
+
+```ts
+const productQuerySchema = z.object({
+  limit: positiveIntegerText(1, 100).default("20"),
+  after: z.string().max(500).optional(),
+  category: z.enum(["books", "electronics", "home"]).optional(),
+  inStock: strictQueryBoolean.optional(),
+  minPrice: nonNegativeMoneyText.optional(),
+  maxPrice: nonNegativeMoneyText.optional(),
+  sort: sortSchema.default("createdAt"),
+}).strict().superRefine((query, ctx) => {
+  if (query.minPrice && query.maxPrice && query.minPrice > query.maxPrice) {
+    ctx.addIssue({ code: "custom", path: ["maxPrice"], message: "Must be at least minPrice" });
+  }
+});
+```
+
+The service then applies permissions and repository query policy.
+
+## Caching Collection Queries
+
+The full normalized query affects cache identity. A cache must vary by authorization where responses differ per user and must not leak private filtered data.
+
+Frequent mutations make collection freshness harder than item caching. Cache-control and validators should reflect actual consistency requirements.
+
+## Testing Collection Endpoints
+
+```text
+default and maximum limit
+limit above cap
+malformed number/boolean
+unknown filter
+unsupported sort field
+stable ordering with ties
+next cursor continuity
+cursor tampering
+insert between pages
+authorization-sensitive filters
+query plan/index performance
+empty page representation
+```
+
+Integration tests with real data are important for pagination correctness.
+
+## Cursor Design Details
+
+A cursor can contain:
+
+```json
+{
+  "version": 1,
+  "sort": "-createdAt,id",
+  "createdAt": "2026-07-20T10:00:00Z",
+  "id": "product_123"
+}
+```
+
+It is encoded and optionally signed. Including a version allows future cursor evolution. The server verifies that cursor sort/filter context matches the current request so a cursor from one query cannot be reused silently with another.
+
+## Keyset Query Example
+
+For descending order:
+
+```sql
+SELECT id, name, created_at
+FROM products
+WHERE status = $1
+  AND (created_at, id) < ($2, $3)
+ORDER BY created_at DESC, id DESC
+LIMIT $4;
+```
+
+Tuple comparison behavior and indexes depend on the database. Integration tests verify no gaps or duplicates under ties.
+
+## Null Sort Values
+
+If a sortable field is nullable, define whether nulls appear first or last and encode that decision in cursor logic. Database defaults differ.
+
+```text
+sort=publishedAt → unpublished nulls first or last?
+```
+
+An undocumented null order can make pagination unstable across environments.
+
+## Authorization After Filtering
+
+Filtering must not fetch all records and remove unauthorized ones after pagination; that creates sparse pages and can leak counts. Tenant/permission constraints belong in the database query itself.
+
+```sql
+WHERE tenant_id = $verifiedTenantId
+  AND ...clientFilters
+```
+
+The tenant value comes from verified context, not an untrusted filter alone.
+
+## Export Is Not Unlimited Pagination
+
+Clients sometimes request `limit=1000000` to export. An asynchronous export job can use controlled resources, snapshot semantics, audit, and secure download expiration without weakening the normal list endpoint's bounds.
+
+## Query Cost Governance
+
+Track slow query plans and cap expensive combinations. Some filters may require premium permissions or asynchronous processing. Public query flexibility is part of the service's resource budget.
+
+## Checkpoint Questions
+
+### Why should every list have a maximum limit?
+
+It bounds database work, memory, serialization, bandwidth, and client impact.
+
+### Why include a unique tie-breaker in sorting?
+
+It creates deterministic order when the primary sort values are equal.
+
+### Is cursor pagination always better?
+
+No. It improves large sequential traversal but complicates page jumps and cursor design. Offset pagination can be appropriate for smaller or administrative datasets.
+
+### Why allowlist sort fields?
+
+It prevents clients from selecting unsupported or dangerous query expressions and avoids injecting identifiers into SQL.
+
+## What I Learned in Part 8
+
+Collection design connects API contracts to database behavior. Pagination must be bounded and stable; filters and sorts must be explicit, validated, authorized, and supported by indexes.
+
+Part 9 addresses important operations that do not fit simple CRUD.

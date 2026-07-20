@@ -1,0 +1,343 @@
+---
+title: Day 9 — REST API Design (Part 7)
+description: Designing consistent request and response representations, media types, success and error envelopes, field conventions, links, metadata, partial responses, and compatibility.
+slug: backend-first-principles-day-9-part-7
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 21 min read
+day: 9
+part: 7
+series: Learning Backend from First Principles
+order: 907
+published: true
+tags: [API Responses, JSON, REST, Error Contracts]
+keywords: [REST response format, API error response, JSON API design]
+---
+# Request and Response Representations: Designing a Predictable Contract
+
+> *“Consistency is valuable when it removes decisions for clients, not when it wraps every response in ceremony.”*
+
+## The Representation Question
+
+Part 6 made repeated operations reliable. The next question is what clients and servers actually exchange.
+
+A resource may have internal fields the API must never expose:
+
+```ts
+{
+  id: "user_123",
+  email: "alice@example.com",
+  passwordHash: "$2b$...",
+  verificationTokenHash: "...",
+  internalRiskScore: 8
+}
+```
+
+The public representation needs an explicit contract.
+
+## Request DTO, Application Command, and Response DTO
+
+```text
+Create User request
+  name, email, password
+      ↓ boundary validation
+CreateUserCommand
+  normalized trusted input
+      ↓ service/repository
+User entity
+  passwordHash and internal state
+      ↓ response mapper
+UserResponse
+  safe public fields
+```
+
+These objects should not be treated as interchangeable.
+
+## Media Types Describe Representation Format
+
+The client describes what it sends:
+
+```http
+Content-Type: application/json
+```
+
+and what it can receive:
+
+```http
+Accept: application/json
+```
+
+Unsupported request media can produce `415`; an unavailable acceptable response representation can produce `406 Not Acceptable` under the API's negotiation policy.
+
+Specialized media types can define version or patch semantics:
+
+```text
+application/merge-patch+json
+application/json-patch+json
+application/problem+json
+```
+
+## Should Every Success Be Wrapped in `data`?
+
+Two consistent styles can work.
+
+Direct resource:
+
+```json
+{
+  "id": "user_123",
+  "name": "Alice"
+}
+```
+
+Envelope:
+
+```json
+{
+  "data": {
+    "id": "user_123",
+    "name": "Alice"
+  },
+  "meta": {
+    "requestId": "abc-123"
+  }
+}
+```
+
+An envelope provides a place for metadata and links. A direct representation is simpler and maps naturally to the resource. The API should choose intentionally and remain consistent where clients benefit.
+
+Avoid envelopes that duplicate HTTP:
+
+```json
+{ "success": true, "status": 200, "data": {} }
+```
+
+The HTTP status already communicates broad success.
+
+## Collection Representation
+
+```json
+{
+  "data": [
+    { "id": "book_1", "title": "Book One" },
+    { "id": "book_2", "title": "Book Two" }
+  ],
+  "page": {
+    "nextCursor": "eyJpZCI6ImJvb2tfMiJ9",
+    "hasMore": true
+  },
+  "links": {
+    "self": "/books?limit=2",
+    "next": "/books?limit=2&cursor=eyJpZCI6ImJvb2tfMiJ9"
+  }
+}
+```
+
+Pagination metadata should reflect the chosen strategy. A cursor response should not pretend it knows `totalPages` unless the system deliberately pays for an exact count.
+
+## Error Representation
+
+A stable error envelope can use Problem Details or an application convention.
+
+```json
+{
+  "type": "https://api.example.com/problems/validation-error",
+  "title": "Request validation failed",
+  "status": 400,
+  "detail": "Some fields are invalid.",
+  "instance": "/requests/abc-123",
+  "errors": [
+    {
+      "field": "email",
+      "code": "invalid_format",
+      "message": "Enter a valid email address."
+    }
+  ]
+}
+```
+
+Stable codes help clients branch without parsing English. Stack traces, SQL, tokens, and entire rejected bodies stay internal.
+
+## Field Naming and Primitive Representation
+
+Choose one convention such as camelCase or snake_case for JSON and document it.
+
+Dates need unambiguous representation:
+
+```json
+{ "createdAt": "2026-07-20T10:30:00Z" }
+```
+
+Money should avoid ambiguous floating-point assumptions:
+
+```json
+{ "amount": 1099, "currency": "USD", "unit": "minor" }
+```
+
+or a documented decimal string representation.
+
+Large integers may need strings to preserve precision in JavaScript clients.
+
+## Null, Missing, and Empty
+
+These meanings must be explicit:
+
+```text
+field missing → not included / not changed / unknown
+field null    → known absence or explicit clear
+empty array   → known collection with zero items
+```
+
+Collection endpoints should normally return `[]`, not `null`, when the collection is known to be empty.
+
+PATCH contracts especially need missing-versus-null semantics.
+
+## Links and Discoverability
+
+Hypermedia controls can describe related resources and available actions:
+
+```json
+{
+  "id": "order_123",
+  "status": "processing",
+  "links": {
+    "self": { "href": "/orders/order_123" },
+    "customer": { "href": "/users/user_9" },
+    "cancellation": {
+      "href": "/orders/order_123/cancellation",
+      "method": "POST"
+    }
+  }
+}
+```
+
+Clients can discover controls from current state rather than construct every URI from out-of-band knowledge. Whether a pragmatic API adopts full hypermedia depends on its goals.
+
+## Sparse Fields and Includes
+
+Clients may request selected fields or relationships:
+
+```text
+GET /books/book_123?fields=id,title,author
+GET /books/book_123?include=reviews
+```
+
+The API must allowlist fields and bound expansion depth. Passing arbitrary field names into SQL or enabling unbounded relationship graphs creates security and performance risks.
+
+## Consistency Versus Independent Evolution
+
+One global response wrapper can make every endpoint look similar, but streaming files, `204` responses, job events, and cached representations have different needs.
+
+Consistency should apply to meaningful conventions:
+
+- field naming;
+- date and money representation;
+- error envelope;
+- pagination style per endpoint family;
+- request IDs and links;
+- null/missing semantics.
+
+It should not force a body into `204` or wrap binary content in JSON.
+
+## Backward Compatibility
+
+Clients may break when fields disappear, change type, or change meaning. Additive response changes are often safer if clients ignore unknown fields.
+
+Servers should not assume all clients update simultaneously. Deprecation communication, version policy, compatibility tests, and telemetry help evolve representations safely.
+
+## Security Review
+
+- Response fields are explicitly allowlisted.
+- Sensitive fields never rely on a blacklist alone.
+- Errors do not echo secrets.
+- URLs and links do not leak internal hosts.
+- Included relationships enforce authorization independently.
+- Cache headers prevent private response leakage.
+- JSON serialization handles untrusted text safely for JSON; clients still encode for HTML sinks.
+
+## Content Encoding and Compression
+
+`Content-Encoding: gzip` describes a transfer encoding of the representation. It is different from `Content-Type`, which describes media format.
+
+Clients and intermediaries use `Accept-Encoding` to negotiate compression. Compression saves bandwidth but costs CPU and can interact with security-sensitive secrets, so deployment policy matters.
+
+## Localization
+
+Stable error codes should not change with language. Human messages may be localized through `Accept-Language` or by the client:
+
+```json
+{
+  "code": "invalid_format",
+  "message": "Enter a valid email address."
+}
+```
+
+Clients branch on `code`, not `message`. APIs should document supported languages and fallback behavior if they localize server responses.
+
+## Decimal, Duration, and Enum Contracts
+
+Ambiguous primitives create long-term problems:
+
+```text
+duration: 30       seconds, minutes, or milliseconds?
+amount: 10.99      binary float or decimal?
+status: 1          which state?
+```
+
+Prefer self-describing fields or objects:
+
+```json
+{
+  "timeoutMs": 30000,
+  "price": { "amountMinor": 1099, "currency": "USD" },
+  "status": "processing"
+}
+```
+
+## Polymorphic Representations
+
+When one field can contain several shapes, use an explicit discriminator:
+
+```json
+{
+  "type": "card",
+  "last4": "4242",
+  "brand": "visa"
+}
+```
+
+This is easier to validate and evolve than guessing the variant from whichever fields happen to exist.
+
+## Streaming and Binary Resources
+
+Large downloads should not be wrapped in Base64 JSON. Use an appropriate media type, streaming, range requests where supported, authorization, and content-disposition policy.
+
+JSON consistency does not justify inefficiently representing every resource as JSON.
+
+## Representation Snapshot Tests
+
+Contract tests should assert explicit fields and schemas rather than blindly snapshot every timestamp. They verify secret exclusion, formats, null/missing behavior, media types, error codes, and backward-compatible examples.
+
+## Checkpoint Questions
+
+### Must every response use a `data` envelope?
+
+No. Envelopes and direct representations are both valid. Choose based on metadata needs and consistency.
+
+### Why return an empty array instead of null for an empty collection?
+
+It preserves the collection type and means the collection is known to contain zero items.
+
+### Why not return database entities directly?
+
+They expose internal naming and may contain secrets or fields not intended for the public contract.
+
+### What is content negotiation?
+
+The client and server use representation metadata such as `Accept` and `Content-Type` to describe formats they can send and receive.
+
+## What I Learned in Part 7
+
+Representations are deliberate public contracts. Consistency, safe mapping, media types, null semantics, errors, links, and compatibility all matter more than one fashionable JSON wrapper.
+
+Part 8 designs scalable list resources through pagination, filtering, and sorting.

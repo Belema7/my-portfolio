@@ -1,0 +1,300 @@
+---
+title: Day 9 — REST API Design (Part 5)
+description: Choosing precise HTTP status codes for success, validation, authentication, authorization, absence, conflicts, rate limits, dependencies, and asynchronous operations.
+slug: backend-first-principles-day-9-part-5
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 21 min read
+day: 9
+part: 5
+series: Learning Backend from First Principles
+order: 905
+published: true
+tags: [HTTP Status Codes, REST, Error Design]
+keywords: [REST API status codes, 401 vs 403, 409 conflict]
+---
+# HTTP Status Codes: Telling the Truth About the Outcome
+
+> *“A status code is not the whole error contract, but it is the first machine-readable summary of what happened.”*
+
+## The Result Question
+
+Part 4 used methods to express client intent. The server now needs to describe the outcome.
+
+Returning `200` for everything forces clients to inspect custom body strings:
+
+```json
+{ "success": false, "message": "User not found" }
+```
+
+HTTP already has standardized status semantics. Using them consistently improves clients, monitoring, retries, caching, and intermediaries.
+
+## The Five Families
+
+```text
+1xx informational
+2xx successful
+3xx redirection
+4xx client/request-side outcome
+5xx server unable to fulfill a valid request
+```
+
+“Client error” does not always mean the human did something morally wrong. It means the request cannot be fulfilled as submitted under the current contract/state.
+
+## Success Codes
+
+### 200 OK
+
+The request succeeded and the response contains a representation or result.
+
+```text
+GET /books/book_123
+PATCH /books/book_123 returning updated book
+POST /orders/order_123/cancellation returning cancellation result
+```
+
+### 201 Created
+
+A resource was created. Include `Location` for its URI when possible.
+
+```http
+HTTP/1.1 201 Created
+Location: /books/book_456
+```
+
+### 202 Accepted
+
+The request was accepted for asynchronous processing but is not complete.
+
+```http
+HTTP/1.1 202 Accepted
+Location: /jobs/job_789
+Retry-After: 5
+```
+
+The job resource lets the client observe progress. `202` is not a promise that processing will eventually succeed.
+
+### 204 No Content
+
+The request succeeded and there is no response content. Common for deletion or updates that return no representation.
+
+A `204` response must not include a message body. If the client needs the updated representation, use `200` instead.
+
+## Redirection and Cache Validation
+
+### 301/308 Permanent Redirect
+
+These can move stable resource URIs. `308` preserves method and content across redirect; clients and gateways vary, so API migration behavior should be tested.
+
+### 304 Not Modified
+
+Used for conditional cache validation. It is not a normal `3xx` page redirect and has no representation body.
+
+## Boundary and Validation Failures
+
+### 400 Bad Request
+
+Use when the request is malformed or violates the input contract: invalid JSON, wrong types, unknown fields, malformed query grammar.
+
+### 413 Content Too Large
+
+The request content exceeds configured limits.
+
+### 415 Unsupported Media Type
+
+The server does not support the request `Content-Type`.
+
+### 422 Unprocessable Content
+
+Some APIs use `422` when the representation is syntactically understood but instructions cannot be processed semantically. Others use `400` for all request validation. Consistency and documentation matter.
+
+## Authentication and Authorization
+
+### 401 Unauthorized
+
+Despite the name, `401` means acceptable authentication credentials are missing or invalid. A `WWW-Authenticate` challenge may be appropriate.
+
+### 403 Forbidden
+
+The server understands the authenticated identity but refuses the action.
+
+```text
+no/invalid credential → 401
+valid user, no permission → 403
+```
+
+Some APIs return `404` instead of `403` when revealing resource existence would leak sensitive information.
+
+## Resource and State Outcomes
+
+### 404 Not Found
+
+The target resource does not exist or is intentionally not disclosed.
+
+### 405 Method Not Allowed
+
+The resource exists for the URI, but the method is unsupported. Include `Allow` where required:
+
+```http
+HTTP/1.1 405 Method Not Allowed
+Allow: GET, HEAD
+```
+
+### 409 Conflict
+
+The request conflicts with current resource state: duplicate unique identity, illegal state transition, or an application concurrency conflict.
+
+### 412 Precondition Failed
+
+A conditional header such as `If-Match` did not match, often used for optimistic concurrency.
+
+### 428 Precondition Required
+
+The server requires a conditional request to prevent lost updates.
+
+### 429 Too Many Requests
+
+A rate policy rejected the request. `Retry-After` may tell the client when to retry.
+
+## Server and Dependency Failures
+
+### 500 Internal Server Error
+
+Unexpected server failure. Return a generic public body and log internal details with a request ID.
+
+### 502 Bad Gateway
+
+A gateway/proxy received an invalid response from an upstream server.
+
+### 503 Service Unavailable
+
+The service is temporarily unable to handle the request, perhaps due to maintenance or dependency availability. `Retry-After` can help.
+
+### 504 Gateway Timeout
+
+A gateway did not receive a timely upstream response.
+
+Not every database failure should become “invalid request.” Correct classification supports safe retry and meaningful operations.
+
+## Status Selection Matrix
+
+| Outcome | Status |
+| --- | --- |
+| Retrieved representation | `200` |
+| Created resource | `201` |
+| Accepted background job | `202` |
+| Success with no content | `204` |
+| Invalid representation | `400` or documented `422` policy |
+| Missing/invalid authentication | `401` |
+| Authenticated but denied | `403` |
+| Resource absent | `404` |
+| Wrong method | `405` |
+| State/uniqueness conflict | `409` |
+| Failed `If-Match` | `412` |
+| Payload too large | `413` |
+| Unsupported content type | `415` |
+| Rate limited | `429` |
+| Unexpected server failure | `500` |
+| Temporarily unavailable | `503` |
+
+## Do Not Encode Every Detail in the Status
+
+The body supplies a stable application code:
+
+```json
+{
+  "error": {
+    "code": "EMAIL_ALREADY_EXISTS",
+    "message": "An account with this email already exists"
+  },
+  "requestId": "abc-123"
+}
+```
+
+The status gives the broad HTTP category; the application code gives domain meaning.
+
+## Monitoring Uses Status Families
+
+Operations can track latency and rates by route template and status family. A spike in `400` may indicate client drift. A spike in `500` indicates server trouble. A spike in `409` may reveal contention or user behavior.
+
+Do not use raw user IDs or URLs as metric labels.
+
+## Redirects and Unsafe Methods
+
+`301` and `302` have historically caused some clients to change POST into GET. `307 Temporary Redirect` and `308 Permanent Redirect` preserve the method and request content.
+
+API migrations involving unsafe methods must be tested with actual clients and gateways. A redirect is not a substitute for a compatibility plan.
+
+## 404 Versus Empty Collection
+
+```text
+GET /users/user_123 → 404 if user absent
+GET /users/user_123/orders → maybe 404 if parent absent
+GET /orders?userId=user_123 → 200 [] under a global query contract
+```
+
+The URI model determines whether absence refers to a missing resource or a valid empty collection.
+
+## 400 Versus 409
+
+Malformed email syntax is a request-contract error (`400`). A correctly formed registration that collides with existing email state is a conflict (`409`).
+
+This distinction tells clients whether to repair representation or reconcile current state.
+
+## Retry Guidance
+
+| Status | Typical client approach |
+| --- | --- |
+| `400` | fix request; do not retry unchanged |
+| `401` | obtain/refresh credentials if allowed |
+| `409` | reconcile state or use a new operation |
+| `412` | reload current representation/version |
+| `429` | wait according to rate policy |
+| `500` | uncertain; retry only when operation is safe/idempotent |
+| `503` | bounded backoff; respect `Retry-After` |
+
+Status alone cannot decide retries; method idempotency and idempotency keys matter.
+
+## Error Handler Mapping
+
+```ts
+if (error instanceof EmailAlreadyExistsError) {
+  return problem(res, 409, "EMAIL_ALREADY_EXISTS", error.publicMessage);
+}
+
+if (error instanceof PreconditionFailedError) {
+  return problem(res, 412, "RESOURCE_CHANGED", error.publicMessage);
+}
+
+return problem(res, 500, "INTERNAL_SERVER_ERROR", "Something went wrong");
+```
+
+Application errors remain independent of HTTP until the adapter maps them.
+
+## Contract Tests for Statuses
+
+Documentation examples should be executable or checked against real responses. Tests verify status, required headers such as `Location` or `Allow`, absence of a body on `204`, and safe error representation—not status alone.
+
+## Checkpoint Questions
+
+### What is the difference between 200 and 201?
+
+`200` indicates general success with a representation/result. `201` specifically means one or more resources were created and should identify them when practical.
+
+### What is the difference between 401 and 403?
+
+`401` is an authentication problem; `403` is a permission refusal for an understood identity.
+
+### When should I use 409 versus 412?
+
+`409` describes a general conflict with current state. `412` specifically reports that a request precondition such as `If-Match` evaluated false.
+
+### Is 202 a completed success?
+
+No. It means accepted for processing. The eventual operation may still fail.
+
+## What I Learned in Part 5
+
+Status codes should tell the truth at the right level: broad HTTP outcome in the status, domain-specific meaning in a stable safe body.
+
+Part 6 tackles retries and duplicate effects through idempotency.
