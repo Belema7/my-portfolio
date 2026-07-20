@@ -1,0 +1,510 @@
+---
+title: Day 8 — Middleware and Request Context (Part 3)
+description: Implementing request IDs, logging, authentication, authorization, rate limiting, CORS, parsing, validation, and compression responsibly.
+slug: backend-first-principles-day-8-part-3
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 23 min read
+day: 8
+part: 3
+series: Learning Backend from First Principles
+order: 803
+published: true
+tags: [Middleware, Authentication, API Security]
+keywords: [authentication middleware, logging middleware, rate limiting, CORS middleware]
+---
+# The Jobs Middleware Performs Before a Handler Runs
+
+> *“The mechanism stays the same; the policy at each checkpoint changes.”*
+
+## From Mechanism to Purpose
+
+Part 2 showed me how `next()` moves control and why middleware order matters. But knowing the mechanism did not tell me which responsibilities deserve a checkpoint.
+
+I began with a useful test: does this concern belong to the HTTP request pipeline, and does it apply to more than one route?
+
+## Request IDs
+
+When several users call the same endpoint simultaneously, “database timeout” is not enough information. A request ID lets logs, errors, and responses refer to one journey.
+
+```js
+function requestIdMiddleware(req, res, next) {
+  const incomingId = req.get("x-request-id");
+  const requestId = isValidRequestId(incomingId)
+    ? incomingId
+    : crypto.randomUUID();
+
+  req.requestId = requestId;
+  res.set("X-Request-ID", requestId);
+  next();
+}
+```
+
+An incoming ID should only be trusted under an intentional proxy architecture and after validation. Otherwise, the application should generate one.
+
+The identifier is not a secret or an authentication token. Its job is correlation. I can return it in an error response so a user can report, “request `7c...` failed,” and then find the matching internal logs.
+
+```text
+Client error response
+  requestId: 7c...
+        ↕
+Application log
+  requestId: 7c..., database timeout
+        ↕
+Downstream service trace
+  requestId: 7c...
+```
+
+If several services cooperate, tracing standards usually carry trace and span identifiers rather than inventing a different header in every service. The principle remains the same: one request needs a consistent identity across its journey.
+
+## Request Logging
+
+Useful logging observes both arrival and completion:
+
+```js
+function loggingMiddleware(req, res, next) {
+  const startedAt = performance.now();
+
+  console.info("request.started", {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.originalUrl,
+  });
+
+  res.on("finish", () => {
+    console.info("request.finished", {
+      requestId: req.requestId,
+      status: res.statusCode,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+  });
+
+  next();
+}
+```
+
+I should not blindly log authorization headers, cookies, passwords, tokens, or entire bodies. Observability is not permission to copy secrets into long-lived storage.
+
+### Structured Logs Instead of Sentences
+
+I used to write logs like this:
+
+```js
+console.log(`${req.method} ${req.path} completed in ${duration}ms`);
+```
+
+Structured fields are easier for machines to query:
+
+```js
+logger.info({
+  event: "request.finished",
+  requestId: req.requestId,
+  method: req.method,
+  route: req.route?.path,
+  status: res.statusCode,
+  durationMs,
+});
+```
+
+Logs should normally use a route template such as `/users/:id` for metrics, because raw URLs like `/users/1`, `/users/2`, and `/users/3` create high-cardinality labels. Raw URLs may still be useful in controlled logs, but metrics and logs have different storage and query tradeoffs.
+
+### What a Logger Should Not Do
+
+A logging middleware should not become the place that modifies business data or performs slow remote writes before every response. Production loggers normally buffer or stream records through appropriate infrastructure. If the logging destination is unavailable, the API's failure policy should be deliberate rather than accidental.
+
+## Authentication and Authorization
+
+Authentication answers **who is calling?** Authorization answers **may this identity perform this operation?**
+
+```js
+function readBearerToken(req) {
+  const [scheme, token] = req.get("authorization")?.split(" ") ?? [];
+  return scheme?.toLowerCase() === "bearer" ? token : null;
+}
+
+function authMiddleware(req, res, next) {
+  const token = readBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Authentication required",
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    const claims = verifyAccessToken(token);
+    req.user = { id: claims.sub, role: claims.role };
+    next();
+  } catch (error) {
+    next(new AuthenticationError("Invalid or expired access token"));
+  }
+}
+```
+
+Authorization can build on the verified identity:
+
+```js
+function requireRole(role) {
+  return function roleMiddleware(req, res, next) {
+    if (req.user?.role !== role) {
+      return res.status(403).json({
+        error: "Forbidden",
+        requestId: req.requestId,
+      });
+    }
+
+    next();
+  };
+}
+```
+
+A client header such as `X-User-Role: admin` is untrusted input. Only verified authentication should establish identity and permissions.
+
+### `401` and `403` Are Different Stories
+
+```text
+401 Unauthorized
+  “I cannot establish an acceptable identity.”
+
+403 Forbidden
+  “I know who you are, but this action is not permitted.”
+```
+
+Despite its historical name, `401 Unauthorized` is used for authentication failure. A protected endpoint without a valid credential normally returns `401`; an authenticated non-admin attempting an admin action normally receives `403`.
+
+### Authentication Is More Than Decoding a Token
+
+Simply Base64-decoding a JWT does not verify it. Verification must check the cryptographic signature and the claims the application relies on, such as expiration, issuer, audience, and permitted algorithm.
+
+The context should receive the minimum verified identity required downstream:
+
+```js
+req.user = {
+  id: claims.sub,
+  role: claims.role,
+};
+```
+
+It usually should not carry the raw token. Keeping the credential available everywhere increases the chance of accidental logging or leakage.
+
+Authorization can also be more specific than roles. “Is an admin?” is simple; “May this user edit this order in its current state?” may require a service-level business rule. Middleware is useful for broad access gates, but resource ownership and state rules may belong closer to the use case.
+
+## Rate Limiting
+
+A rate limiter protects shared capacity by restricting how frequently a key may call an endpoint.
+
+```js
+import { rateLimit } from "express-rate-limit";
+
+const apiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many requests. Try again later." },
+});
+
+app.use("/api", apiRateLimiter);
+```
+
+Production configuration needs more thought: trusted proxies affect IP detection, multiple server instances may need a shared store, and login routes often need stricter policies than ordinary reads.
+
+### Choosing a Rate-Limit Key
+
+Before authentication, the client IP may be the only available key. After authentication, a verified account ID may be fairer. Both can be useful because attackers can distribute requests across accounts or networks.
+
+```text
+IP-based limit      → protects anonymous boundary
+Account-based limit → protects per-user allocation
+Route-specific limit → protects expensive operations
+```
+
+A limiter should normally return `429 Too Many Requests` and appropriate standard headers so a client can understand the policy. In-memory stores are unsuitable when several application instances need a shared limit.
+
+Rate limiting is one defense, not a complete denial-of-service solution. Infrastructure-level protection, caching, timeouts, and capacity planning still matter.
+
+## CORS
+
+I originally thought CORS stopped foreign clients from calling an API. It does not. CORS tells browsers which origins may let frontend JavaScript read a response. A command-line client can still call a publicly reachable endpoint.
+
+```js
+import cors from "cors";
+
+app.use(cors({
+  origin: ["https://app.example.com"],
+  methods: ["GET", "POST", "PATCH", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+  credentials: true,
+}));
+```
+
+`Access-Control-Allow-Origin: *` can be appropriate for a public non-credentialed API, but it is not a safe universal default. CORS is also not authentication.
+
+### Why Browsers Send a Preflight
+
+For some cross-origin requests, the browser first sends `OPTIONS`:
+
+```http
+OPTIONS /api/users HTTP/1.1
+Origin: https://app.example.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization, content-type
+```
+
+The server replies with the allowed policy. Only then does the browser decide whether to send the actual request. A CORS package handles these rules and response headers more reliably than a few manual `setHeader` calls.
+
+When credentials are enabled, the server must use an explicit allowed origin rather than `*`, and cookie security settings still need separate attention.
+
+## Body Parsing
+
+```js
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+```
+
+Parsing answers, “Can these bytes become a JavaScript value?” It does not answer, “Does this value satisfy my endpoint contract?” That second question belongs to validation.
+
+Parser placement also matters. A payment webhook may verify a signature over the exact raw bytes. If a JSON parser changes that body into an object first, signature verification may no longer have the required input. Such routes often need a raw parser mounted deliberately before general JSON parsing.
+
+Body limits are resource controls, not semantic validation. A `1mb` payload can still contain invalid fields, and a valid object can still violate a business rule.
+
+## Validation
+
+Day 6 taught me that external input must earn trust. Route middleware can enforce a boundary contract before the handler runs:
+
+```js
+function validateBody(schema) {
+  return function validationMiddleware(req, res, next) {
+    const result = schema.safeParse(req.body);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: result.error.flatten(),
+        requestId: req.requestId,
+      });
+    }
+
+    req.validatedBody = result.data;
+    next();
+  };
+}
+```
+
+Attaching `validatedBody` instead of silently rewriting `req.body` makes the trust transition visible.
+
+### Boundary Validation Versus Business Validation
+
+Middleware can verify that an email is a string with an acceptable format. It should not automatically own every business rule.
+
+```text
+Boundary validation
+  Is email a string?
+  Is age a safe integer?
+  Are unknown fields rejected?
+
+Business validation
+  Is registration open?
+  May this actor create an admin?
+  Is this invitation still valid?
+
+Database constraint
+  Is email unique at commit time?
+```
+
+Day 6 established these layers. Middleware is the mechanism for the request boundary, not permission to move services and database guarantees into a validation function.
+
+### Validation Errors Should Help Without Leaking
+
+A useful `400` response identifies fields and stable error codes:
+
+```json
+{
+  "error": "VALIDATION_FAILED",
+  "fields": {
+    "email": ["Email must be valid"],
+    "age": ["Age must be a whole number"]
+  },
+  "requestId": "7c6f..."
+}
+```
+
+It should not include an internal stack trace or dump the entire rejected body back to logs.
+
+## Compression
+
+```js
+import compression from "compression";
+app.use(compression());
+```
+
+Compression can reduce network transfer, but it costs CPU and may already be handled by a reverse proxy or CDN. Middleware should exist because the deployment needs it, not because a checklist mentions it.
+
+## Security Headers
+
+Another cross-cutting concern is browser-facing response security. Libraries such as Helmet can set a collection of headers:
+
+```js
+import helmet from "helmet";
+app.use(helmet());
+```
+
+These headers can reduce risks such as content-type sniffing or unsafe embedding, but policy still needs understanding. A Content Security Policy that is too broad provides little protection; one that is too strict can break required resources. Middleware offers the delivery mechanism, not an automatic substitute for policy design.
+
+## Caching Middleware
+
+Some requests can be answered from a cache before the handler performs expensive work:
+
+```text
+Request
+  ↓
+Cache lookup ── hit ──→ cached response
+  ↓ miss
+Handler → service → database
+  ↓
+Store cache entry → response
+```
+
+Caching becomes dangerous when keys ignore user identity, permissions, locale, or query parameters. A cached admin response must never be served to another user. Invalidation and privacy are part of the design, not afterthoughts.
+
+## One Route, Several Focused Policies
+
+The common use cases become easier to understand when composed around one route:
+
+```js
+app.post(
+  "/api/admin/users",
+  authMiddleware,
+  requireRole("admin"),
+  strictWriteRateLimiter,
+  validateBody(createUserSchema),
+  userHandler.create,
+);
+```
+
+```text
+Auth          → Who is calling?
+Authorization → May they create users?
+Rate limit    → Are they within allowed usage?
+Validation    → Is the request structurally acceptable?
+Handler       → Translate the Create User use case to HTTP
+```
+
+Each layer asks one question. If any answer rejects the request, expensive business and database work never begins.
+
+## File Upload Middleware
+
+File uploads made me see why limits and validation need layers. Multipart middleware may stream a file or expose metadata, but accepting the multipart format does not make the file safe.
+
+```text
+Transport limits
+  maximum request/file size
+  allowed number of files
+        ↓
+Metadata checks
+  permitted extension and declared MIME type
+        ↓
+Content inspection
+  detected file type, malware scanning where required
+        ↓
+Storage policy
+  generated filename, isolated location, access controls
+```
+
+The client-supplied filename must not become an arbitrary filesystem path. MIME headers can lie. Image processing and archive extraction have their own resource and security risks.
+
+Upload middleware is therefore a boundary mechanism, while secure storage remains a larger workflow.
+
+## Idempotency Middleware
+
+Payment and order-creation APIs may accept an idempotency key so a retried request does not create the operation twice.
+
+```http
+POST /payments
+Idempotency-Key: payment-attempt-123
+```
+
+A layer can look up the key and replay a prior result, but correct idempotency requires durable storage, request fingerprinting, concurrency handling, expiration policy, and careful scoping to the authenticated caller.
+
+```text
+same user + same key + same request → replay stored outcome
+same user + same key + different body → conflict
+different user + same key            → independent namespace
+```
+
+This is another example where middleware can coordinate an HTTP concern, but a few lines around an in-memory map would not be production-grade.
+
+## Audit Logging Is Not Ordinary Request Logging
+
+Request logs answer operational questions such as latency and status. Audit logs answer security and accountability questions such as who changed a role or deleted a project.
+
+An audit record may need:
+
+- verified actor identity;
+- action and target resource;
+- outcome;
+- timestamp and request ID;
+- relevant before/after identifiers without unnecessary sensitive data;
+- tamper-resistant retention appropriate to the system.
+
+Because audit semantics depend on whether the business operation succeeded, a service event or post-operation layer may be more accurate than a generic global request logger. Calling all logs “middleware logging” would hide this distinction.
+
+## Timeouts as Middleware Policy
+
+Requests should not consume resources forever. Middleware can establish a deadline or abort signal, but merely sending a timeout response does not cancel downstream work.
+
+```text
+deadline expires
+  ↓
+signal cancellation
+  ↓
+database/HTTP client cooperates
+  ↓
+stop work and release resources
+  ↓
+return deliberate timeout response if still possible
+```
+
+Timeout values may differ by route. A health check and a report export do not have the same expected duration. Infrastructure timeouts must also be coordinated so an outer proxy does not give up before the application can respond meaningfully.
+
+## Production Questions for Each Middleware
+
+Before installing a package or writing a custom layer, I now ask:
+
+| Concern | Question |
+| --- | --- |
+| Request ID | Who generates it, and which upstream IDs are trusted? |
+| Logging | Which fields are useful, and which must be redacted? |
+| Authentication | Which claims and algorithms are verified? |
+| Authorization | Is this broad access or a resource-specific business rule? |
+| Rate limiting | What is the key, store, scope, and proxy configuration? |
+| CORS | Which browser origins need access, and are credentials used? |
+| Parsing | What types and size limits are accepted? |
+| Validation | What belongs to the boundary versus service/database? |
+| Compression | Is it already handled upstream, and what is the CPU cost? |
+| Caching | Is the key complete, private, and invalidated correctly? |
+
+## Checkpoint Questions
+
+### Why is parsing not validation?
+
+Parsing only converts a representation into a runtime value. Valid JSON can still contain missing fields, wrong types, forbidden properties, or values that violate business rules.
+
+### Why can CORS not replace authentication?
+
+CORS is primarily a browser enforcement mechanism controlling whether frontend JavaScript may read a cross-origin response. Direct HTTP clients are not prevented from calling the endpoint.
+
+### Should authentication middleware store the raw token in context?
+
+Usually no. Downstream code normally needs a minimal verified identity, while retaining the credential increases accidental exposure risk.
+
+### Is rate limiting only an IP count?
+
+No. The appropriate key, scope, shared store, proxy trust, endpoint cost, and authenticated identity all affect a real policy.
+
+## What I Learned in Part 3
+
+The common middleware jobs all share one mechanism, but they enforce different policies. Each should remain focused, handle sensitive data intentionally, and be placed according to its dependencies and cost.
+
+Several of these checkpoints also create information for later steps: request IDs, users, roles, and validated input. Part 4 asks how that data travels safely through the pipeline as request context.

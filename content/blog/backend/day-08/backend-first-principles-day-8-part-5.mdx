@@ -1,0 +1,507 @@
+---
+title: Day 8 — Middleware and Request Context (Part 5)
+description: Choosing between global, router-level, route-specific, and conditional middleware without creating hidden policy.
+slug: backend-first-principles-day-8-part-5
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 19 min read
+day: 8
+part: 5
+series: Learning Backend from First Principles
+order: 805
+published: true
+tags: [Middleware, Express Router, Backend Architecture]
+keywords: [global middleware, route-specific middleware, Express router middleware]
+---
+# Global and Route-Specific Middleware: Choosing the Right Scope
+
+> *“A reusable policy is only useful when it runs for the right requests.”*
+
+## Does Every Request Need Every Checkpoint?
+
+Part 4 showed how context travels through middleware. But a health check does not need an authenticated user, and a public page should not pass through admin authorization.
+
+Middleware scope matters as much as middleware order.
+
+## Global Middleware
+
+Global middleware is registered on the application. It applies to every matching request that reaches that registration point.
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "1mb" }));
+```
+
+Request IDs and basic logging often make sense globally because every request benefits from correlation and observation. Parsing can also be global when most routes accept the format, though webhook routes sometimes require raw bytes and must be mounted before a JSON parser.
+
+Authentication rarely belongs globally when an application contains public endpoints.
+
+### Global Does Not Mean Unconditional
+
+Even globally registered middleware only runs if the request reaches its position and matches its path. Earlier middleware can end the response first.
+
+```js
+app.use(maintenanceModeMiddleware);
+app.use(loggingMiddleware);
+```
+
+If maintenance middleware responds immediately, the later logger never sees the request. If I need to observe every request, logging must be placed before possible termination or handled at infrastructure level.
+
+This is another reason I treat registration order and scope as one design problem.
+
+## Router-Level Middleware
+
+An Express router can apply a shared policy to a family of routes:
+
+```js
+const apiRouter = express.Router();
+
+apiRouter.use(apiRateLimiter);
+apiRouter.use(authMiddleware);
+
+apiRouter.get("/profile", profileHandler);
+apiRouter.get("/orders", orderHandler.list);
+
+app.use("/api", apiRouter);
+```
+
+Every route inside this router receives rate limiting and authentication. The route structure expresses the security boundary without repeating middleware on every line.
+
+Routers can also be nested:
+
+```js
+const adminRouter = express.Router();
+
+adminRouter.use(authMiddleware);
+adminRouter.use(requireRole("admin"));
+adminRouter.get("/users", adminHandler.listUsers);
+
+app.use("/api/admin", adminRouter);
+```
+
+### Routers as Policy Boundaries
+
+A router is not merely a folder organization tool. It can state what a section of the application requires:
+
+```text
+/api/public/*
+  rate limit
+  no required identity
+
+/api/account/*
+  rate limit
+  authentication
+
+/api/admin/*
+  rate limit
+  authentication
+  admin authorization
+  audit logging
+```
+
+This structure is easier to audit than a flat file containing fifty routes with slightly different middleware arrays.
+
+I can create router factories when policy needs dependencies:
+
+```js
+function createAdminRouter({ userService, auditLogger }) {
+  const router = express.Router();
+
+  router.use(authMiddleware);
+  router.use(requireRole("admin"));
+  router.use(createAuditMiddleware(auditLogger));
+
+  router.get("/users", createListUsersHandler(userService));
+  return router;
+}
+```
+
+The factory makes infrastructure dependencies explicit without passing them through request context.
+
+## Route-Specific Middleware
+
+Some policies belong to one operation:
+
+```js
+app.post(
+  "/users",
+  authMiddleware,
+  requireRole("admin"),
+  validateBody(createUserSchema),
+  userHandler.create,
+);
+```
+
+Reading the route left to right tells the whole boundary story:
+
+```text
+authenticate → require admin → validate input → create user
+```
+
+Validation is usually route-specific because different endpoints accept different shapes. Authorization can also depend on the exact action and resource, not only a broad role.
+
+### Route Arrays and Readability
+
+Express allows multiple middleware functions in one route. Arrays can group a deliberate policy:
+
+```js
+const adminPolicy = [authMiddleware, requireRole("admin")];
+
+app.get("/admin/reports", adminPolicy, reportHandler.list);
+```
+
+The name should communicate the exact guarantee. A vague `secureRoute` helper can hide whether it authenticates, authorizes, rate-limits, or validates. Explicit route declarations are often worth a few repeated names because a reviewer can see the security story.
+
+## Public, Optional, and Protected Routes
+
+Three access models helped me reason more precisely:
+
+| Access model | Missing credential | Invalid credential | Valid credential |
+| --- | --- | --- | --- |
+| Public | Continue anonymous | Usually ignore only if credentials are not processed | Continue |
+| Optional identity | Continue anonymous | Reject or follow explicit policy | Enrich context |
+| Protected | Return `401` | Return `401` | Continue with identity |
+
+“Public” does not automatically mean “no middleware.” Public routes still need request IDs, logging, CORS decisions, resource limits, and perhaps rate limiting.
+
+## Resource-Specific Authorization
+
+Router-level role checks are broad. Ownership often requires route data:
+
+```js
+app.patch(
+  "/orders/:orderId",
+  authMiddleware,
+  validateParams(orderParamsSchema),
+  loadOrder,
+  requireOrderAccess,
+  validateBody(updateOrderSchema),
+  orderHandler.update,
+);
+```
+
+The sequence matters:
+
+```text
+verify identity
+  ↓
+validate order ID
+  ↓
+load order
+  ↓
+check ownership/state permission
+  ↓
+validate requested update
+  ↓
+execute use case
+```
+
+There is a design tradeoff here. Loading a domain resource and enforcing state-sensitive rules may belong in the service rather than middleware. Middleware is appropriate when the loaded value is a clear request-boundary concern reused by several routes. Business invariants must not disappear merely because a middleware checked something earlier.
+
+## Combining Scopes
+
+The three levels can cooperate:
+
+```js
+// Every request
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+
+// Public: request ID + logging
+app.get("/health", healthHandler);
+
+// API: request ID + logging + rate limit
+app.use("/api", apiRateLimiter, apiRouter);
+
+// Admin routes add authentication and admin authorization
+adminRouter.use(authMiddleware, requireRole("admin"));
+app.use("/api/admin", adminRouter);
+```
+
+| Scope | Good candidates |
+| --- | --- |
+| Global | Request IDs, baseline logging, CORS policy |
+| Router-level | API rate limits, authentication for a protected area |
+| Route-specific | Input validation, resource authorization, upload policy |
+
+These are design tendencies, not absolute laws.
+
+## Conditional Middleware
+
+I can write one global middleware with path conditions:
+
+```js
+function optionalAuth(req, res, next) {
+  if (req.path === "/health" || req.path === "/public") {
+    return next();
+  }
+
+  authMiddleware(req, res, next);
+}
+```
+
+But as exceptions grow, the policy becomes hidden in conditionals. A new public route might accidentally inherit authentication, or a protected route might be skipped because of a broad prefix check.
+
+Route and router composition is usually clearer:
+
+```js
+app.get("/health", healthHandler);
+app.use("/api/public", publicRouter);
+app.use("/api", authMiddleware, protectedRouter);
+```
+
+Conditional middleware is still useful when the condition is genuinely about request properties rather than architecture—for example, parsing a supported content type or enabling optional authentication that enriches context without requiring identity.
+
+## Path Conditions Can Be Deceptive
+
+String prefix checks are especially risky:
+
+```js
+if (req.path.startsWith("/public")) return next();
+```
+
+This may unintentionally include `/public-admin` or a future route the author did not consider. Router mounting uses the framework's matching rules and keeps the exception near the route definition.
+
+Conditions also become difficult when query values, methods, and content types matter. A declarative route stack is normally easier to test than one global function containing an internal router made of `if` statements.
+
+## Middleware Factories
+
+Route-specific behavior often needs configuration. A factory returns middleware with a captured policy:
+
+```js
+function requirePermission(permission) {
+  return function permissionMiddleware(req, res, next) {
+    if (!req.context.user.permissions.includes(permission)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    next();
+  };
+}
+
+app.delete(
+  "/projects/:id",
+  authMiddleware,
+  requirePermission("project:delete"),
+  projectHandler.remove,
+);
+```
+
+This is still one reusable implementation, but the route declares the required permission explicitly.
+
+## Versioned APIs and Scope
+
+Middleware may differ across API versions:
+
+```js
+app.use("/api/v1", legacyCompatibilityMiddleware, v1Router);
+app.use("/api/v2", v2Router);
+```
+
+A compatibility transformation should stay scoped to the version that needs it. Registering it globally could silently alter new contracts.
+
+The same principle applies to webhook providers, file uploads, internal APIs, and browser-facing routes. Each boundary can have its own parser, authentication mechanism, and limits.
+
+## Sub-Applications and Trust Zones
+
+Large systems sometimes separate internal and external routers:
+
+```text
+Public API router
+  internet authentication
+  strict rate limits
+  public response contract
+
+Internal operations router
+  network identity / service authentication
+  administrative audit logs
+  different availability requirements
+```
+
+“Internal” does not mean trusted by default. It means the trust mechanism and threat model may differ. Mounting routers separately helps prevent an internal policy from leaking onto a public route—or a public route from accidentally receiving internal privileges.
+
+## Scope and Performance
+
+Putting database-backed authentication globally means even `/health` may fail when the identity database is unavailable. That can make orchestration systems think the application process is unhealthy when only an external dependency is degraded.
+
+Health endpoints need intentional semantics:
+
+- a liveness check may only confirm the process can respond;
+- a readiness check may confirm required dependencies;
+- neither normally needs end-user authentication, though network exposure still matters.
+
+Scope therefore affects operational reliability, not only code cleanliness.
+
+## Case Study: Designing an E-Commerce Route Map
+
+I tested the scope rules on a small shop API.
+
+```text
+GET  /health
+GET  /api/catalog
+GET  /api/products/:id
+GET  /api/account/orders
+POST /api/account/orders
+POST /api/auth/login
+GET  /api/admin/orders
+PATCH /api/admin/orders/:id/status
+```
+
+The first attempt put authentication on `/api` globally. That accidentally protected the public catalog and login route.
+
+A clearer composition is:
+
+```js
+app.use(requestContextMiddleware);
+app.use(requestLoggingMiddleware);
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/health", healthHandler);
+
+const publicApi = express.Router();
+publicApi.use(publicRateLimiter);
+publicApi.get("/catalog", catalogHandler.list);
+publicApi.get("/products/:id", validateProductParams, productHandler.get);
+app.use("/api", publicApi);
+
+const authRouter = express.Router();
+authRouter.use(strictAuthRateLimiter);
+authRouter.post("/login", validateLoginBody, authHandler.login);
+app.use("/api/auth", authRouter);
+
+const accountRouter = express.Router();
+accountRouter.use(accountRateLimiter);
+accountRouter.use(authMiddleware);
+accountRouter.get("/orders", orderHandler.listMine);
+accountRouter.post("/orders", validateOrderBody, orderHandler.create);
+app.use("/api/account", accountRouter);
+
+const adminRouter = express.Router();
+adminRouter.use(adminRateLimiter);
+adminRouter.use(authMiddleware);
+adminRouter.use(requireRole("admin"));
+adminRouter.use(auditContextMiddleware);
+adminRouter.get("/orders", adminOrderHandler.list);
+adminRouter.patch(
+  "/orders/:id/status",
+  validateOrderParams,
+  validateStatusBody,
+  adminOrderHandler.changeStatus,
+);
+app.use("/api/admin", adminRouter);
+```
+
+Now each boundary states its policy:
+
+- the catalog is public but rate-limited;
+- login has a strict abuse limit but cannot require authentication;
+- account routes require a verified user;
+- admin routes add role enforcement and audit context;
+- validation remains close to the route contract.
+
+## A Scope Matrix for Review
+
+Before shipping, I can turn the route map into a matrix:
+
+| Route group | Request ID | Rate limit | Auth | Admin | Validation | Audit |
+| --- | --- | --- | --- | --- | --- | --- |
+| Health | Yes | Optional | No | No | No | No |
+| Catalog | Yes | Public | No | No | Params | No |
+| Login | Yes | Strict | No | No | Body | Security events |
+| Account | Yes | Account | Yes | No | Per route | Relevant actions |
+| Admin | Yes | Admin | Yes | Yes | Per route | Yes |
+
+This table is useful in design reviews because missing or accidental policies become visible before reading implementation details.
+
+## Avoiding Middleware Drift
+
+As an application grows, two routers may start with the same policy and slowly diverge. One receives a new security header or rate limit while another is forgotten.
+
+Shared factories can encode truly shared policy:
+
+```js
+function applyProtectedApiPolicy(router) {
+  router.use(apiRateLimiter);
+  router.use(authMiddleware);
+  return router;
+}
+```
+
+But I would not force unlike zones through one abstraction. Admin audit requirements and ordinary account routes may deserve separate named policies. The goal is consistent intent, not eliminating every repeated line.
+
+## Middleware Placement During Refactoring
+
+Moving a route between routers can silently change its protections. Code review should treat this like changing authorization code.
+
+A safe refactor checks:
+
+1. the route's old effective middleware stack;
+2. the new router's inherited stack;
+3. differences in parsers, limits, authentication, and error handling;
+4. integration tests for public/protected behavior;
+5. observability after deployment.
+
+File movement is not merely organizational when folders and routers represent trust zones.
+
+## Registration Points Are Boundaries
+
+This code does not protect routes registered earlier:
+
+```js
+app.get("/accidentally-public", sensitiveHandler);
+app.use(authMiddleware);
+```
+
+Express processes layers in registration order. Moving one `app.use` line can change the application's security behavior.
+
+I now treat the application bootstrap as an executable policy document. Related routes and their middleware should be visually close enough that reviewers can understand the boundary.
+
+## Testing Scope, Not Just Behavior
+
+It is not enough to test that `authMiddleware` rejects a missing token. I also need to prove where it is and is not mounted:
+
+```js
+it("keeps health public", async () => {
+  await request(app).get("/health").expect(200);
+});
+
+it("protects account routes", async () => {
+  await request(app).get("/api/account/profile").expect(401);
+});
+
+it("requires admin permission", async () => {
+  await request(app)
+    .get("/api/admin/users")
+    .set("Authorization", `Bearer ${ordinaryUserToken}`)
+    .expect(403);
+});
+```
+
+These tests protect architecture against a future line being moved above or below the wrong `app.use` call.
+
+## Checkpoint Questions
+
+### Why might logging need to be registered before maintenance middleware?
+
+If maintenance middleware sends a response first, later logging middleware never runs. Placement depends on whether maintenance traffic must be observed.
+
+### Why are routers useful for security?
+
+They group routes under a shared, reviewable policy boundary such as authentication and admin authorization.
+
+### When is conditional middleware appropriate?
+
+When the condition truly belongs to the request representation or optional behavior. Architectural path groups are usually clearer as separate routers.
+
+### Why should health checks avoid unnecessary authentication dependencies?
+
+An identity-service outage could make the health route fail even when the application process itself is alive, confusing operational diagnosis.
+
+## What I Learned in Part 5
+
+Global middleware is not “better” because it requires fewer lines. The right scope is the narrowest scope that expresses the policy clearly and consistently.
+
+So far, this series has followed the successful path. Part 6 creates a separate track for failures and shows how error-handling middleware keeps internal details safe and responses consistent.

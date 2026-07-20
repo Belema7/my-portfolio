@@ -1,0 +1,523 @@
+---
+title: Day 8 — Middleware and Request Context (Part 2)
+description: Understanding next(), terminal responses, nested execution, middleware ordering, and the causes of hanging requests.
+slug: backend-first-principles-day-8-part-2
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 20 min read
+day: 8
+part: 2
+series: Learning Backend from First Principles
+order: 802
+published: true
+tags: [Middleware, Express, Request Lifecycle]
+keywords: [Express next function, middleware order, middleware pipeline]
+---
+# How `next()` Moves a Request Through the Pipeline
+
+> *“Every middleware branch must continue, fail, or finish.”*
+
+## The Handoff Question
+
+Part 1 taught me why cross-cutting concerns need a pipeline instead of being copied into every handler.
+
+That immediately made me wonder: when one middleware finishes its job, how does the next one begin?
+
+In Express, the answer is `next()`.
+
+At first, I thought `next()` was an unusual return statement. It is not. Calling it asks Express to find and invoke the next matching layer.
+
+```js
+function loggingMiddleware(req, res, next) {
+  console.log(req.method, req.originalUrl);
+  next();
+}
+```
+
+## Three Ways a Middleware Can Exit
+
+Every branch has one of three meaningful outcomes:
+
+```text
+next()       → continue through the normal pipeline
+next(error)  → skip normal layers and enter the error pipeline
+send response → complete the request-response cycle
+```
+
+Authentication shows all three decisions:
+
+```js
+function requireApiKey(req, res, next) {
+  const apiKey = req.get("x-api-key");
+
+  if (!apiKey) {
+    return res.status(401).json({ error: "API key required" });
+  }
+
+  try {
+    req.client = verifyApiKey(apiKey);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+The `return` before `res.status(...).json(...)` does not send the response; Express already does that. It exits my function so execution cannot fall through and call `next()` afterward.
+
+## The Hanging Request
+
+This middleware looks harmless:
+
+```js
+function brokenLogger(req, res, next) {
+  console.log(req.method, req.originalUrl);
+}
+```
+
+But it never calls `next()` and never sends a response. The handler never runs, and the client waits until a timeout.
+
+That gave me a useful debugging rule:
+
+> **When a request hangs, inspect every conditional branch for one that neither continues nor responds.**
+
+The opposite bug is continuing after completion:
+
+```js
+function brokenAuth(req, res, next) {
+  if (!req.get("authorization")) {
+    res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+```
+
+The handler can now attempt a second response, producing errors such as “headers already sent.” A terminal branch must really terminate:
+
+```js
+if (!req.get("authorization")) {
+  return res.status(401).json({ error: "Unauthorized" });
+}
+```
+
+## The Nested Execution Model
+
+Middleware is registered in sequence:
+
+```js
+app.use(first);
+app.use(second);
+app.get("/hello", handler);
+```
+
+Code before `next()` runs on the way toward the handler. Synchronous code after it resumes while nested calls unwind:
+
+```js
+function first(req, res, next) {
+  console.log("1. first before");
+  next();
+  console.log("5. first after");
+}
+
+function second(req, res, next) {
+  console.log("2. second before");
+  next();
+  console.log("4. second after");
+}
+
+function handler(req, res) {
+  console.log("3. handler");
+  res.json({ message: "Hello" });
+}
+```
+
+```text
+1. first before
+2. second before
+3. handler
+4. second after
+5. first after
+```
+
+I picture it as nested calls:
+
+```text
+first before
+  second before
+    handler
+  second after
+first after
+```
+
+However, code after `next()` does not necessarily mean that every response byte has reached the client. For reliable completion logging, the response exposes lifecycle events:
+
+```js
+function loggingMiddleware(req, res, next) {
+  const startedAt = performance.now();
+
+  res.on("finish", () => {
+    console.log({
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+  });
+
+  next();
+}
+```
+
+This distinction corrected an oversimplification in my first mental model: middleware can wrap execution, while response events report what happened to the response stream.
+
+## How Express Finds the “Next” Layer
+
+`next()` does not mean “run the function written on the next line.” It means “continue searching the registered stack for the next layer that matches this request.”
+
+Matching can depend on registration order, path, router mount point, HTTP method, and whether the pipeline is currently on the normal or error track.
+
+```js
+app.use(globalLogger);                 // matches all methods and paths
+app.use("/api", apiMiddleware);       // matches paths under /api
+app.get("/api/users", listUsers);     // matches GET /api/users
+app.post("/api/users", createUser);   // matches POST /api/users
+```
+
+For `GET /api/users`, Express can pass through the first three matching layers. The `POST` handler is registered later but does not match the method.
+
+This helped me understand why a middleware does not need a reference to the next function. Express owns the stack and supplies a `next` callback for the current position.
+
+## `next()` Is Not the Same as `return next()`
+
+These two lines both continue the pipeline:
+
+```js
+next();
+return next();
+```
+
+The difference is local JavaScript control flow. `return next()` prevents code after the call from executing in the current middleware.
+
+```js
+function example(req, res, next) {
+  if (!req.user) {
+    return next(new AuthenticationError());
+  }
+
+  next();
+  console.log("This line executes as the nested stack unwinds");
+}
+```
+
+I use `return` for terminal branches and error delegation because it makes the exit explicit. I do not automatically use `return next()` when I intentionally need wrapping logic after downstream execution.
+
+## A Full Branch Table
+
+Complex middleware often fails because one branch behaves differently from the others. Writing a decision table makes the contract visible:
+
+| Condition | Action | Does handler run? |
+| --- | --- | --- |
+| Credential missing | Send `401` | No |
+| Credential malformed | Send/forward `401` | No |
+| Verification service fails | `next(error)` | No normal handler |
+| Credential valid | Add user, call `next()` | Yes |
+
+Then I can compare code against the table:
+
+```js
+async function authenticate(req, res, next) {
+  const token = readBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  try {
+    req.user = await identityService.verify(token);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+Every path has one outcome. That is easier to review than nested conditions with several fall-through possibilities.
+
+## Normal Pipeline Versus Error Pipeline
+
+I initially imagined one list of functions. Express effectively gives me two modes of traversal.
+
+Normal middleware uses three arguments:
+
+```js
+function normal(req, res, next) {}
+```
+
+Error middleware uses four:
+
+```js
+function onError(err, req, res, next) {}
+```
+
+Calling `next(error)` changes the search mode:
+
+```text
+normal A
+   ↓ next()
+normal B
+   ↓ next(error)
+normal C is skipped
+   ↓
+error handler A
+```
+
+An error handler can finish the response or delegate again with `next(error)`. This permits local error handling followed by a global fallback, although too many overlapping error layers can become confusing.
+
+## Router Boundaries and Path Changes
+
+Mounted routers form sub-pipelines:
+
+```js
+const usersRouter = express.Router();
+
+usersRouter.use(authMiddleware);
+usersRouter.get("/:id", getUserHandler);
+
+app.use("/api/users", usersRouter);
+```
+
+The outer application matches `/api/users`. Inside the router, the route can match `/:id`. This lets a router express one domain or security boundary without requiring each handler to know the full mount path.
+
+When debugging, `req.originalUrl`, `req.baseUrl`, and `req.path` can describe different parts of that journey. Logging only one without understanding router mounting can produce confusing paths.
+
+## Response Events: `finish` and `close`
+
+`finish` fires when the response has been handed off for transmission. But a client can disconnect early. For cleanup or aborted-request metrics, the `close` event may also matter.
+
+```js
+function observeResponse(req, res, next) {
+  let finished = false;
+
+  res.on("finish", () => {
+    finished = true;
+    recordCompletedRequest(req, res);
+  });
+
+  res.on("close", () => {
+    if (!finished) recordAbortedRequest(req, res);
+  });
+
+  next();
+}
+```
+
+I would wrap this in a well-tested observability component rather than repeat it, but the distinction matters: “the handler called `res.json`” and “the request completed normally” are not exactly the same event.
+
+## Async Middleware and the Illusion of Unwinding
+
+The simple before/after example is synchronous. Real middleware often performs asynchronous work.
+
+```js
+async function loadTenant(req, res, next) {
+  req.tenant = await tenantRepository.findByHost(req.hostname);
+  next();
+  console.log("This does not await all downstream async work");
+}
+```
+
+Express's `next()` callback does not return one promise representing the entire downstream pipeline. Therefore `await next()` is not Koa-style onion middleware in ordinary Express.
+
+For response completion, events are the reliable tool. For errors, I follow the behavior of the installed Express version. Express 5 forwards rejected async handlers; older Express 4 code needs explicit forwarding or a wrapper.
+
+This framework difference is important because the same-looking middleware signature can have different composition semantics in another ecosystem.
+
+## Order as a Dependency Graph
+
+Instead of memorizing a popular list, I can derive order from dependencies:
+
+| Middleware | Requires | Produces |
+| --- | --- | --- |
+| Request ID | Nothing | `requestId` |
+| Logger | Request ID | completion log |
+| Body parser | correct content type, size limit | `req.body` |
+| Authentication | credential headers/cookies | `req.user` |
+| Authorization | `req.user` | permission decision |
+| Validation | parsed input | validated command |
+| Handler | identity and/or validated input | response |
+
+If middleware B requires what middleware A produces, A comes first. If one layer is cheaper and can safely reject bad traffic before an expensive layer, that is another ordering reason.
+
+## A Concrete Order Failure
+
+Imagine authorization before authentication:
+
+```js
+app.use(requireRole("admin"));
+app.use(authMiddleware);
+```
+
+`requireRole` reads `req.user`, but no earlier layer created it. Every request is forbidden or the code crashes.
+
+Now imagine the error handler first:
+
+```js
+app.use(errorMiddleware);
+app.get("/users", asyncUserHandler);
+```
+
+When the later handler fails, Express searches forward, not backward. That error handler is already behind the traversal point and cannot catch it.
+
+Order is therefore not style. It changes correctness and security.
+
+## Testing the Pipeline Order
+
+Unit tests prove each function's branches. An integration test proves composition:
+
+```js
+it("authenticates before the profile handler", async () => {
+  const response = await request(app)
+    .get("/api/profile")
+    .set("Authorization", `Bearer ${validToken}`);
+
+  expect(response.status).toBe(200);
+  expect(response.headers["x-request-id"]).toBeDefined();
+  expect(profileService.get).toHaveBeenCalledWith(authenticatedUser.id);
+});
+```
+
+I would also test missing credentials, malformed tokens, handler failures, and unmatched routes. The goal is to prove not only individual functions but the actual registered sequence.
+
+## `next("route")` and Skipping a Route Stack
+
+Express has a more specialized control path: `next("route")` can skip the remaining callbacks for the current route and continue matching later routes. It is available from middleware loaded with a route method such as `app.get`, not ordinary `app.use` middleware.
+
+```js
+app.get(
+  "/users/:id",
+  (req, res, next) => {
+    if (req.params.id === "me") return next("route");
+    next();
+  },
+  getUserById,
+);
+
+app.get("/users/me", authMiddleware, getCurrentUser);
+```
+
+This feature exists, but route ordering and explicit paths are often clearer than clever skipping. I include it because `next()` has more control semantics than merely “call the next array element.”
+
+## Double `next()` Calls
+
+A middleware must hand off once. Calling `next()` twice can make Express continue unexpectedly or surface a second error after a response:
+
+```js
+async function broken(req, res, next) {
+  next();
+  await auditSomething();
+  next(); // second handoff: incorrect
+}
+```
+
+The same risk appears when an asynchronous callback calls `next(error)` after the middleware already continued. Once ownership has moved downstream, the current layer should not initiate another traversal.
+
+## Parallel Work Requires Careful Ownership
+
+Suppose logging enrichment and a feature-flag lookup are independent. Running remote calls sequentially adds latency, but moving them into parallel middleware is not automatic because Express invokes registered middleware sequentially.
+
+One focused layer can explicitly coordinate truly independent work:
+
+```js
+async function enrichContext(req, res, next) {
+  try {
+    const [flags, tenant] = await Promise.all([
+      flagService.forUser(req.user.id),
+      tenantService.resolve(req.hostname),
+    ]);
+
+    req.context.flags = flags;
+    req.context.tenant = tenant;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+I would only combine them if they belong to one coherent context-enrichment boundary. Performance is not permission to blur unrelated ownership.
+
+## Visual Trace of Four Outcomes
+
+```text
+Case A: Success
+M1 → next → M2 → next → Handler → 200
+
+Case B: Early rejection
+M1 → next → Auth → 401
+                  pipeline ends
+
+Case C: Forwarded failure
+M1 → next → M2 → next(error) → Error middleware → 500
+
+Case D: Missing handoff
+M1 → next → Broken middleware
+             no next, no response → client waits
+```
+
+When debugging, identifying which of these shapes occurred is often faster than reading every line at once.
+
+## Why Order Changes Behavior
+
+Registration order is part of the application design:
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use(rateLimitMiddleware);
+app.use(express.json({ limit: "1mb" }));
+app.use("/api", apiRouter);
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+If logging needs `req.requestId`, request ID middleware must run first. If validation needs parsed JSON, the parser must precede it. If authorization needs `req.user`, authentication must establish the user first.
+
+```text
+Request ID     creates req.requestId
+     ↓
+Logging        reads req.requestId
+     ↓
+Authentication creates req.user
+     ↓
+Authorization reads req.user
+```
+
+Order can also affect security and cost. A cheap rate-limit check placed before expensive token verification rejects abusive traffic earlier. A body-size limit prevents oversized payloads from consuming unnecessary memory.
+
+There is no perfect order for every application. There must be a reason for the chosen order.
+
+## Checkpoint Questions
+
+### What exactly does `next()` select?
+
+It asks Express to continue from the current stack position and find the next matching layer for the request and current normal/error mode.
+
+### Why can a request hang?
+
+A matching middleware branch may neither send a response nor call `next()` or `next(error)`, leaving the cycle incomplete.
+
+### Does code after `next()` mean the client received the response?
+
+No. It means nested synchronous execution returned to the current function. Response lifecycle events such as `finish` provide a more accurate completion signal.
+
+### Why must an error handler come last?
+
+Express searches forward through registered layers. It needs to appear after the routes and middleware whose errors it should handle.
+
+## What I Learned in Part 2
+
+`next()` is the pipeline handoff, not a response and not a return statement. Middleware must continue, delegate a failure, or complete the response. Registration order determines which context exists and which policies run first.
+
+Now that the control flow is clear, the next question is practical: what jobs actually belong in this pipeline?
+
+Part 3 explores the most common middleware use cases and the problems each one solves.

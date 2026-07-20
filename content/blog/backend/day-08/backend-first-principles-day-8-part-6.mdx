@@ -1,0 +1,511 @@
+---
+title: Day 8 — Middleware and Request Context (Part 6)
+description: Building centralized Express error handling with typed application errors, safe responses, 404 handling, and async failure propagation.
+slug: backend-first-principles-day-8-part-6
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 8
+part: 6
+series: Learning Backend from First Principles
+order: 806
+published: true
+tags: [Error Handling, Middleware, Express]
+keywords: [Express error middleware, async error handling, API error responses]
+---
+# Error-Handling Middleware: The Pipeline’s Failure Track
+
+> *“A failure should change the path, not destroy the response contract.”*
+
+## What Happens When a Checkpoint Fails?
+
+Part 5 placed middleware at global, router, and route scopes. On the happy path, each layer calls `next()` until the handler responds.
+
+But authentication can fail, validation can discover bad input, a service can reject a business rule, and a database can become unavailable.
+
+If every handler formats these failures independently, duplication returns. One endpoint exposes a stack trace, another returns plain text, and a third forgets to log the request ID.
+
+I needed a centralized failure track.
+
+## The Four-Argument Signature
+
+Express identifies error middleware by its four arguments:
+
+```js
+function errorMiddleware(err, req, res, next) {
+  // Handle or delegate the failure.
+}
+```
+
+Even when I do not otherwise use `next`, I keep the parameter so Express recognizes the function as an error handler.
+
+Calling `next(error)` skips normal middleware and searches for an error-handling layer:
+
+```text
+Request
+   ↓
+Authentication ─ next(error) ───────┐
+   ↓                                │
+Validation ───── next(error) ───────┤
+   ↓                                │
+Handler ───────── throws ───────────┤
+                                    ↓
+                             Error Middleware
+                                    ↓
+                             Safe HTTP Response
+```
+
+## Errors Are Data Crossing a Boundary
+
+An error contains information for different audiences:
+
+```text
+Developer/operator needs
+  stack, cause, query name, dependency, timing, request ID
+
+Client needs
+  stable code, safe message, relevant field details, request ID
+
+Attacker should not receive
+  stack, SQL, filesystem path, secret, internal topology
+```
+
+One raw `Error` object cannot be serialized blindly for all three audiences. Error middleware is the boundary that decides what stays internal and what becomes part of the public API contract.
+
+## Operational and Programmer Errors
+
+I found it useful to distinguish expected operational failures from bugs.
+
+Expected failures include invalid input, missing resources, expired credentials, and uniqueness conflicts. The application can map them deliberately.
+
+Programmer errors include reading a property from `undefined`, violating an internal assumption, or sending two responses. They normally become a generic `500`, get logged with full diagnostic context, and should be fixed—not normalized as ordinary business outcomes.
+
+This distinction is not always perfect, but it prevents a global handler from returning `err.message` for every unexpected exception.
+
+## Application Errors
+
+Known failures need enough structure to become HTTP without making services depend on Express:
+
+```js
+class AppError extends Error {
+  constructor(message, status, code) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class ValidationError extends AppError {
+  constructor(message) {
+    super(message, 400, "VALIDATION_ERROR");
+  }
+}
+
+class AuthenticationError extends AppError {
+  constructor(message) {
+    super(message, 401, "AUTHENTICATION_ERROR");
+  }
+}
+
+class NotFoundError extends AppError {
+  constructor(message) {
+    super(message, 404, "NOT_FOUND");
+  }
+}
+```
+
+The service can express an application failure without choosing JSON or manipulating `res`:
+
+```js
+async function getUser(userId) {
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError("User not found");
+  }
+
+  return user;
+}
+```
+
+### Preserve the Original Cause
+
+When translating an infrastructure error, modern JavaScript can retain its cause:
+
+```js
+throw new AppError("Could not load user", {
+  status: 503,
+  code: "USER_STORE_UNAVAILABLE",
+  cause: databaseError,
+});
+```
+
+The public response can remain safe while logs preserve the chain of failure. Replacing every error with a new message and discarding the cause makes production debugging much harder.
+
+### Avoid Classifying by Message Text
+
+This is fragile:
+
+```js
+if (err.message === "User not found") { /* ... */ }
+```
+
+Messages change, can be localized, and may come from dependencies. Classes or stable error codes are more reliable classification tools.
+
+The final middleware translates it:
+
+```js
+function errorMiddleware(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  console.error("request.failed", {
+    requestId: req.requestId,
+    error: err,
+  });
+
+  if (err instanceof AppError) {
+    return res.status(err.status).json({
+      error: err.code,
+      message: err.message,
+      requestId: req.requestId,
+    });
+  }
+
+  res.status(500).json({
+    error: "INTERNAL_SERVER_ERROR",
+    message: "Something went wrong",
+    requestId: req.requestId,
+  });
+}
+```
+
+Known errors can expose intentional public messages. Unknown errors return a generic message. Stack traces, SQL details, paths, and secrets stay in protected logs.
+
+The `headersSent` check matters when a streaming response or partial response fails after headers have left the server. At that point, the custom handler cannot safely replace the response and should delegate to Express's default handling.
+
+## A Stable Error Envelope
+
+Consistency lets frontend code handle failures without parsing English sentences:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Some fields are invalid",
+    "fields": {
+      "email": ["Email must be valid"]
+    }
+  },
+  "requestId": "7c6f..."
+}
+```
+
+Not every failure needs `fields`, but the outer structure can remain stable. Error codes are part of the API contract and should not be renamed casually.
+
+## Error Logging Without Double Logging
+
+If every layer logs and rethrows, one failure produces several copies:
+
+```text
+repository logs database error
+service logs same error
+handler logs same error
+global middleware logs same error
+```
+
+That creates noise without adding context. A better convention is to enrich or translate errors in deeper layers and log once at the boundary that has request context. A layer may log only when it truly handles or adds unique information.
+
+The final log should include useful fields but redact secrets:
+
+```js
+logger.error({
+  event: "request.failed",
+  requestId: req.context.requestId,
+  method: req.method,
+  route: req.route?.path,
+  userId: req.context.user?.id,
+  error: err,
+});
+```
+
+Whether `userId` is appropriate depends on privacy policy and retention.
+
+## Is a 404 an Error?
+
+An unmatched route does not automatically throw. The normal stack simply reaches the end without a response.
+
+I can make that case explicit with terminal middleware:
+
+```js
+function notFoundMiddleware(req, res) {
+  res.status(404).json({
+    error: "NOT_FOUND",
+    message: `Cannot ${req.method} ${req.originalUrl}`,
+    requestId: req.requestId,
+  });
+}
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+The 404 handler belongs after every real route. The error handler belongs last so earlier layers can reach it.
+
+Another approach is to create a `NotFoundError` and forward it. Both can be valid. A direct 404 responder is simple; forwarding gives all error responses one formatter. The important part is consistent output and correct placement.
+
+```js
+app.use((req, res, next) => {
+  next(new NotFoundError(`Cannot ${req.method} ${req.originalUrl}`));
+});
+```
+
+I should be careful about reflecting raw URLs in responses if they can contain sensitive query values. A generic message may be safer.
+
+## Async Failures and Express Versions
+
+In Express 5, a rejected promise or thrown error from an `async` middleware or handler is forwarded automatically:
+
+```js
+app.get("/users/:id", async (req, res) => {
+  const user = await userService.findById(req.params.id);
+  res.json({ user });
+});
+```
+
+Older Express 4 applications commonly use `try/catch` and `next(error)` or a wrapper:
+
+```js
+const asyncHandler = (handler) => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+};
+
+app.get("/users", asyncHandler(async (req, res) => {
+  const users = await userService.findAll();
+  res.json({ users });
+}));
+```
+
+This is why framework versions matter. Copying an error pattern without checking the installed Express version can leave a rejected promise unhandled.
+
+## Errors Outside the Express Request Chain
+
+Not every asynchronous failure belongs to request error middleware.
+
+```js
+setTimeout(() => {
+  throw new Error("background failure");
+}, 100);
+```
+
+This callback runs outside the active handler chain. Express cannot reliably turn it into the original request's response. Background jobs need their own failure handling, retry policy, observability, and dead-letter strategy.
+
+Similarly, process-level `uncaughtException` and `unhandledRejection` events are not substitutes for route error handling. They indicate failures that reached the process boundary and may leave state uncertain. Production shutdown/restart policy belongs at the application-hosting level.
+
+## Timeouts and Cancellation
+
+A client may disconnect while a database query or remote call continues. Error middleware formats failures that reach it, but resource cancellation requires cooperation from downstream APIs.
+
+```text
+Client disconnects
+  ↓
+Abort signal fires
+  ↓
+HTTP client / database operation cancels if supported
+  ↓
+Resources released
+```
+
+Timeout errors should be classified deliberately. A gateway timeout, dependency timeout, and client cancellation describe different situations. Returning `500` for all of them loses operational meaning.
+
+## Validation Error Mapping
+
+Schema libraries often produce detailed internal issue structures. The API should map them into its own stable format rather than expose a dependency's raw output forever:
+
+```js
+function mapValidationIssues(issues) {
+  return issues.reduce((fields, issue) => {
+    const key = issue.path.join(".") || "body";
+    fields[key] ??= [];
+    fields[key].push(issue.message);
+    return fields;
+  }, {});
+}
+```
+
+This keeps the public contract stable if the validation library changes.
+
+## Database Errors Need Translation
+
+A database may report a vendor-specific unique-constraint code. The repository or an infrastructure translation layer can turn it into a domain/application conflict:
+
+```text
+Database duplicate-key error
+  ↓ translate
+EmailAlreadyExistsError
+  ↓ HTTP mapping
+409 Conflict
+```
+
+The client should not learn table names, constraint names, or SQL text. The database still remains the final authority under concurrent writes.
+
+## Error Middleware Can Fail Too
+
+The error handler should be small and defensive. If it queries a failing database to decide how to format a database failure, it can create a second failure. If JSON serialization receives a circular object, response formatting can fail.
+
+Known error mapping should use information already carried by the error. Logging infrastructure should have a fallback. The final unknown response should require as little work as possible.
+
+## Error Categories and Status Codes
+
+Centralization does not mean turning every error into `500`.
+
+| Failure | Typical status |
+| --- | --- |
+| Malformed or invalid input | `400 Bad Request` |
+| Missing or invalid identity | `401 Unauthorized` |
+| Authenticated but not permitted | `403 Forbidden` |
+| Resource absent | `404 Not Found` |
+| Uniqueness or state conflict | `409 Conflict` |
+| Unexpected internal failure | `500 Internal Server Error` |
+
+These mappings are API contract decisions. The same internal error should not randomly produce different responses across handlers.
+
+## Testing the Failure Track
+
+I need more than one “returns 500” test:
+
+```text
+missing credential      → 401, safe body, request ID
+authenticated forbidden → 403
+invalid body            → 400 with field errors
+missing resource        → 404
+unique conflict         → 409
+unexpected exception    → 500 without internal details
+unknown route           → 404
+response already started → delegates safely
+```
+
+An integration test can also spy on the logger to verify that internal errors are recorded once with the request ID while the public response remains generic.
+
+## A More Complete Error Model
+
+A production application error can carry public and internal properties separately:
+
+```ts
+type AppErrorOptions = {
+  status: number;
+  code: string;
+  publicMessage: string;
+  details?: unknown;
+  cause?: unknown;
+};
+
+class AppError extends Error {
+  status: number;
+  code: string;
+  publicMessage: string;
+  details?: unknown;
+
+  constructor(options: AppErrorOptions) {
+    super(options.publicMessage, { cause: options.cause });
+    this.name = "AppError";
+    this.status = options.status;
+    this.code = options.code;
+    this.publicMessage = options.publicMessage;
+    this.details = options.details;
+  }
+}
+```
+
+The formatter can allowlist fields:
+
+```js
+function toErrorResponse(error, requestId) {
+  if (error instanceof AppError) {
+    return {
+      status: error.status,
+      body: {
+        error: {
+          code: error.code,
+          message: error.publicMessage,
+          ...(error.details ? { details: error.details } : {}),
+        },
+        requestId,
+      },
+    };
+  }
+
+  return {
+    status: 500,
+    body: {
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Something went wrong",
+      },
+      requestId,
+    },
+  };
+}
+```
+
+Only sanitized validation details should enter `details`. A database error object must never be placed there simply because the property exists.
+
+## Content Negotiation and Error Responses
+
+APIs commonly return JSON errors, but a server may also serve HTML pages. Error middleware should match the application's response contract instead of assuming every client expects the same representation.
+
+For a JSON-only API, consistent JSON is straightforward. For a mixed application, separate routers or error boundaries can keep API failures from returning an HTML error page to frontend code expecting JSON.
+
+```js
+app.use("/api", apiRouter, apiNotFound, apiErrorHandler);
+app.use(webRouter, webNotFound, webErrorHandler);
+```
+
+Scope applies to failure contracts too.
+
+## Security Errors and Information Disclosure
+
+Authentication responses should avoid revealing more than policy intends. A login endpoint that says “email exists but password is wrong” can help account enumeration. A generic “invalid credentials” message may be safer.
+
+Similarly, some APIs return `404` instead of `403` for resources whose existence should not be disclosed to unauthorized callers. Status mapping is not only semantics; it can be part of the threat model.
+
+## Retryable Versus Permanent Failures
+
+Clients and background workers need to know whether retrying can help:
+
+```text
+400 invalid input     → change request before retrying
+401 expired token     → refresh identity, then retry if allowed
+409 conflict          → reconcile state
+429 rate limited      → wait according to policy
+503 unavailable       → retry with backoff when safe
+```
+
+Retry behavior also depends on idempotency. Automatically retrying a non-idempotent payment request without an idempotency mechanism may duplicate work.
+
+Error responses, headers, and API documentation should support safe client behavior without exposing internals.
+
+## Checkpoint Questions
+
+### Why should unknown error messages not be returned directly?
+
+They may expose implementation details, credentials, SQL, paths, or other information that is useful to attackers and irrelevant to clients.
+
+### Why are stable error codes better than matching messages?
+
+Codes are machine-readable contracts. Human messages can change, be localized, or originate from dependencies.
+
+### Can Express error middleware catch a background job failure?
+
+No. Failures outside the request's asynchronous chain need the background system's own error and retry handling.
+
+### Why log an error only once?
+
+Repeated logs create noise and inflated alerts. The request boundary usually has the richest context for one authoritative diagnostic record.
+
+## What I Learned in Part 6
+
+Error middleware is not a giant `catch` block that hides failures. It is a controlled boundary between internal errors and public HTTP responses. It logs useful internal context, exposes only intentional details, and preserves one response contract.
+
+Part 7 now assembles everything: context, ordering, scopes, success paths, failure paths, routes, and the architectural lessons I want to carry forward.

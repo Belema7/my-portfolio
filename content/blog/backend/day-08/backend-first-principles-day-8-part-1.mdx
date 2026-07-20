@@ -1,0 +1,424 @@
+---
+title: Day 8 — Middleware and Request Context (Part 1)
+description: Why cross-cutting concerns do not belong inside every handler, and how middleware creates a reusable request pipeline.
+slug: backend-first-principles-day-8-part-1
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 19 min read
+day: 8
+part: 1
+series: Learning Backend from First Principles
+order: 801
+published: true
+tags: [Middleware, Express, Backend Architecture]
+keywords: [middleware explained, cross-cutting concerns, Express middleware]
+---
+# The Missing Layer Around Every Handler
+
+> *“The handler should own the use case—not every concern that happens to surround it.”*
+
+## The Question Day 7 Left Behind
+
+In Day 7, I followed a request through the router, handler, service, repository, and database. I finally understood how separating those responsibilities keeps one endpoint from becoming the entire application.
+
+But that lifecycle left one important question unanswered.
+
+Before the handler creates a user, who authenticates the caller? Who records that the request arrived? Who limits abusive traffic, parses the body, validates input, and turns failures into safe responses?
+
+My first answer was to put those jobs inside the handler:
+
+```js
+app.post("/users", async (req, res) => {
+  // log request
+  // check rate limit
+  // authenticate caller
+  // validate body
+  // execute business logic
+  // format errors
+});
+```
+
+Then I imagined one hundred handlers doing the same thing. Even if I extracted helpers, every handler would still need to remember which helpers to call, in what order, and how to stop when one failed.
+
+The deeper problem was not simply repeated lines. Logging, authentication, rate limiting, CORS, and error formatting apply **across** many routes. They are **cross-cutting concerns**.
+
+```text
+                         GET /users
+Logging ──────────────── POST /users
+Authentication ───────── GET /orders
+Error handling ───────── POST /payments
+```
+
+These concerns needed one reusable place in the request lifecycle.
+
+## The Airport Checkpoint Analogy
+
+I picture an airport. A passenger does not walk from the entrance directly onto the plane. The passenger passes through document inspection, baggage screening, security, and the gate.
+
+Each checkpoint has one job. It can inspect information, attach new information, allow the passenger to continue, or stop the journey. The gate does not repeat the security scan; it trusts the checkpoints that came before it.
+
+A backend request can move the same way:
+
+```text
+Request
+   ↓
+Request ID
+   ↓
+Logging
+   ↓
+Rate Limit
+   ↓
+Authentication
+   ↓
+Validation
+   ↓
+Handler
+   ↓
+Response
+```
+
+That pipeline is where middleware fits.
+
+> **Middleware is a function placed in the request-response pipeline. It can inspect or enrich the request, affect the response, end the cycle, or pass control to the next step.**
+
+## The Three Arguments
+
+An Express middleware function usually receives `req`, `res`, and `next`:
+
+```js
+function requestIdMiddleware(req, res, next) {
+  const requestId = crypto.randomUUID();
+
+  req.requestId = requestId;
+  res.set("X-Request-ID", requestId);
+
+  next();
+}
+```
+
+| Argument | Responsibility |
+| --- | --- |
+| `req` | Represents the incoming request and information accumulated about it |
+| `res` | Represents the response being constructed |
+| `next` | Passes control to the next matching layer |
+
+The middleware can read headers, paths, parameters, query values, and parsed bodies. It can add trusted information such as a request ID or authenticated user. It can set response headers. It can reject a request. Or it can call `next()` and let the journey continue.
+
+## Middleware Versus a Handler
+
+Both receive `req` and `res`, so I initially wondered whether middleware was just another name for a handler.
+
+The difference is its role in the pipeline.
+
+A handler is normally the destination selected for a route. It translates the HTTP request into a use-case call and turns the result into HTTP. Middleware surrounds or guards that destination.
+
+```text
+Middleware asks: “May or should this request continue?”
+Handler asks:    “What business operation does this route perform?”
+```
+
+Middleware is still an ordinary function. The framework makes it special by composing and invoking it automatically when its registration matches a request.
+
+## The Problem Without Middleware, Step by Step
+
+To understand why this abstraction matters, I followed two protected endpoints without it.
+
+```js
+app.get("/api/profile", async (req, res) => {
+  const startedAt = Date.now();
+  const authorization = req.get("authorization");
+
+  if (!authorization) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const user = verifyToken(authorization);
+  const profile = await profileService.get(user.id);
+
+  console.log("GET /api/profile", Date.now() - startedAt);
+  res.json({ profile });
+});
+
+app.get("/api/orders", async (req, res) => {
+  const startedAt = Date.now();
+  const authorization = req.get("authorization");
+
+  if (!authorization) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const user = verifyToken(authorization);
+  const orders = await orderService.listForUser(user.id);
+
+  console.log("GET /api/orders", Date.now() - startedAt);
+  res.json({ orders });
+});
+```
+
+The obvious problem is duplication, but the hidden problems are more serious:
+
+- one endpoint may verify the token differently;
+- one may forget to reject an expired token;
+- one may log before the response and another after it;
+- one may accidentally include the token in a log;
+- a security-policy change requires finding every copy;
+- tests must repeat the same setup for every handler;
+- business-focused handlers become coupled to transport policy.
+
+With middleware, the policy becomes visible once:
+
+```js
+app.use(requestIdMiddleware);
+app.use(loggingMiddleware);
+app.use("/api", authMiddleware);
+
+app.get("/api/profile", profileHandler);
+app.get("/api/orders", orderHandler.list);
+```
+
+The handlers can now assume that a protected route has passed the declared boundary. That does not mean they blindly trust everything. It means the pipeline has an explicit contract: if `authMiddleware` continues, it has established a verified identity.
+
+## Why a Normal Helper Is Not the Whole Solution
+
+My next thought was, “Why not write `authenticate(req)` and call it from every handler?”
+
+That is already better than copying token logic:
+
+```js
+app.get("/api/profile", async (req, res) => {
+  const user = authenticate(req);
+  if (!user) return unauthorized(res);
+
+  const profile = await profileService.get(user.id);
+  res.json({ profile });
+});
+```
+
+But the handler still coordinates the concern. It must remember to call the helper, interpret its result, send the correct failure, and repeat the sequence everywhere.
+
+| Question | Helper called by handler | Middleware pipeline |
+| --- | --- | --- |
+| Who invokes it? | Every handler manually | Framework when a layer matches |
+| Who controls order? | Every handler | Central registration |
+| Who handles rejection? | Every caller | Middleware or central error path |
+| Can it enrich later steps? | Through return values and manual assignment | Through explicit request context |
+| Where is route policy visible? | Scattered through handlers | Application/router/route declaration |
+
+Middleware is not better because it avoids function calls. It is better when the application needs **automatic, ordered HTTP composition**.
+
+## Before, Around, and After the Handler
+
+The phrase “runs before the handler” is useful for beginners, but it is incomplete.
+
+Middleware can do work:
+
+```text
+Before the handler
+  authenticate, validate, rate-limit, parse
+
+Around the handler
+  measure duration, trace execution, attach cleanup behavior
+
+After the response finishes
+  record final status, release request-scoped resources
+
+Instead of the handler
+  return 401, 403, 404, 429, or a cached response
+
+When something fails
+  log and format a safe error response
+```
+
+This is why I now think of middleware as a pipeline layer rather than merely a pre-handler function.
+
+## Application Middleware and Infrastructure Middleware
+
+I also noticed that “middleware” appears at several levels of a system.
+
+```text
+Client
+  ↓
+CDN / edge protection
+  ↓
+Reverse proxy / load balancer
+  ↓
+Application middleware
+  ↓
+Router and handler
+```
+
+A CDN may compress content or block abusive IPs. A reverse proxy may terminate TLS and attach forwarding headers. Express middleware may establish the authenticated user and validate the route body.
+
+These layers can cooperate, but I must know which boundary I trust. If the application accepts `X-Forwarded-For` from any public client, an attacker can spoof it. If only a trusted proxy can reach the application and the framework is configured correctly, that header can become meaningful.
+
+The word is the same, but ownership differs:
+
+- infrastructure middleware protects and transforms traffic before application code;
+- framework middleware participates in the application's request lifecycle;
+- business services should remain independent of both where possible.
+
+## Middleware as a Chain of Responsibility
+
+The design resembles the **Chain of Responsibility** pattern. A request moves through a sequence of handlers. Each link decides whether to process and forward it or end the chain.
+
+```text
+Request → Link A → Link B → Link C → Final Handler
+             ↘ stop   ↘ error
+```
+
+The name matters less than the insight: no checkpoint needs to know every checkpoint after it. Authentication does not call the profile handler directly. It only fulfills its contract and continues.
+
+That reduces coupling. I can reuse the same authentication middleware with profiles, orders, and admin routes as long as they agree on the context contract it creates.
+
+## Cross-Cutting Does Not Mean Globally Applied
+
+I initially confused “cross-cutting” with “runs for every request.” They are different.
+
+Authentication cuts across many protected routes, but it should not necessarily run on `/health`. Validation cuts across many write operations, but each route has a different schema. Rate limiting may be global, router-wide, or stricter for login.
+
+```text
+Cross-cutting concern = reusable across multiple operations
+Global middleware     = registered for every matching request
+```
+
+Scope comes later in this series, but this distinction prevents me from turning every shared concern into global behavior.
+
+## The Cost of a Pipeline
+
+Middleware improves organization, but it is not free.
+
+Every global layer runs often. A synchronous password hash inside global middleware would block the event loop. A database query added to every request increases latency and load. A remote authorization call can make every endpoint depend on another service.
+
+Too many tiny layers can also make control flow harder to follow. When an endpoint behaves unexpectedly, I may need to trace application middleware, router middleware, route middleware, and error middleware.
+
+The goal is not the largest possible pipeline. The goal is the smallest set of well-owned policies that keeps handlers clean and behavior consistent.
+
+## The Same Idea Across Frameworks
+
+Express made the pattern concrete for me, but middleware is not an Express-only invention. Frameworks expose the idea with different names and control models:
+
+```text
+Express       middleware and next()
+NestJS        middleware, guards, pipes, interceptors, filters
+Koa           async onion-style middleware
+ASP.NET Core  request delegates in a middleware pipeline
+Django        middleware around request/view processing
+```
+
+The categories are not identical. NestJS deliberately gives authentication guards, transformation pipes, interceptors, and exception filters different contracts instead of putting every concern in one generic function. That separation can make intent clearer.
+
+The first-principles idea underneath them is stable:
+
+```text
+request enters
+  ↓
+ordered reusable policies inspect, enrich, wrap, reject, or continue
+  ↓
+endpoint executes
+  ↓
+response returns through framework lifecycle
+```
+
+Learning the problem first means I can recognize the solution even when a framework changes the vocabulary.
+
+## Middleware and Separation of Concerns
+
+Middleware does not create separation merely because code moved into another file.
+
+```js
+function everythingMiddleware(req, res, next) {
+  // authenticate
+  // validate
+  // calculate price
+  // write order to database
+  // send email
+  // decide response
+}
+```
+
+This function is still poorly separated. A useful boundary is defined by **reason to change**:
+
+| Middleware | Changes when... |
+| --- | --- |
+| Authentication | credential or identity policy changes |
+| Rate limiter | traffic policy changes |
+| Validation | HTTP input contract changes |
+| Logger | observability policy changes |
+| CORS | permitted browser origins change |
+
+The order composes these reasons without merging them into one implementation.
+
+## A Practical Classification Exercise
+
+I tested my understanding by classifying common pieces of code:
+
+| Code | Middleware? | Why? |
+| --- | --- | --- |
+| Assign request ID | Usually yes | Shared request-scoped HTTP concern |
+| Verify bearer token | Usually yes | Guards many HTTP routes |
+| Hash a new password | No | Part of a use case/service dependency |
+| Validate Create User body | Often route middleware | HTTP boundary contract |
+| Check email uniqueness | Service + database | Business/storage rule, race-sensitive |
+| Set CORS response headers | Usually yes | Cross-cutting browser transport policy |
+| Calculate order total | No | Domain computation |
+| Format unknown errors safely | Error middleware | Shared HTTP failure boundary |
+
+This exercise keeps me from using middleware as a fashionable name for every function near a request.
+
+## A First Middleware Test
+
+Because middleware has a small contract, I can test its decisions directly:
+
+```js
+it("adds a request ID and continues", () => {
+  const req = { get: () => undefined };
+  const res = { set: vi.fn() };
+  const next = vi.fn();
+
+  requestIdMiddleware(req, res, next);
+
+  expect(req.requestId).toEqual(expect.any(String));
+  expect(res.set).toHaveBeenCalledWith("X-Request-ID", req.requestId);
+  expect(next).toHaveBeenCalledOnce();
+});
+```
+
+This test does not require the user service or database because request ID assignment is a separate concern. Integration tests will still be needed to prove registration and ordering, but isolation is already an architectural benefit.
+
+## When Middleware Is the Wrong Tool
+
+Not every reusable function belongs in the HTTP pipeline.
+
+A password hasher, price calculator, email formatter, or repository query is an ordinary dependency. Turning all helpers into middleware would couple business code to `req`, `res`, and Express.
+
+I now use this rule:
+
+> **Use middleware for shared HTTP pipeline concerns. Keep handlers focused on HTTP translation, services focused on business rules, and ordinary helpers focused on reusable computation.**
+
+## Checkpoint Questions
+
+### Why is calling a helper inside every handler not equivalent to middleware?
+
+The helper removes duplicated implementation, but every handler still owns invocation, ordering, result interpretation, and failure behavior. Middleware centralizes that HTTP orchestration.
+
+### Does cross-cutting mean global?
+
+No. A concern can apply across a group of protected routes without applying to public routes. Reuse and scope are separate decisions.
+
+### Why should a service not receive `req` and `res`?
+
+Those are framework and transport objects. Passing them into a service couples business rules to Express and makes the service harder to reuse and test.
+
+### Can middleware send the final response?
+
+Yes. Authentication may send `401`, rate limiting may send `429`, a cache may return a stored response, and a catch-all may send `404`. If it sends a response, it should not continue into a handler that will send another one.
+
+## What I Learned in Part 1
+
+The problem middleware solves is architectural duplication. Cross-cutting concerns do not belong inside every handler, and manually coordinating helper calls still leaves every handler responsible for the pipeline.
+
+Middleware gives those shared concerns one ordered, reusable home.
+
+But this creates the next question: if several middleware functions surround a handler, how does one function hand control to the next—and what happens when it refuses?
+
+That is the job of `next()`, which I will trace in Part 2.

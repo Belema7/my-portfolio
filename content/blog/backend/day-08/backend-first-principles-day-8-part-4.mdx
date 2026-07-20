@@ -1,0 +1,515 @@
+---
+title: Day 8 — Middleware and Request Context (Part 4)
+description: How request-scoped data flows through middleware, what belongs in context, and how to keep that context typed and safe.
+slug: backend-first-principles-day-8-part-4
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 8
+part: 4
+series: Learning Backend from First Principles
+order: 804
+published: true
+tags: [Request Context, Middleware, TypeScript]
+keywords: [request context, Express request user, TypeScript Express context]
+---
+# Request Context: The Data Carried Through the Pipeline
+
+> *“Context should carry what this request needs—not everything the application knows.”*
+
+## The Backpack Analogy
+
+Part 3 showed how middleware can create a request ID, authenticate a user, and validate input. That raised another question: how does information discovered by one checkpoint reach the handler and the checkpoints after it?
+
+I picture each request carrying a backpack.
+
+It enters with client-supplied data: method, path, headers, query values, and body. Each trusted checkpoint can inspect those values and add a carefully chosen item.
+
+```text
+Incoming request
+  { headers, path, body }
+          ↓ Request ID
+  { ..., requestId }
+          ↓ Authentication
+  { ..., requestId, user }
+          ↓ Validation
+  { ..., requestId, user, validatedBody }
+          ↓ Handler
+```
+
+That accumulated, request-scoped information is **request context**.
+
+> **Request context is data associated with one request and made available to the code participating in that request.**
+
+Different frameworks may store it directly on the request, in a dedicated context object, or in an asynchronous context mechanism. The mental model is the same.
+
+## Reading and Enriching Context
+
+Middleware can interact with both sides of the request-response cycle:
+
+| Operation | Example |
+| --- | --- |
+| Read client input | `req.get("authorization")` |
+| Add a verified identity | `req.context.user = verifiedUser` |
+| Add correlation data | `req.context.requestId = id` |
+| Attach validated input | `req.validatedBody = result.data` |
+| Set a response header | `res.set("X-Request-ID", id)` |
+| Observe response status | `res.statusCode` inside `finish` |
+| End the cycle | `res.status(401).json(...)` |
+
+Here is one context flowing end to end:
+
+```js
+app.use((req, res, next) => {
+  req.context = {
+    requestId: crypto.randomUUID(),
+    startedAt: performance.now(),
+    user: null,
+  };
+
+  res.set("X-Request-ID", req.context.requestId);
+  next();
+});
+
+app.use(optionalAuthMiddleware);
+
+app.use((req, res, next) => {
+  console.info("request", {
+    requestId: req.context.requestId,
+    userId: req.context.user?.id ?? "anonymous",
+    method: req.method,
+    path: req.originalUrl,
+  });
+
+  next();
+});
+
+app.get("/api/profile", requireAuth, async (req, res) => {
+  const profile = await profileService.get(req.context.user.id);
+
+  res.json({
+    profile,
+    requestId: req.context.requestId,
+  });
+});
+```
+
+Every simultaneous request needs its own context. Shared mutable context would let one user's state leak into another user's request.
+
+## Context Is a Lifetime Boundary
+
+The word **scoped** became important to me. Application data lives for different lengths of time:
+
+```text
+Application scope
+  configuration, connection pools, shared services
+  lifetime: process or deployment
+
+Request scope
+  request ID, authenticated identity, request logger
+  lifetime: one request
+
+Operation scope
+  local variables, intermediate calculations
+  lifetime: one function or use-case call
+```
+
+Putting request data in application-global mutable variables is dangerous:
+
+```js
+// Dangerous: shared by every request.
+let currentUser;
+
+app.use((req, res, next) => {
+  currentUser = authenticate(req);
+  next();
+});
+```
+
+Node.js can interleave asynchronous work from many requests. Request A may set `currentUser`, pause for a database query, and then Request B may replace that value before Request A resumes. That can become a data leak or authorization vulnerability.
+
+```text
+Request A sets currentUser = Alice
+Request A awaits database
+Request B sets currentUser = Bob
+Request A resumes and reads Bob  ← security bug
+```
+
+Attaching data to the request's own context prevents that shared mutable slot.
+
+## Context as an Explicit Contract
+
+If authentication creates a user and authorization consumes it, they share a contract:
+
+```ts
+type AuthenticatedUser = {
+  id: string;
+  role: "user" | "admin";
+};
+```
+
+The producer promises:
+
+- identity came from a verified credential;
+- `id` is the stable public identifier downstream code expects;
+- `role` was validated against permitted values;
+- raw secrets were discarded.
+
+The consumer promises:
+
+- it will not reinterpret raw headers as identity;
+- it handles the possibility that optional authentication produced no user;
+- it uses the identity only for the intended request.
+
+Without this contract, middleware becomes order-dependent magic. With it, the pipeline is a series of typed transformations.
+
+## Optional and Required Authentication
+
+Some routes behave differently for signed-in users but remain available anonymously. Optional authentication can enrich context without rejecting absence:
+
+```js
+async function optionalAuth(req, res, next) {
+  const token = readBearerToken(req);
+
+  if (!token) return next();
+
+  try {
+    req.context.user = await identityService.verify(token);
+    next();
+  } catch (error) {
+    next(new AuthenticationError("Invalid access token"));
+  }
+}
+```
+
+A later guard can require the identity:
+
+```js
+function requireAuth(req, res, next) {
+  if (!req.context.user) {
+    return res.status(401).json({
+      error: "AUTHENTICATION_REQUIRED",
+      requestId: req.context.requestId,
+    });
+  }
+
+  next();
+}
+```
+
+I need a clear policy for invalid optional credentials. Silently treating a supplied but invalid token as anonymous can hide client bugs and create confusing behavior, so the example rejects it.
+
+## Tenant Context and a Dangerous Shortcut
+
+Multi-tenant systems often add `tenantId` to context. But the source matters.
+
+```js
+// Unsafe if accepted without verification.
+req.context.tenantId = req.get("x-tenant-id");
+```
+
+An attacker could select another tenant. A safer flow connects the requested tenant to verified identity and membership:
+
+```js
+async function resolveTenant(req, res, next) {
+  const requestedTenantId = req.get("x-tenant-id");
+
+  const membership = await membershipService.findMembership({
+    userId: req.context.user.id,
+    tenantId: requestedTenantId,
+  });
+
+  if (!membership) {
+    return res.status(403).json({ error: "TENANT_ACCESS_DENIED" });
+  }
+
+  req.context.tenant = {
+    id: membership.tenantId,
+    permissions: membership.permissions,
+  };
+
+  next();
+}
+```
+
+Context should hold the result of a trust decision, not disguise an untrusted header under a friendlier property name.
+
+## A Request-Scoped Logger
+
+Instead of repeating the request ID in every log call, context can hold a child logger:
+
+```js
+app.use((req, res, next) => {
+  const requestId = crypto.randomUUID();
+
+  req.context = {
+    requestId,
+    logger: logger.child({ requestId }),
+    user: null,
+  };
+
+  next();
+});
+```
+
+Later code can add domain fields without losing correlation:
+
+```js
+req.context.logger.info({
+  event: "profile.loaded",
+  userId: req.context.user.id,
+});
+```
+
+The logger remains an application facility, while the child instance carries request-level fields.
+
+## Locale Is More Than Copying a Header
+
+The `Accept-Language` header is input, so middleware should parse it against supported languages:
+
+```js
+function localeMiddleware(req, res, next) {
+  const requested = parseAcceptLanguage(req.get("accept-language"));
+  req.context.locale = chooseSupportedLocale(requested, ["en", "fr", "so"]);
+  next();
+}
+```
+
+Copying the raw header into context would force every consumer to parse and validate it. Context becomes useful when middleware turns external representations into a small internal contract.
+
+## Async Context Without Passing `req`
+
+Deep utilities sometimes need a request ID even though passing `req` through services would couple them to Express. Node.js offers `AsyncLocalStorage` for asynchronous request-local state:
+
+```js
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const requestStorage = new AsyncLocalStorage();
+
+app.use((req, res, next) => {
+  const context = { requestId: crypto.randomUUID() };
+  requestStorage.run(context, next);
+});
+```
+
+Deep logging code can read the current store:
+
+```js
+function log(message) {
+  const context = requestStorage.getStore();
+  logger.info({ requestId: context?.requestId, message });
+}
+```
+
+This can reduce plumbing for observability, but it creates an implicit dependency. I would not use it as an invisible container for arbitrary services or business inputs. Explicit arguments are easier to understand when data is essential to a use case.
+
+## Request-Scoped Transactions
+
+Sometimes several operations must share a database transaction. Context can carry a request- or use-case-scoped transaction, but the ownership must be explicit:
+
+```text
+Begin transaction
+  ↓
+Run use case with transaction context
+  ↓ success             ↓ failure
+Commit                  Roll back
+```
+
+Creating a transaction for every request would be expensive and unnecessary. Transaction scope belongs around operations that require atomicity, often in a service/unit-of-work abstraction rather than generic global middleware.
+
+This taught me that “can be stored in context” is not the same as “should be stored in context.”
+
+## What Belongs in Request Context?
+
+Useful context is small, trusted, and relevant to multiple steps:
+
+- a request or trace ID;
+- authenticated user identity and permissions;
+- a validated tenant ID or locale;
+- a request-scoped logger;
+- a deadline or cancellation signal;
+- validated route input when that is the project's convention.
+
+Context is convenient, so it is tempting to use it as a storage drawer for everything. That weakens boundaries and increases security risk.
+
+I avoid putting these values in context:
+
+- plaintext passwords or raw bearer tokens;
+- JWT signing secrets, API secrets, or database credentials;
+- password hashes, which remain sensitive authentication data;
+- large database results added “just in case”;
+- arbitrary mutable global state;
+- personal information downstream code does not need.
+
+A database connection pool is normally an application-scoped dependency, not request context. A request-scoped transaction can be different if several operations must explicitly share one unit of work.
+
+The principle is least privilege applied to data:
+
+> **Store only the minimum trusted information that downstream code genuinely needs.**
+
+## Trusted Context Versus Client Input
+
+The client may send `X-User-Id: 123`, but that does not make user `123` authenticated. Middleware must distinguish raw input from facts established by a trusted process.
+
+```text
+req.headers["x-user-id"] → client claim, untrusted
+req.context.user.id      → verified identity, trusted within this pipeline
+```
+
+Naming can make that boundary visible. `req.validatedBody` is clearer than quietly replacing `req.body`; `req.context.user` is clearer than letting any layer invent `req.user` without a contract.
+
+## TypeScript Declaration Merging
+
+JavaScript accepts custom request properties at runtime. TypeScript needs to know their shape:
+
+```ts
+declare global {
+  namespace Express {
+    interface Request {
+      context: {
+        requestId: string;
+        startedAt: number;
+        user: { id: string; role: string } | null;
+      };
+      validatedBody?: unknown;
+    }
+  }
+}
+
+export {};
+```
+
+This catches misspelled properties and documents shared context. It does not create runtime truth. `context.user` becomes trustworthy because authentication middleware verified and assigned it—not because an interface claims it exists.
+
+For route-specific validated bodies, generic handler types or a locally typed abstraction may be safer than declaring one global body type for every endpoint.
+
+## Making Authentication Types Honest
+
+One global `Request` type with `user` always present can lie on public routes. A more honest type distinguishes authenticated handlers:
+
+```ts
+type RequestContext = {
+  requestId: string;
+  user: AuthenticatedUser | null;
+};
+
+type AuthenticatedRequest = Express.Request & {
+  context: RequestContext & { user: AuthenticatedUser };
+};
+```
+
+The middleware performs the runtime check; the route adapter can then expose a narrower type to the handler. TypeScript cannot prove Express registration order on its own, so tests and route composition still matter.
+
+## Context and Testing
+
+Context makes dependencies visible, which also makes tests clearer. A middleware test can verify that a valid token adds a minimal user object and calls `next()`. A handler test can receive a prepared request context without performing token verification again.
+
+I still need integration tests to verify the real order:
+
+```text
+request ID → authentication → authorization → validation → handler
+```
+
+Unit tests prove each checkpoint's policy. Integration tests prove the backpack reaches the destination with the right contents.
+
+## Cleanup and Context Lifetime
+
+Request context must not outlive the request accidentally. A background job should receive an explicit serializable payload rather than a reference to `req.context`:
+
+```js
+await jobQueue.add("send-welcome-email", {
+  userId: createdUser.id,
+  correlationId: req.context.requestId,
+});
+```
+
+The job may run on another process minutes later. It has its own execution context and should not depend on an HTTP request object that no longer exists.
+
+Likewise, event listeners attached during a request should be cleaned up or use lifecycle-safe patterns to avoid retaining large objects and causing memory leaks.
+
+## Data Lineage: Where Did This Value Come From?
+
+Context is easiest to trust when I can trace each property to its source and transformation:
+
+| Context field | Raw source | Trust operation | Consumer |
+| --- | --- | --- | --- |
+| `requestId` | generated or trusted proxy header | format validation/generation | logs and responses |
+| `user` | bearer token | signature and claim verification | authorization and handlers |
+| `tenant` | requested tenant + identity | membership check | repositories/services |
+| `locale` | `Accept-Language` | parse and allowlist | presentation layer |
+| `validatedBody` | parsed JSON | runtime schema | handler/service command |
+
+If I cannot fill out this table for a context field, the property may be too magical or insufficiently validated.
+
+## Immutable Context Versus Incremental Context
+
+Middleware naturally enriches context over time, which implies mutation:
+
+```js
+req.context.user = verifiedUser;
+```
+
+Mutation is practical, but consumers should not freely rewrite facts established by earlier security boundaries. Freezing nested identity values can prevent accidental changes:
+
+```js
+req.context.user = Object.freeze({
+  id: claims.sub,
+  role: claims.role,
+});
+```
+
+Another design passes new context objects through framework-native mechanisms. The best choice depends on the framework, but the policy is clear: later layers may add information they own; they should not silently alter verified facts owned by earlier layers.
+
+## Context Size and Memory
+
+Every in-flight request retains its context until work and listeners release it. Storing a large response, entire uploaded file, or huge ORM graph in context increases memory pressure under concurrency.
+
+```text
+5 MB context × 1,000 concurrent requests ≈ 5 GB retained data
+```
+
+The arithmetic is simplified, but it reveals why “just attach it to `req`” can become an operational problem. Context should carry identifiers and focused values, not become a cache for everything loaded during the request.
+
+## Redaction at the Context Boundary
+
+Even trusted context may contain sensitive values. A logger should use an allowlist of safe fields rather than serialize the full context object:
+
+```js
+logger.info({
+  requestId: req.context.requestId,
+  userId: req.context.user?.id,
+  tenantId: req.context.tenant?.id,
+});
+```
+
+This is safer than:
+
+```js
+logger.info({ context: req.context });
+```
+
+Future developers may add a sensitive field, and the second form would begin logging it automatically.
+
+## Checkpoint Questions
+
+### Why is a global `currentUser` unsafe?
+
+Concurrent asynchronous requests share the same module-level variable. One request can overwrite another request's identity before the first finishes.
+
+### Is a value trusted simply because it is stored in context?
+
+No. Trust comes from the verification or validation that produced it. Copying an untrusted header into context only renames untrusted input.
+
+### When is implicit async context useful?
+
+It is useful for cross-cutting observability such as correlation IDs. It should be used carefully because hidden business dependencies are harder to reason about and test.
+
+### Should a queued background job receive request context?
+
+It should receive an explicit minimal payload, perhaps including a correlation ID. It should not retain the Express request or a mutable context object.
+
+## What I Learned in Part 4
+
+Request context is the data plane of the middleware pipeline. It lets one checkpoint create trustworthy information for the next, but convenience must not turn it into a secret vault or global junk drawer.
+
+The next question is scope. Should every request receive every checkpoint? Part 5 separates global, router-level, and route-specific middleware.

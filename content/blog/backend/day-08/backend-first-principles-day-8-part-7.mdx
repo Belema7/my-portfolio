@@ -1,0 +1,642 @@
+---
+title: Day 8 — Middleware and Request Context (Part 7)
+description: Assembling request context, security middleware, scoped routes, handlers, and centralized errors into one complete Express pipeline.
+slug: backend-first-principles-day-8-part-7
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 24 min read
+day: 8
+part: 7
+series: Learning Backend from First Principles
+order: 807
+published: true
+tags: [Middleware, Request Lifecycle, Express, Backend Architecture]
+keywords: [complete Express middleware example, request pipeline architecture, middleware best practices]
+---
+# Building the Complete Middleware Pipeline
+
+> *“The pipeline is complete when every responsibility has a clear place, not when every possible middleware has been installed.”*
+
+## Bringing the Seven-Part Journey Together
+
+Part 1 identified cross-cutting concerns. Part 2 traced `next()` and ordering. Part 3 explored common checkpoints. Part 4 followed request context. Part 5 chose middleware scopes. Part 6 created a centralized failure track.
+
+Now I can assemble one application without losing sight of why each line exists.
+
+## The Complete Express Application
+
+```js
+import crypto from "node:crypto";
+import compression from "compression";
+import cors from "cors";
+import express from "express";
+import { rateLimit } from "express-rate-limit";
+
+const app = express();
+
+// 1. Establish context required by later middleware.
+app.use((req, res, next) => {
+  req.context = {
+    requestId: crypto.randomUUID(),
+    startedAt: performance.now(),
+    user: null,
+  };
+
+  res.set("X-Request-ID", req.context.requestId);
+  next();
+});
+
+// 2. Observe every request and its final response.
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    console.info("request.finished", {
+      requestId: req.context.requestId,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Math.round(performance.now() - req.context.startedAt),
+    });
+  });
+
+  next();
+});
+
+// 3. Apply transport policy.
+app.use(cors({
+  origin: ["https://app.example.com"],
+  credentials: true,
+}));
+app.use(compression());
+
+// 4. Bound and parse incoming bodies.
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+// 5. Public application route.
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    requestId: req.context.requestId,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 6. Shared API policy.
+const apiRouter = express.Router();
+
+apiRouter.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+}));
+
+// Public API route: rate limited but anonymous.
+apiRouter.get("/public/info", (req, res) => {
+  res.json({
+    message: "Public information",
+    requestId: req.context.requestId,
+  });
+});
+
+// Protected API route.
+apiRouter.get("/profile", authMiddleware, async (req, res) => {
+  const profile = await profileService.get(req.context.user.id);
+
+  res.json({
+    profile,
+    requestId: req.context.requestId,
+  });
+});
+
+// Protected and validated admin operation.
+apiRouter.post(
+  "/users",
+  authMiddleware,
+  requireRole("admin"),
+  validateBody(createUserSchema),
+  async (req, res) => {
+    const user = await userService.create(req.validatedBody);
+
+    res.status(201).json({
+      user,
+      requestId: req.context.requestId,
+    });
+  },
+);
+
+app.use("/api", apiRouter);
+
+// 7. Terminal middleware remains last.
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
+```
+
+## The Supporting Middleware Implementations
+
+The application bootstrap is only readable if each named layer has a focused contract.
+
+```js
+function readBearerToken(req) {
+  const [scheme, token] = req.get("authorization")?.split(" ") ?? [];
+  return scheme?.toLowerCase() === "bearer" && token ? token : null;
+}
+
+async function authMiddleware(req, res, next) {
+  const token = readBearerToken(req);
+
+  if (!token) {
+    return res.status(401).json({
+      error: { code: "AUTHENTICATION_REQUIRED" },
+      requestId: req.context.requestId,
+    });
+  }
+
+  try {
+    const claims = await tokenVerifier.verify(token);
+    req.context.user = {
+      id: claims.subject,
+      role: claims.role,
+      permissions: claims.permissions,
+    };
+    next();
+  } catch (error) {
+    next(new AuthenticationError("Invalid or expired access token"));
+  }
+}
+
+function requireRole(requiredRole) {
+  return (req, res, next) => {
+    if (req.context.user?.role !== requiredRole) {
+      return res.status(403).json({
+        error: { code: "FORBIDDEN" },
+        requestId: req.context.requestId,
+      });
+    }
+
+    next();
+  };
+}
+
+function validateBody(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.body);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: {
+          code: "VALIDATION_FAILED",
+          fields: mapValidationIssues(result.error.issues),
+        },
+        requestId: req.context.requestId,
+      });
+    }
+
+    req.validatedBody = result.data;
+    next();
+  };
+}
+```
+
+The code reveals the context dependency: authorization runs after authentication, and the handler runs after validation.
+
+## Following One Successful Request
+
+Suppose an administrator sends:
+
+```http
+POST /api/users HTTP/1.1
+Host: api.example.com
+Authorization: Bearer valid-admin-token
+Content-Type: application/json
+
+{
+  "name": " Belema ",
+  "email": "BELEMA@EXAMPLE.COM",
+  "age": 21
+}
+```
+
+The lifecycle is now concrete:
+
+1. Context middleware creates request ID `abc-123` and a start time.
+2. Logging middleware registers a completion listener.
+3. CORS evaluates the browser origin policy.
+4. The JSON parser converts bytes into an untrusted object.
+5. The API limiter accepts the current rate-limit key.
+6. Authentication verifies the token and adds the minimal admin identity.
+7. `requireRole("admin")` permits the identity.
+8. The schema rejects unknown fields and transforms accepted values.
+9. The handler calls `userService.create(req.validatedBody)`.
+10. The service applies registration rules.
+11. The repository inserts the record; the database enforces uniqueness.
+12. The handler sends `201 Created` with a safe user representation.
+13. The logger observes the final status and duration.
+
+```json
+{
+  "user": {
+    "id": "usr_123",
+    "name": "Belema",
+    "email": "belema@example.com",
+    "age": 21
+  },
+  "requestId": "abc-123"
+}
+```
+
+At no point does the response expose a password hash, token, internal database ID strategy, or stack trace.
+
+## Following a Rejected Request
+
+Now the same route receives no authorization header:
+
+```text
+Context → Logging → CORS → Parser → Rate limit → Authentication
+                                                     ↓
+                                                send 401
+```
+
+Authorization, validation, handler, service, repository, and database do not run. Rejecting early saves work and prevents an unauthorized operation from reaching business code.
+
+If the credential is valid but the user role is `user`, authentication continues and authorization sends `403`. If the caller is an admin but the body is invalid, validation sends `400` with field details.
+
+Each rejection tells a different story.
+
+## Following an Unexpected Failure
+
+Suppose the database becomes unavailable:
+
+```text
+Handler
+  ↓
+Service
+  ↓
+Repository throws database error
+  ↓
+async handler rejection
+  ↓
+Error middleware logs internal cause with request ID
+  ↓
+Client receives generic 500 + request ID
+```
+
+The client does not need the driver message. Operators need the cause, dependency name, timing, and correlation ID. Error middleware separates those audiences.
+
+## What Each Layer Is Allowed to Know
+
+The pipeline becomes maintainable when dependencies point in sensible directions:
+
+| Layer | Knows about | Should not own |
+| --- | --- | --- |
+| Middleware | HTTP pipeline, cross-cutting policy, context | Core business workflow |
+| Handler | HTTP request/response and use-case contract | SQL and broad shared policy |
+| Service | Business rules and repository contracts | Express `req`/`res` |
+| Repository | Persistence operations and mapping | HTTP status codes |
+| Database | Stored-data constraints | Public API response shape |
+
+This is the connection back to Day 7. Middleware did not replace handler/service/repository architecture. It completed the outer request boundary.
+
+## Configuration and Dependency Injection
+
+Hard-coded globals make middleware difficult to test. Factories can accept dependencies:
+
+```js
+function createAuthMiddleware({ tokenVerifier }) {
+  return async function authMiddleware(req, res, next) {
+    const token = readBearerToken(req);
+    if (!token) return next(new AuthenticationError("Token required"));
+
+    try {
+      req.context.user = await tokenVerifier.verify(token);
+      next();
+    } catch (error) {
+      next(new AuthenticationError("Invalid token", { cause: error }));
+    }
+  };
+}
+```
+
+A test can provide a fake verifier without generating real cryptographic tokens. Production bootstrap supplies the real implementation.
+
+## Testing the Complete Application
+
+The test strategy has layers too.
+
+### Unit Tests
+
+Test one middleware's branch decisions:
+
+```js
+it("rejects a missing bearer token", async () => {
+  const req = createRequest({ headers: {} });
+  const res = createResponse();
+  const next = vi.fn();
+
+  await authMiddleware(req, res, next);
+
+  expect(res.status).toHaveBeenCalledWith(401);
+  expect(next).not.toHaveBeenCalled();
+});
+```
+
+### Integration Tests
+
+Test the registered pipeline through HTTP:
+
+```js
+it("creates a user for an admin", async () => {
+  const response = await request(app)
+    .post("/api/users")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send(validCreateUserBody);
+
+  expect(response.status).toBe(201);
+  expect(response.headers["x-request-id"]).toBeDefined();
+  expect(response.body.user).not.toHaveProperty("passwordHash");
+});
+```
+
+### Boundary Matrix
+
+```text
+no token                    → 401
+invalid token               → 401
+valid non-admin             → 403
+admin + malformed JSON      → 400
+admin + invalid body        → 400
+admin + duplicate email     → 409
+admin + valid body          → 201
+repository unavailable      → 500/503 safe response
+unknown route               → 404
+too many requests           → 429
+```
+
+This matrix proves that each checkpoint owns the intended failure and that later work does not run after rejection.
+
+## Operational Observability
+
+A production pipeline needs signals, not just console output:
+
+- request counts by method, route template, and status family;
+- latency distributions rather than only averages;
+- authentication and rate-limit rejection counts;
+- error counts by stable internal category;
+- traces across downstream services;
+- carefully sampled and redacted structured logs.
+
+Metric labels must avoid unbounded values such as raw user IDs or full URLs. Logs can carry richer context under appropriate access and retention controls.
+
+## Performance Budget
+
+Every middleware consumes part of the request latency budget:
+
+```text
+Parsing             1 ms
+Authentication      8 ms
+Authorization       2 ms
+Validation          1 ms
+Business operation 40 ms
+Serialization       2 ms
+Total              54 ms
+```
+
+Real timings vary, but measuring them reveals whether a “small” global middleware is making a remote call on every request. Independent work may sometimes run concurrently, while security dependencies must preserve their logical order.
+
+## Deployment Boundaries
+
+Some responsibilities may move outside Express:
+
+```text
+CDN / gateway
+  TLS termination, coarse DDoS protection, caching
+
+Reverse proxy
+  compression, request size limits, forwarding headers
+
+Application middleware
+  application identity, authorization, validation, error contract
+```
+
+Moving work upstream does not remove the need to understand it. The application must configure trusted proxies correctly, and critical business authorization still belongs under application control.
+
+## Startup Order Versus Request Order
+
+There are two lifecycles I should not confuse.
+
+At startup, the application loads configuration, creates connection pools, constructs services, builds routers, and begins listening. Per request, the already-constructed pipeline executes.
+
+```text
+Application startup (once)
+  read validated config
+  create database pool
+  create repositories/services
+  register middleware/routes
+  listen
+
+Request lifecycle (many times)
+  create request context
+  execute matching pipeline
+  send response
+  release request-scoped resources
+```
+
+Creating a new database pool inside middleware would confuse these scopes and exhaust resources. Application-scoped dependencies are constructed once and injected into middleware factories or handlers.
+
+## Graceful Shutdown and In-Flight Requests
+
+The pipeline also meets the deployment lifecycle during shutdown. A graceful process stops accepting new traffic, allows in-flight requests a limited time to finish, closes pools, and then exits.
+
+Middleware can help track active requests, but shutdown coordination belongs at application level. Abrupt termination can interrupt requests after business work began but before the client received confirmation, which is another reason idempotency matters for retried operations.
+
+## Documentation as an Effective Stack
+
+For each route, I should be able to document the effective stack after global and router inheritance:
+
+```text
+POST /api/users
+  global: request context, logging, CORS, JSON parser
+  /api: rate limiter
+  route: authentication, admin authorization, validation
+  terminal: 404 and global error contract
+```
+
+This is more useful than a list of middleware package names. It tells a reviewer what guarantees the handler receives and which failures can occur before it.
+
+## The Final End-to-End Test
+
+The most valuable test follows one request through every architectural boundary:
+
+```text
+HTTP request
+  → middleware creates trusted context
+  → handler constructs explicit command
+  → service applies business rule
+  → repository persists
+  → database constraint protects race
+  → handler maps safe result
+  → logger records completion
+```
+
+I would assert both positive and negative facts:
+
+- the intended service receives normalized validated data;
+- the unauthenticated path never calls the service;
+- the repository error becomes the correct safe response;
+- sensitive fields never appear in response or logs;
+- request IDs match across header, body where included, and log record;
+- every terminal path completes once.
+
+That test connects Day 6 validation, Day 7 layers, and Day 8 middleware into one working mental model.
+
+## Reading the Architecture as a Flow
+
+```text
+Incoming HTTP Request
+         ↓
+Request Context ────────── request ID and start time
+         ↓
+Logger ─────────────────── observes final status and duration
+         ↓
+CORS / Compression ─────── transport policy
+         ↓
+Body Parser ─────────────── bytes become an untrusted value
+         ↓
+Router Scope ────────────── selects public or protected policy
+         ↓
+Rate Limiter ────────────── protects shared capacity
+         ↓
+Authentication ──────────── adds verified identity
+         ↓
+Authorization ───────────── checks permission
+         ↓
+Validation ──────────────── adds trusted route input
+         ↓
+Handler ─────────────────── translates HTTP to a use case
+         ↓
+Service → Repository → Database
+         ↓
+HTTP Response
+
+Any failure ───────────────→ Error Middleware → Safe Response
+No route matched ──────────→ 404 Middleware
+```
+
+The handler is small for the right reason. It is not hiding work. Shared HTTP concerns live in middleware, business rules live in services, persistence lives in repositories, and storage constraints live in the database.
+
+## Mistakes I Will Watch For
+
+### Forgetting to Continue or Respond
+
+Every branch must call `next`, delegate an error, or complete the response. Missing all three creates a hanging request.
+
+### Continuing After a Response
+
+Calling `next()` after sending `401` allows downstream code to run and may produce a second response.
+
+### Registering in the Wrong Order
+
+A logger cannot read a request ID that does not exist. Authorization cannot read a user before authentication. An error handler placed too early cannot catch later route failures.
+
+### Turning Middleware into Another Giant Handler
+
+Authentication middleware should not also query orders, format a profile response, and send business emails. A checkpoint still needs one focused responsibility.
+
+### Trusting Client Claims
+
+Headers, cookies, parameters, and bodies are input. They become trusted context only through a verified boundary.
+
+### Logging Secrets
+
+Authorization headers, cookies, passwords, tokens, and personal data need redaction and intentional retention policies.
+
+### Treating CORS as Security Against Every Client
+
+CORS is a browser reading policy. It does not authenticate callers or stop direct HTTP requests.
+
+### Adding Middleware Without Measuring Cost
+
+Global middleware runs frequently. CPU-heavy synchronous work blocks other requests, and remote calls add latency. A useful checkpoint can still become a bottleneck.
+
+### Assuming Package Defaults Are Policy
+
+Installing CORS, rate-limit, security-header, or authentication middleware gives me mechanisms and defaults. I still own allowed origins, keys, limits, trust boundaries, and failure responses.
+
+### Hiding Route Security Behind Vague Abstractions
+
+Names such as `secureRoute` can conceal important differences. Route declarations should make authentication, authorization, validation, and special limits reviewable.
+
+### Forgetting Proxy Configuration
+
+Client IPs and secure cookies may behave incorrectly behind a reverse proxy if Express trust settings are wrong. Trusting every forwarding header is also dangerous. Deployment topology is part of middleware correctness.
+
+## My Middleware Design Checklist
+
+Before adding middleware, I now ask:
+
+1. Is this an HTTP concern shared by multiple routes?
+2. Should it apply globally, to a router, or to one route?
+3. What input does it trust, validate, or reject?
+4. What context does it add, and who needs that context?
+5. Can it terminate the request, and what response contract does it use?
+6. How does it report failures?
+7. What must run before it, and what depends on it?
+8. Could it expose sensitive data in logs or context?
+9. What latency and resource cost does it add?
+10. How will unit and integration tests verify its behavior and order?
+
+## Final Checkpoint Questions
+
+### Why does authentication come before authorization?
+
+Authorization needs a verified identity and permissions. Without authentication, it would be deciding based on missing or untrusted claims.
+
+### Why does validation not replace database constraints?
+
+Validation checks one request before persistence. Concurrent requests can pass the same uniqueness check, so the database must still enforce stored-data invariants.
+
+### Why is a small handler not automatically evidence of good architecture?
+
+Work may simply be hidden in giant middleware. The responsibilities and dependency boundaries matter more than line count.
+
+### What is the most important middleware rule?
+
+Every layer should have a focused contract: know what it reads, what trusted context it produces, how it exits, where it is scoped, and how it fails.
+
+## What Finally Clicked
+
+Before Day 8, I thought middleware was simply “a function that runs before a route.” Across these seven parts, that definition became much richer.
+
+Middleware is how a backend composes the work surrounding its handlers. It provides an ordered control flow, carries request-scoped context, applies shared policies at deliberate scopes, and gives errors a consistent path.
+
+```text
+Problem:
+Cross-cutting logic is duplicated across handlers.
+
+Solution:
+Compose it as an ordered middleware pipeline.
+
+Data model:
+Carry small, trusted, request-scoped context.
+
+Control model:
+next() continues, next(error) changes tracks,
+and sending a response ends the cycle.
+
+Design rule:
+Global concerns belong globally; narrow policies belong near their routes;
+handlers remain focused on the use-case boundary.
+```
+
+Day 7 showed me the vertical journey from handler to database. Day 8 explained the horizontal concerns wrapped around that journey.
+
+```text
+                    Cross-cutting middleware
+              ┌────────────────────────────────┐
+Request ─────→│ Handler → Service → Repository │─────→ Response
+              └────────────────────────────────┘
+```
+
+Now the lifecycle feels complete. The router decides where the request goes. Middleware prepares and protects the journey. Request context carries what the application learns along the way. The handler translates HTTP. The service applies business rules. The repository talks to storage. Error middleware makes failures consistent and safe.
+
+That is the power of the pipeline: not adding more code around a request, but giving repeated responsibilities one clear and reliable place to live.
