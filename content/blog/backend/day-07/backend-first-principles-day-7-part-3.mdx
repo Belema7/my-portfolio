@@ -1,0 +1,463 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 3)
+description: Designing thin but responsible handlers that extract HTTP input, consume validated data, call services, map errors, and shape safe responses.
+slug: backend-first-principles-day-7-part-3
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 21 min read
+day: 7
+part: 3
+series: Learning Backend from First Principles
+order: 703
+published: true
+tags: [Handlers, Controllers, Express, TypeScript]
+keywords: [Express handler, controller layer, thin controllers]
+---
+# The Handler: Translating HTTP Without Owning the Business
+
+> *“A thin handler is not empty; it is focused on the boundary only it understands.”*
+
+## The Entry Point for One API Operation
+
+Part 2 followed a request through the full lifecycle. The first application layer it reached was the handler, sometimes called a controller.
+
+A handler is a predefined function responsible for handling the HTTP side of one API operation.
+
+```ts
+router.post("/users", userHandler.create);
+```
+
+The handler sits between two worlds:
+
+```text
+HTTP world                    Application world
+req.body                      CreateUserCommand
+req.params                    userId
+req.query                     ListUsersQuery
+status codes        ←→        results and application errors
+JSON responses                entities / result objects
+```
+
+Its job is translation, not ownership of the entire use case.
+
+## What the Handler Receives
+
+In Express, it normally receives:
+
+| Object | Contains/controls |
+| --- | --- |
+| `req` | body, path params, query, headers, method, URL, authenticated context |
+| `res` | status, headers, cookies, JSON/body, streaming response |
+| `next` | forwards failures or continues middleware flow |
+
+The service should not receive these objects. They contain far more authority and framework behavior than a business use case needs.
+
+## Five Handler Responsibilities
+
+I organize the handler boundary into five steps:
+
+```text
+1. Extract HTTP data
+2. Consume parsing/deserialization result
+3. Validate and transform at the boundary
+4. Call the service with explicit input
+5. Format the HTTP response
+```
+
+Validation may live in route middleware, a pipe, or a handler helper depending on the framework. It still belongs to the request boundary, not the service's core business rules.
+
+## 1. Extract Data From the Correct Location
+
+```ts
+const body = req.body;
+const userId = req.params.userId;
+const page = req.query.page;
+const authorization = req.get("authorization");
+```
+
+These locations have different semantics:
+
+| Source | Typical use | Example |
+| --- | --- | --- |
+| Path param | identifies a resource | `/users/:userId` |
+| Query | filtering, sorting, pagination | `?page=2&role=admin` |
+| Body | create/update representation | `{ "name": "Alice" }` |
+| Header | metadata, credentials, negotiation | `Authorization`, `If-Match` |
+
+A handler should not merge them casually. If both path and body contain `userId`, the API contract must say which is authoritative—usually the path identifies the target.
+
+## 2. Understand Deserialization
+
+Express commonly parses JSON before the handler:
+
+```ts
+app.use(express.json({ limit: "1mb" }));
+```
+
+Malformed JSON can fail in parser middleware before the route runs. A parsed body is still `unknown` from a trust perspective.
+
+```text
+bytes → JSON parser → JavaScript value → schema validation → command
+```
+
+TypeScript annotations do not inspect runtime network data:
+
+```ts
+const body = req.body as CreateUserBody; // assertion, not validation
+```
+
+This line can silence the compiler without protecting the application.
+
+## 3. Validate and Transform the Boundary
+
+Instead of scattered `if` statements, a runtime schema can define the accepted shape:
+
+```ts
+const createUserSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(12).max(128),
+  age: z.number().int().min(0).max(150).optional(),
+}).strict();
+```
+
+The schema handles boundary facts:
+
+- required and optional fields;
+- runtime types;
+- sizes and formats;
+- safe representation transformations;
+- unknown-field policy.
+
+It should not query the database to check email uniqueness. That rule needs service orchestration and a database constraint.
+
+## 4. Construct an Explicit Command
+
+Passing `req.body` directly to a service or ORM creates a mass-assignment risk:
+
+```ts
+// Dangerous if body includes role: "admin".
+await userService.createUser(req.body);
+```
+
+Instead, the handler/boundary produces a narrow command:
+
+```ts
+const parsed = createUserSchema.parse(req.body);
+
+const command: CreateUserCommand = {
+  name: parsed.name,
+  email: parsed.email,
+  password: parsed.password,
+  age: parsed.age,
+};
+```
+
+The public route never accepts a role. The service assigns `user` according to policy.
+
+## 5. Call the Service and Format HTTP
+
+```ts
+async function create(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = createUserSchema.parse(req.body);
+    const user = await userService.createUser(input);
+
+    res
+      .status(201)
+      .location(`/users/${user.id}`)
+      .json({ user: toUserResponse(user) });
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+The handler knows that successful creation means `201 Created`, that the new resource has a location, and that the public body uses a safe representation.
+
+The service returns an application result. It does not call `res.status(201)`.
+
+## Request DTO, Command, Entity, and Response DTO
+
+I used to treat all “user objects” as interchangeable. They are not.
+
+```text
+HTTP request DTO
+  name, email, password, age
+        ↓ boundary
+CreateUserCommand
+  normalized trusted application input
+        ↓ service
+User entity/result
+  id, email, passwordHash, role, timestamps
+        ↓ response mapper
+User response DTO
+  id, name, email, role, createdAt
+```
+
+Each shape exists for a different audience. Explicit transformations prevent password hashes and internal fields from leaking outward.
+
+## Response Status Is Part of the Contract
+
+| Situation | Typical status |
+| --- | --- |
+| Created resource | `201 Created` |
+| Successful read/update | `200 OK` |
+| Successful deletion without body | `204 No Content` |
+| Invalid boundary input | `400 Bad Request` |
+| Missing/invalid identity | `401 Unauthorized` |
+| Authenticated but forbidden | `403 Forbidden` |
+| Missing resource | `404 Not Found` |
+| State/uniqueness conflict | `409 Conflict` |
+
+The handler or centralized error middleware owns this mapping because status codes are HTTP semantics.
+
+## A Complete Create User Handler
+
+```ts
+type UserHandlerDependencies = {
+  userService: UserService;
+};
+
+export function createUserHandler({ userService }: UserHandlerDependencies) {
+  return async function createUser(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const result = createUserSchema.safeParse(req.body);
+
+      if (!result.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_FAILED",
+            fields: mapValidationIssues(result.error.issues),
+          },
+          requestId: req.context.requestId,
+        });
+      }
+
+      const command: CreateUserCommand = {
+        name: result.data.name,
+        email: result.data.email,
+        password: result.data.password,
+        age: result.data.age,
+      };
+
+      const user = await userService.createUser(command);
+
+      res
+        .status(201)
+        .location(`/users/${user.id}`)
+        .json({
+          user: toUserResponse(user),
+          requestId: req.context.requestId,
+        });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+```
+
+Dependency injection makes the handler testable without using a real service implementation.
+
+## Thin Does Not Mean No Decisions
+
+A handler legitimately decides:
+
+- where HTTP input comes from;
+- how the boundary schema is applied;
+- which command is constructed;
+- which service operation is invoked;
+- what HTTP status, headers, and representation are returned.
+
+Those are important decisions. “Thin” means it avoids business orchestration and persistence details, not that it must contain three lines.
+
+## Path, Query, Body, and Header Conflicts
+
+Suppose an update route receives:
+
+```http
+PATCH /users/123
+
+{ "id": "999", "name": "Alice" }
+```
+
+The path identifies the target. The body should not be allowed to redirect the operation to another user. A strict schema can reject `id` entirely.
+
+Headers need the same care. `If-Match` can carry a version for optimistic concurrency, while authentication context identifies the actor. The handler constructs one command with explicit meanings:
+
+```ts
+const command: UpdateUserCommand = {
+  actorId: req.context.user.id,
+  targetUserId: parsedParams.userId,
+  expectedVersion: parsedHeaders.ifMatch,
+  changes: parsedBody,
+};
+```
+
+The service receives facts, not the ambiguity of four HTTP containers.
+
+## Content Negotiation and Serialization
+
+The response boundary owns more than `res.json`. It may select representation based on `Accept`, set cache headers, return `ETag`, or stream a file.
+
+For a JSON API, consistency still matters:
+
+```ts
+res
+  .status(200)
+  .type("application/json")
+  .set("Cache-Control", "private, no-store")
+  .json({ user: toUserResponse(user) });
+```
+
+Sensitive account responses should not be cached by shared intermediaries accidentally. These are transport policies, not service decisions.
+
+## Handler Factories Versus Class Binding
+
+Class handlers can lose `this` when passed as callbacks:
+
+```ts
+router.post("/users", userHandler.create); // this may be undefined
+```
+
+Possible solutions include binding, arrow properties, or factory functions. I prefer factories when they make dependencies explicit:
+
+```ts
+const create = createUserHandler({ service: createUserService });
+router.post("/users", create);
+```
+
+The architectural issue is not class versus function. It is whether dependencies and context are reliable and visible.
+
+## Validation Middleware Versus Handler Validation
+
+Boundary validation can be extracted:
+
+```ts
+router.post(
+  "/users",
+  validateBody(createUserSchema),
+  createUserHandler,
+);
+```
+
+Then the handler consumes `req.validatedBody`. This reduces repetition, but the type and runtime contract must agree. An untyped custom property can make TypeScript falsely assume validation ran.
+
+Route composition and integration tests must prove the middleware precedes the handler. Day 8 explores that pipeline in depth.
+
+## Avoiding Accidental Double Responses
+
+Every handler path should send once or forward an error once:
+
+```ts
+if (!result.success) {
+  return res.status(400).json(/* ... */);
+}
+```
+
+Without `return`, execution may continue into the service and attempt another response. Async error forwarding should also match the installed Express version.
+
+## Handler Contract Tests
+
+A useful matrix is:
+
+```text
+malformed/invalid body → 400, service not called
+valid body             → correct command passed
+successful service     → 201 + Location + safe DTO
+known service error    → forwarded/mapped consistently
+unexpected service bug → forwarded to generic error boundary
+```
+
+These tests verify translation. They should not duplicate the service's business-rule test suite.
+
+## What a Handler Should Not Do
+
+### Direct Database Access
+
+```ts
+// Wrong boundary.
+const user = await prisma.user.create({ data: req.body });
+```
+
+This couples HTTP input directly to persistence, bypasses business policy, and risks mass assignment.
+
+### Business Workflow
+
+```ts
+if (user.role === "admin" && hasActiveOrders(user)) {
+  // business decision in handler
+}
+```
+
+The service should own rules that must remain true regardless of transport.
+
+### Returning Raw Entities
+
+```ts
+res.json(user); // may include passwordHash
+```
+
+Response mapping must explicitly expose safe fields.
+
+### Catching Every Error as `400`
+
+Database outages and programmer bugs are not client input mistakes. Error classification needs stable application errors and a central fallback.
+
+## Handler Testing
+
+The handler test focuses on HTTP translation:
+
+```ts
+it("returns 201 with a safe user response", async () => {
+  const userService = {
+    createUser: vi.fn().mockResolvedValue(savedUser),
+  };
+
+  const handler = createUserHandler({ userService });
+  const req = createRequest({ body: validBody });
+  const res = createResponse();
+  const next = vi.fn();
+
+  await handler(req, res, next);
+
+  expect(userService.createUser).toHaveBeenCalledWith({
+    name: "Belema",
+    email: "belema@example.com",
+    password: validBody.password,
+    age: 21,
+  });
+  expect(res.status).toHaveBeenCalledWith(201);
+  expect(res.body.user).not.toHaveProperty("passwordHash");
+});
+```
+
+Other tests cover invalid input and forwarded service errors. Service tests independently cover business rules.
+
+## Checkpoint Questions
+
+### Does Express automatically validate parsed JSON?
+
+No. Parsing produces a JavaScript value. Runtime validation must still establish the endpoint contract.
+
+### Why construct a command instead of passing `req.body`?
+
+The command allowlists accepted fields, makes trust explicit, and prevents transport objects or unauthorized properties from leaking inward.
+
+### Is status `201` a service decision?
+
+No. The service knows a user was created; the HTTP boundary maps that outcome to `201 Created`.
+
+### Why map the response explicitly?
+
+Internal entities and database records can contain secrets and implementation fields. Public contracts should expose only intended data.
+
+## What I Learned in Part 3
+
+The handler is the translator at the HTTP boundary. It is thin because it refuses business and persistence ownership, not because it has no responsibilities.
+
+Part 4 moves inward to the service—the layer that gives the operation its business meaning.

@@ -1,0 +1,469 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 5)
+description: Designing repository contracts and implementations that isolate SQL or ORM details, return predictable types, map records safely, and preserve database guarantees.
+slug: backend-first-principles-day-7-part-5
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 7
+part: 5
+series: Learning Backend from First Principles
+order: 705
+published: true
+tags: [Repository Pattern, SQL, Data Access, TypeScript]
+keywords: [repository layer, repository pattern, data access layer, parameterized queries]
+---
+# The Repository Layer: Giving Persistence One Clear Boundary
+
+> *“The repository translates application persistence needs into storage operations and predictable application results.”*
+
+## The Question Beneath the Service
+
+Part 4 built a service that understands the Create User use case without knowing HTTP. But it still needs to find and store users.
+
+Should the service write SQL directly?
+
+```ts
+const rows = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+```
+
+If it does, the service learns table names, database clients, query syntax, row shapes, and storage errors. Business logic becomes coupled to persistence mechanics.
+
+The repository creates a boundary between those worlds.
+
+> **A repository receives persistence-focused input, executes a database operation through SQL or an ORM, maps the result, and returns a predictable application value.**
+
+## The Bridge Mental Model
+
+```text
+Application language             Storage language
+findByEmail(email)      →        SELECT ... WHERE email = $1
+create(newUser)         →        INSERT INTO users ...
+User | null             ←        database row or no row
+```
+
+The service asks for a user by email. It does not ask for table `users`, column `email_normalized`, or a Prisma query object.
+
+## Three Repository Responsibilities
+
+```text
+1. Receive persistence criteria or data
+2. Construct and execute the storage operation
+3. Map and return a predictable result
+```
+
+Repositories also translate low-level storage failures when the application needs a stable meaning, but they should not absorb every error into `null`.
+
+## Start With the Contract
+
+```ts
+interface UserRepository {
+  findById(id: string): Promise<User | null>;
+  findByEmail(email: string): Promise<User | null>;
+  findPage(query: UserPageQuery): Promise<UserPage>;
+  create(data: NewUserRecord): Promise<User>;
+  update(id: string, changes: UserChanges): Promise<User | null>;
+  softDelete(id: string): Promise<boolean>;
+  countActiveByRole(role: UserRole): Promise<number>;
+}
+```
+
+The return type communicates behavior:
+
+| Method | Return | Meaning |
+| --- | --- | --- |
+| `findById` | `User | null` | at most one entity |
+| `findPage` | `UserPage` | collection plus pagination metadata |
+| `countActiveByRole` | `number` | aggregate count |
+| `softDelete` | `boolean` | whether a row changed |
+| `create` | `User` | saved entity or thrown failure |
+
+Predictability is more important than a slogan that every method must execute exactly one SQL statement. `create` may insert and return a row through one statement or a transaction. The contract should represent one coherent persistence operation.
+
+## Naming Methods by Intent
+
+Good repository names describe what the application asks:
+
+```ts
+findById(id)
+findByEmail(email)
+findActiveByTenant(tenantId)
+countOpenOrdersByUserId(userId)
+existsBySlug(slug)
+```
+
+Names such as `getData`, `query`, or `execute` hide return shape and intent.
+
+I also distinguish `find` from `get` by convention:
+
+```text
+findById → may return null
+getById  → may guarantee presence or throw
+```
+
+The exact convention can differ, but it must be consistent.
+
+## A Complete SQL Repository
+
+```ts
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  role: "user" | "admin";
+  created_at: Date;
+  updated_at: Date;
+  deleted_at: Date | null;
+};
+
+function mapUserRow(row: UserRow): User {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    passwordHash: row.password_hash,
+    role: row.role,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+class SqlUserRepository implements UserRepository {
+  constructor(private readonly db: Database) {}
+
+  async findById(id: string): Promise<User | null> {
+    const row = await this.db.oneOrNone<UserRow>(
+      `SELECT id, name, email, password_hash, role,
+              created_at, updated_at, deleted_at
+       FROM users
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [id],
+    );
+
+    return row ? mapUserRow(row) : null;
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const row = await this.db.oneOrNone<UserRow>(
+      `SELECT id, name, email, password_hash, role,
+              created_at, updated_at, deleted_at
+       FROM users
+       WHERE email = $1 AND deleted_at IS NULL`,
+      [email],
+    );
+
+    return row ? mapUserRow(row) : null;
+  }
+
+  async create(data: NewUserRecord): Promise<User> {
+    const row = await this.db.one<UserRow>(
+      `INSERT INTO users (name, email, password_hash, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)
+       RETURNING id, name, email, password_hash, role,
+                 created_at, updated_at, deleted_at`,
+      [data.name, data.email, data.passwordHash, data.role, data.createdAt],
+    );
+
+    return mapUserRow(row);
+  }
+}
+```
+
+The repository controls SQL and row mapping. The service sees `User` values and repository methods.
+
+## Parameterized Queries Prevent Code/Data Confusion
+
+This is unsafe:
+
+```ts
+const sql = `SELECT * FROM users WHERE email = '${email}'`;
+```
+
+Client-controlled text can change query meaning. Parameterization keeps SQL structure separate from values:
+
+```ts
+const sql = "SELECT * FROM users WHERE email = $1";
+const row = await db.oneOrNone(sql, [email]);
+```
+
+Runtime input validation and parameterization solve different problems. A syntactically valid email can still contain unexpected text; parameterization is the destination-specific SQL defense.
+
+Dynamic identifiers such as sort columns cannot usually be parameterized as values. They need an allowlist:
+
+```ts
+const sortColumns = {
+  createdAt: "created_at",
+  name: "name",
+} as const;
+
+const column = sortColumns[input.sortBy];
+```
+
+## ORM Does Not Remove the Repository Question
+
+An ORM already abstracts SQL:
+
+```ts
+await prisma.user.findUnique({ where: { email } });
+```
+
+Do I still need a repository?
+
+Not automatically. For a small application, using the ORM directly in a focused service can be reasonable. A repository becomes valuable when I need:
+
+- stable application contracts independent of ORM result types;
+- shared query semantics such as soft-delete filtering;
+- record/entity mapping;
+- easier business tests with fake persistence;
+- isolation from ORM-specific errors and query APIs;
+- several persistence operations behind one meaningful boundary.
+
+Wrapping every ORM call with an identical forwarding method adds ceremony without abstraction.
+
+## Persistence Model Versus Domain Model
+
+Storage optimizes for querying and constraints. Application models optimize for business meaning.
+
+```text
+Database row
+  snake_case columns
+  nullable storage fields
+  joins and foreign keys
+  password hash
+
+Domain/application entity
+  meaningful types
+  invariants
+  Date values
+  no ORM metadata
+
+Public response
+  allowlisted safe fields
+```
+
+The repository maps the first boundary. The handler maps the last.
+
+## Collections Need Pagination
+
+An unbounded `findAll()` becomes dangerous as the table grows.
+
+```ts
+type UserPageQuery = {
+  limit: number;
+  cursor?: string;
+  role?: UserRole;
+};
+
+type UserPage = {
+  items: User[];
+  nextCursor: string | null;
+};
+```
+
+The repository applies stable ordering and bounded queries. Cursor pagination can avoid large offsets, but the correct strategy depends on ordering and product requirements.
+
+```sql
+SELECT ...
+FROM users
+WHERE deleted_at IS NULL
+  AND ($1::text IS NULL OR role = $1)
+  AND ($2::uuid IS NULL OR id > $2)
+ORDER BY id
+LIMIT $3
+```
+
+## Updates and Patch Semantics
+
+An update input should distinguish missing from explicit `null`:
+
+```ts
+type UserChanges = {
+  name?: string;
+  avatarUrl?: string | null;
+};
+```
+
+```text
+name missing      → leave unchanged
+avatarUrl missing → leave unchanged
+avatarUrl null    → clear avatar
+```
+
+The handler validates patch representation, the service decides permitted changes, and the repository translates the final change set safely.
+
+## Soft Delete Is a System-Wide Policy
+
+```sql
+UPDATE users SET deleted_at = NOW() WHERE id = $1;
+```
+
+Once soft deletion exists, every relevant query must define whether deleted rows are visible. Central repository methods reduce accidental inconsistency.
+
+But soft delete also affects uniqueness, restoration, foreign keys, privacy erasure, and analytics. It is not merely replacing `DELETE` with `UPDATE`.
+
+## Avoid the Generic Repository Trap
+
+A generic interface can look elegant:
+
+```ts
+interface Repository<T> {
+  findAll(): Promise<T[]>;
+  findById(id: string): Promise<T | null>;
+  save(entity: T): Promise<T>;
+  delete(id: string): Promise<void>;
+}
+```
+
+Real domains quickly need queries such as `countActiveByUserId`, optimistic versions, tenant scoping, and projections. Forcing them through generic filters can expose database query language to services.
+
+Specific repository contracts are often more expressive:
+
+```ts
+interface OrderRepository {
+  findOpenByCustomer(customerId: CustomerId): Promise<Order[]>;
+  reserveNextNumber(tenantId: TenantId): Promise<number>;
+  save(order: Order): Promise<void>;
+}
+```
+
+Abstraction should describe application needs, not erase useful differences between aggregates.
+
+## N+1 Queries
+
+A repository abstraction does not automatically make queries efficient.
+
+```ts
+const users = await usersRepository.findPage(query);
+for (const user of users.items) {
+  user.orders = await ordersRepository.findByUserId(user.id);
+}
+```
+
+Twenty users can trigger twenty-one queries. Solutions include a purpose-built projection query, batching, joins, or data-loader patterns.
+
+The service defines the data the use case needs; repository/query implementations should retrieve it efficiently without leaking raw query mechanics upward.
+
+## Read Models and Projections
+
+Not every read must hydrate a full domain entity. A reporting endpoint may need:
+
+```ts
+type UserSummary = {
+  id: string;
+  name: string;
+  orderCount: number;
+  lifetimeValue: number;
+};
+```
+
+A query repository can return this projection directly. Pretending every query returns the same full `User` entity can waste data and create awkward mapping.
+
+```text
+Write repository → protects aggregate persistence
+Query repository → serves purpose-built read models
+```
+
+This separation becomes more useful as read and write needs diverge.
+
+## Transactions and Repository Instances
+
+All operations in one transaction must use the transaction-bound executor:
+
+```ts
+await unitOfWork.run(async (tx) => {
+  await tx.users.create(user);
+  await tx.settings.createDefaultForUser(user.id);
+});
+```
+
+If one repository secretly uses the global pool instead of `tx`, part of the work can commit outside the transaction. The unit-of-work API should make misuse difficult.
+
+## Database Types Need Careful Mapping
+
+Drivers may return decimals as strings, timestamps in configured time zones, large integers outside JavaScript's safe range, or JSON columns as untyped values.
+
+Repository mapping is the place to validate and convert these storage representations intentionally. TypeScript generic annotations do not prove the database returned what the annotation claims.
+
+```ts
+const amount = Money.fromDecimalString(row.amount);
+const createdAt = parseDatabaseTimestamp(row.created_at);
+```
+
+Trust boundaries exist at database reads too, especially when schemas and application deployments can drift.
+
+## Database Constraints Remain Essential
+
+The service may check email first for a friendly error:
+
+```ts
+if (await users.findByEmail(email)) {
+  throw new EmailAlreadyExistsError(email);
+}
+```
+
+Two concurrent requests can both see no user and then insert:
+
+```text
+Request A checks → none
+Request B checks → none
+Request A inserts
+Request B inserts
+```
+
+A unique database constraint is the final authority:
+
+```sql
+CREATE UNIQUE INDEX users_email_unique ON users (email);
+```
+
+The repository can translate the vendor-specific violation into a stable persistence/application conflict without exposing constraint details.
+
+## What a Repository Should Not Do
+
+- choose HTTP status codes;
+- receive `req` or `res`;
+- decide whether an admin may be deleted;
+- send email or payment requests;
+- accept arbitrary raw body objects;
+- return inconsistent shapes from the same method;
+- swallow database outages as “not found.”
+
+## Repository Tests
+
+Repository integration tests should use a real compatible database because mocks cannot prove SQL syntax, constraints, transaction isolation, or mappings.
+
+```text
+findById existing       → mapped User
+findById absent         → null
+create valid            → persisted mapped User
+create duplicate email  → translated conflict
+softDelete              → hidden from normal reads
+pagination              → bounded stable order
+```
+
+Service tests can mock the repository contract. Repository tests verify the persistence implementation itself.
+
+## Checkpoint Questions
+
+### Why not return raw rows?
+
+Rows expose storage naming, nullability, driver types, and sensitive fields. Mapping creates a stable application contract.
+
+### Does input validation replace parameterized SQL?
+
+No. Validation establishes the application contract; parameterization prevents values from becoming executable SQL syntax.
+
+### Does every ORM project require repositories?
+
+No. A repository should isolate meaningful persistence complexity, not merely rename every ORM call.
+
+### Why is a service uniqueness check insufficient?
+
+Concurrent requests can both pass the check. A database unique constraint protects the invariant at commit time.
+
+## What I Learned in Part 5
+
+The repository is a translation and isolation boundary. It gives services persistence operations in application language while keeping SQL, ORM behavior, records, and database failures contained.
+
+Part 6 assembles all three layers into one complete TypeScript feature.

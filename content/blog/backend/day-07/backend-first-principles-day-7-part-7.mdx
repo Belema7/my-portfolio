@@ -1,0 +1,548 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 7)
+description: Designing cross-layer error propagation, stable application errors, database translation, safe HTTP responses, logging, and a complete architecture checklist.
+slug: backend-first-principles-day-7-part-7
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 23 min read
+day: 7
+part: 7
+series: Learning Backend from First Principles
+order: 707
+published: true
+tags: [Error Handling, Backend Architecture, TypeScript]
+keywords: [error handling across layers, service errors, repository errors, API error mapping]
+---
+# Error Handling Across Handler, Service, and Repository Layers
+
+> *“An error should gain meaning as it moves upward, but it should not lose its original cause or leak internal details.”*
+
+## The Failure Question
+
+Part 6 assembled the successful Create User flow. But real systems spend a great deal of effort handling paths where something fails.
+
+Errors can begin anywhere:
+
+```text
+Handler boundary
+  malformed or invalid input
+
+Service
+  business rule rejected
+
+Repository/database
+  unique conflict, timeout, unavailable connection
+
+External dependency
+  email/payment service failure
+
+Program code
+  unexpected bug
+```
+
+If every layer catches everything and creates a new generic message, the application loses useful information. If every layer exposes raw errors, the client receives SQL, stack traces, and internal details.
+
+The architecture needs a deliberate error flow.
+
+## The Principle: Handle, Translate, or Propagate
+
+When a layer catches an error, it should do one of three things:
+
+```text
+Handle
+  recover, retry safely, compensate, or return a valid fallback
+
+Translate
+  convert a lower-level error into meaning this layer owns
+
+Propagate
+  preserve the error for a higher layer that can decide
+```
+
+Logging and rethrowing without adding unique value often creates duplicate noise.
+
+## Error Ownership by Layer
+
+| Layer | Understands | Appropriate action |
+| --- | --- | --- |
+| Handler/boundary | HTTP input/output | map safe application errors to HTTP |
+| Service | business/use-case meaning | throw application errors, coordinate compensation |
+| Repository | persistence technology | translate vendor-specific errors |
+| Database | constraints and execution | enforce stored invariants |
+
+The repository knows error `23505` and constraint `users_email_unique`. The service knows this means an email conflict in Create User. The HTTP layer knows the public representation should be `409 Conflict`.
+
+## A Typed Error Hierarchy
+
+```ts
+class AppError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = new.target.name;
+  }
+}
+
+class EmailAlreadyExistsError extends AppError {
+  constructor(options?: ErrorOptions) {
+    super(
+      "An account with this email already exists",
+      "EMAIL_ALREADY_EXISTS",
+      options,
+    );
+  }
+}
+
+class UserNotFoundError extends AppError {
+  constructor(options?: ErrorOptions) {
+    super("User not found", "USER_NOT_FOUND", options);
+  }
+}
+
+class PermissionDeniedError extends AppError {
+  constructor(options?: ErrorOptions) {
+    super("This action is not permitted", "PERMISSION_DENIED", options);
+  }
+}
+```
+
+These errors express stable application meaning without containing an HTTP status.
+
+## Persistence Errors Stay Internal
+
+```ts
+class EmailConflictPersistenceError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("Unique email constraint rejected the write", options);
+  }
+}
+
+class RepositoryUnavailableError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("User repository unavailable", options);
+  }
+}
+```
+
+The repository translates recognized driver errors:
+
+```ts
+async create(data: NewUserRecord): Promise<User> {
+  try {
+    return await this.insertUser(data);
+  } catch (error) {
+    if (isUniqueViolation(error, "users_email_unique")) {
+      throw new EmailConflictPersistenceError({ cause: error });
+    }
+
+    if (isConnectionFailure(error)) {
+      throw new RepositoryUnavailableError({ cause: error });
+    }
+
+    throw error;
+  }
+}
+```
+
+It preserves the original cause for internal diagnostics. It does not return SQL text to the service or client.
+
+## The Service Adds Use-Case Meaning
+
+```ts
+try {
+  return await this.unitOfWork.run(/* ... */);
+} catch (error) {
+  if (error instanceof EmailConflictPersistenceError) {
+    throw new EmailAlreadyExistsError({ cause: error });
+  }
+
+  throw error;
+}
+```
+
+The service translates only what it understands. A repository outage may propagate to a central infrastructure mapping rather than becoming a misleading business error.
+
+This is dangerous:
+
+```ts
+catch (error) {
+  throw new ServiceError("Could not create user");
+}
+```
+
+It collapses duplicate email, timeout, programmer bug, and connection failure into one category while discarding the cause.
+
+## The HTTP Error Boundary
+
+In Express, centralized error middleware can map application errors:
+
+```ts
+function errorHandler(
+  error: unknown,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (res.headersSent) return next(error);
+
+  req.context.logger.error({
+    event: "request.failed",
+    error,
+    method: req.method,
+    path: req.originalUrl,
+  });
+
+  if (error instanceof EmailAlreadyExistsError) {
+    return res.status(409).json({
+      error: { code: error.code, message: error.message },
+      requestId: req.context.requestId,
+    });
+  }
+
+  if (error instanceof UserNotFoundError) {
+    return res.status(404).json({
+      error: { code: error.code, message: error.message },
+      requestId: req.context.requestId,
+    });
+  }
+
+  if (error instanceof PermissionDeniedError) {
+    return res.status(403).json({
+      error: { code: error.code, message: error.message },
+      requestId: req.context.requestId,
+    });
+  }
+
+  if (error instanceof RepositoryUnavailableError) {
+    return res.status(503).json({
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "The service is temporarily unavailable",
+      },
+      requestId: req.context.requestId,
+    });
+  }
+
+  return res.status(500).json({
+    error: {
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Something went wrong",
+    },
+    requestId: req.context.requestId,
+  });
+}
+```
+
+Unknown errors receive a generic response. Logs keep the internal object and cause chain under protected access.
+
+## Public Error Contract
+
+```json
+{
+  "error": {
+    "code": "EMAIL_ALREADY_EXISTS",
+    "message": "An account with this email already exists"
+  },
+  "requestId": "abc-123"
+}
+```
+
+Stable codes let clients react without parsing English text. Human messages can evolve or be localized.
+
+## Validation Errors Are Structured
+
+Boundary validation often needs field details:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Some fields are invalid",
+    "fields": {
+      "email": ["Email must be valid"],
+      "password": ["Password must contain at least 12 characters"]
+    }
+  },
+  "requestId": "abc-123"
+}
+```
+
+The API should map a schema library's issues into its own contract rather than expose a dependency-specific structure forever.
+
+## Not Found at Different Layers
+
+These situations look similar but mean different things:
+
+```text
+No route matched
+  HTTP boundary returns endpoint 404
+
+Route matched, required user absent
+  repository returns null
+  service throws UserNotFoundError
+  HTTP boundary maps resource 404
+```
+
+The response may use `404` for both, but the internal cause and logging category differ.
+
+## Transaction Rollback
+
+If default settings fail after user insertion inside a transaction:
+
+```text
+BEGIN
+INSERT user succeeds
+INSERT settings fails
+ROLLBACK
+```
+
+The unit of work ensures no partial database state remains. The service does not attempt manual cleanup with separate non-transactional deletes.
+
+External effects need different compensation or eventual-delivery strategies because they cannot participate in the local transaction.
+
+## Retry Decisions
+
+Not every failure should be retried:
+
+| Failure | Retry? |
+| --- | --- |
+| Invalid input | No, change request |
+| Duplicate email | No, resolve conflict |
+| Permission denied | No, unless permissions change |
+| Temporary repository outage | Possibly with bounded backoff |
+| Transaction serialization conflict | Often safe to retry operation |
+| Unknown programmer bug | No automatic blind retry |
+
+Retries must respect idempotency. Repeating a non-idempotent external call can duplicate side effects.
+
+## Logging Once With the Best Context
+
+If repository, service, handler, and middleware all log the same failure, one event becomes four noisy records.
+
+The central request boundary often has:
+
+- request ID;
+- method and route;
+- authenticated user/tenant where appropriate;
+- full error and cause chain;
+- final HTTP outcome.
+
+Deeper layers should log only when they add unique operational information or actually handle the failure.
+
+Secrets, password values, tokens, raw bodies, and sensitive personal data must be redacted.
+
+## Operational Versus Programmer Errors
+
+Expected operational errors include missing resources, conflicts, invalid inputs, and temporary dependency failures. The system has a deliberate policy for them.
+
+Programmer errors include incorrect assumptions, undefined access, or double responses. They become generic `500` responses and should trigger investigation rather than being normalized into business outcomes.
+
+## Error Cause Chain Example
+
+One duplicate request can produce a meaningful chain:
+
+```text
+DatabaseDriverError
+  code: 23505
+  constraint: users_email_unique
+        ↓ repository translation, preserves cause
+EmailConflictPersistenceError
+        ↓ service translation, preserves cause
+EmailAlreadyExistsError
+        ↓ HTTP mapping
+409 EMAIL_ALREADY_EXISTS
+```
+
+The client receives only the final safe meaning. Internal logs can traverse `cause` to diagnose the exact constraint and driver behavior.
+
+## Avoid Matching Error Messages
+
+```ts
+if (error.message === "Email already taken") { /* ... */ }
+```
+
+Messages change, can be localized, and may come from unrelated dependencies. Classes, discriminated result types, or stable codes are safer classification tools.
+
+Likewise, exposing `error.sql` or driver metadata in public JSON would couple clients to infrastructure and leak implementation details.
+
+## Partial Failure and Compensation
+
+If a synchronous workflow creates a payment customer and then fails locally, the service needs a deliberate policy:
+
+```text
+Option A: compensate by deleting/refunding external state
+Option B: persist pending state and reconcile asynchronously
+Option C: use provider idempotency and retry safely
+```
+
+There is no universal rollback across independent systems. Calling `catch` and ignoring the failure leaves hidden inconsistency.
+
+Business workflow design must define observable states such as `pending`, `active`, and `failed`, plus recovery processes.
+
+## Error Budgets and Alerting
+
+Not every `4xx` should page an engineer. Invalid client input is expected traffic. Unexpected `5xx`, dependency unavailability, and rising conflict rates may deserve alerts or investigation.
+
+Structured classification enables useful metrics:
+
+```text
+http_requests_total{route,status}
+application_errors_total{code}
+repository_failures_total{dependency,category}
+```
+
+Labels should avoid user IDs or raw URLs, which create unbounded cardinality. Logs carry request-specific detail; metrics summarize system behavior.
+
+## Privacy in Error Reporting
+
+Error trackers can accidentally capture request bodies, cookies, tokens, email addresses, and database parameters. Redaction should happen before data leaves the application boundary.
+
+A request ID lets support correlate a user's report without placing every private value in the public response.
+
+The safe rule is allowlisting diagnostic fields rather than serializing entire request and context objects.
+
+## Async and Background Failure Boundaries
+
+An outbox worker does not have an HTTP handler waiting for a response. Its error policy includes retries, idempotency, backoff, and dead-letter handling.
+
+```text
+HTTP error boundary      → safe response + request log
+Background worker boundary → retry/dead-letter + job log
+CLI boundary             → exit code + terminal message
+```
+
+The same application error can reach different adapters, which is exactly why services should not choose HTTP status codes.
+
+## Versioning Error Contracts
+
+Clients may build logic around error codes. Renaming `EMAIL_ALREADY_EXISTS` or changing the envelope can be a breaking API change even if the success response is unchanged.
+
+Stable codes, documented field structures, and compatibility tests make failure behavior part of the API contract rather than an afterthought.
+
+## Testing the Error Matrix
+
+```text
+invalid body               → 400, field errors, no service call
+existing email pre-check   → 409
+concurrent unique conflict → 409 with same public code
+missing user               → 404
+forbidden action           → 403
+repository unavailable     → 503 safe body
+unexpected bug             → 500 without stack
+unknown route              → 404 endpoint response
+```
+
+Tests should also assert negative behavior:
+
+- no password hash in response;
+- no database message in response;
+- transaction rolls back;
+- error is logged once with request ID;
+- later dependencies are not called after a business rejection.
+
+## The Complete Responsibility Map
+
+```text
+Router
+  chooses handler
+
+Handler
+  reads HTTP
+  consumes validated boundary data
+  creates explicit command
+  calls service
+  maps result/error to HTTP
+
+Service
+  owns use-case sequence
+  enforces business rules
+  coordinates repositories and external ports
+  defines transaction boundary
+  throws application meaning
+
+Repository
+  owns SQL/ORM operation
+  parameterizes values
+  maps records
+  translates known storage failures
+
+Database
+  enforces constraints under concurrency
+
+Error boundary
+  logs internal failure safely
+  returns stable public contract
+```
+
+## Common Architectural Mistakes
+
+### Fat Handler
+
+Business rules, ORM calls, hashing, and response mapping live together.
+
+### HTTP-Aware Service
+
+The service accepts `req`, sets status codes, or returns Express responses.
+
+### Business-Aware Repository
+
+The repository decides whether an admin may be deleted or sends welcome email.
+
+### Leaky ORM Types
+
+Every layer imports ORM-generated models and errors, making persistence the application architecture.
+
+### Generic Error Wrapping
+
+Every failure becomes “service error,” losing category and cause.
+
+### Premature Abstraction
+
+Interfaces and layers forward calls without protecting any meaningful decision.
+
+## Final Checkpoint Questions
+
+### Which layer maps a unique database violation to application meaning?
+
+The repository recognizes the storage-specific failure; the service translates it into the use-case error when appropriate; the HTTP boundary chooses the public status and response.
+
+### Why preserve `cause`?
+
+It keeps the original diagnostic chain while allowing higher layers to expose safer, more meaningful errors.
+
+### Should every layer catch every error?
+
+No. Catch only to handle, translate, compensate, retry, or add unique context. Otherwise propagate.
+
+### Why are database constraints part of the architecture?
+
+They enforce stored invariants under concurrency, where application pre-checks alone cannot guarantee correctness.
+
+## What Finally Clicked
+
+Before Day 7, I thought clean backend architecture meant placing code in `controllers`, `services`, and `repositories` folders.
+
+Across these seven parts, I learned that the folders are only labels. The architecture lives in the boundaries:
+
+```text
+HTTP representation
+  ↓ handler translation
+Application command
+  ↓ service rules and orchestration
+Persistence operation
+  ↓ repository translation
+Database constraints
+
+Database result
+  ↑ repository mapping
+Application result
+  ↑ handler response mapping
+Safe HTTP response
+```
+
+The handler receives and translates the request. The service gives the use case business meaning. The repository isolates persistence. The database protects stored truth. Errors travel upward, gaining meaning without leaking implementation details.
+
+That is the architecture of clean code—not the maximum number of layers, but the clearest possible ownership of change.

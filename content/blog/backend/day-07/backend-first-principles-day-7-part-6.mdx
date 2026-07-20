@@ -1,0 +1,543 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 6)
+description: Assembling validation, handler, service, repository, dependency injection, transactions, and safe responses into one complete Create User implementation.
+slug: backend-first-principles-day-7-part-6
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 25 min read
+day: 7
+part: 6
+series: Learning Backend from First Principles
+order: 706
+published: true
+tags: [Backend Architecture, TypeScript, Express, Complete Example]
+keywords: [complete backend architecture example, TypeScript Express layers, handler service repository code]
+---
+# Building the Complete Handler → Service → Repository Flow
+
+> *“A complete example should reveal every boundary, not hide the difficult decisions behind comments.”*
+
+## What the Previous Parts Built
+
+Part 1 separated responsibilities. Part 2 traced the lifecycle. Part 3 defined the HTTP handler. Part 4 built the use case. Part 5 isolated persistence.
+
+Now I will assemble one production-minded Create User flow.
+
+```text
+POST /users
+  ↓ validation boundary
+CreateUserCommand
+  ↓ handler
+CreateUserService
+  ↓ repositories/unit of work
+Database
+  ↑ User
+response mapper
+  ↑ 201 Created
+```
+
+## 1. Application Types
+
+```ts
+type UserRole = "user" | "admin";
+
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: UserRole;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type CreateUserCommand = {
+  name: string;
+  email: string;
+  password: string;
+  age?: number;
+};
+
+type NewUserRecord = {
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: UserRole;
+  createdAt: Date;
+};
+```
+
+The password exists in the incoming command only as long as hashing requires it. Persistence receives `passwordHash`, never plaintext.
+
+## 2. Runtime Boundary Schema
+
+```ts
+import { z } from "zod";
+
+const createUserSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(12).max(128),
+  age: z.number().int().min(0).max(150).optional(),
+}).strict();
+```
+
+The strict schema rejects `role`, `passwordHash`, `id`, and arbitrary unknown fields. The boundary does not let a public caller promote itself.
+
+## 3. Repository Contracts
+
+```ts
+interface UserRepository {
+  findByEmail(email: string): Promise<User | null>;
+  create(data: NewUserRecord): Promise<User>;
+}
+
+interface SettingsRepository {
+  createDefaultForUser(userId: string): Promise<void>;
+}
+
+interface OutboxRepository {
+  add(event: OutboxEvent): Promise<void>;
+}
+
+interface TransactionRepositories {
+  users: UserRepository;
+  settings: SettingsRepository;
+  outbox: OutboxRepository;
+}
+
+interface UnitOfWork {
+  run<T>(work: (repositories: TransactionRepositories) => Promise<T>): Promise<T>;
+}
+```
+
+The unit of work exposes transaction-bound repositories so every write uses the same transaction.
+
+## 4. SQL User Repository
+
+```ts
+class SqlUserRepository implements UserRepository {
+  constructor(private readonly db: QueryExecutor) {}
+
+  async findByEmail(email: string): Promise<User | null> {
+    const row = await this.db.oneOrNone<UserRow>(
+      `SELECT id, name, email, password_hash, role, created_at, updated_at
+       FROM users
+       WHERE email = $1 AND deleted_at IS NULL`,
+      [email],
+    );
+
+    return row ? mapUserRow(row) : null;
+  }
+
+  async create(data: NewUserRecord): Promise<User> {
+    try {
+      const row = await this.db.one<UserRow>(
+        `INSERT INTO users
+           (name, email, password_hash, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $5)
+         RETURNING id, name, email, password_hash, role,
+                   created_at, updated_at`,
+        [data.name, data.email, data.passwordHash, data.role, data.createdAt],
+      );
+
+      return mapUserRow(row);
+    } catch (error) {
+      if (isUniqueViolation(error, "users_email_unique")) {
+        throw new EmailConflictPersistenceError({ cause: error });
+      }
+
+      throw error;
+    }
+  }
+}
+```
+
+The repository handles parameterization, row mapping, and vendor-specific unique error recognition.
+
+## 5. Service Dependencies
+
+```ts
+interface PasswordHasher {
+  hash(password: string): Promise<string>;
+}
+
+interface Clock {
+  now(): Date;
+}
+
+type CreateUserServiceDependencies = {
+  users: UserRepository;
+  passwordHasher: PasswordHasher;
+  clock: Clock;
+  unitOfWork: UnitOfWork;
+};
+```
+
+The direct `users` dependency supports the friendly pre-check. Transaction repositories perform the authoritative writes.
+
+## 6. Create User Service
+
+```ts
+class CreateUserService {
+  constructor(private readonly deps: CreateUserServiceDependencies) {}
+
+  async execute(command: CreateUserCommand): Promise<User> {
+    const existing = await this.deps.users.findByEmail(command.email);
+
+    if (existing) {
+      throw new EmailAlreadyExistsError();
+    }
+
+    const passwordHash = await this.deps.passwordHasher.hash(command.password);
+    const now = this.deps.clock.now();
+
+    try {
+      return await this.deps.unitOfWork.run(async (tx) => {
+        const user = await tx.users.create({
+          name: command.name,
+          email: command.email,
+          passwordHash,
+          role: "user",
+          createdAt: now,
+        });
+
+        await tx.settings.createDefaultForUser(user.id);
+
+        await tx.outbox.add({
+          id: crypto.randomUUID(),
+          type: "UserCreated",
+          payload: { userId: user.id, email: user.email },
+          occurredAt: now,
+        });
+
+        return user;
+      });
+    } catch (error) {
+      if (error instanceof EmailConflictPersistenceError) {
+        throw new EmailAlreadyExistsError({ cause: error });
+      }
+
+      throw error;
+    }
+  }
+}
+```
+
+There are two uniqueness protections:
+
+1. the pre-check provides a fast friendly failure;
+2. the database constraint handles the concurrency race.
+
+The service translates both into the same application error.
+
+## 7. Public Response Mapper
+
+```ts
+type UserResponse = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+};
+
+function toUserResponse(user: User): UserResponse {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
+```
+
+The mapper cannot leak `passwordHash` accidentally through object spread.
+
+## 8. HTTP Handler
+
+```ts
+function createUserHandler(service: CreateUserService) {
+  return async function createUser(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const parsed = createUserSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_FAILED",
+            fields: mapValidationIssues(parsed.error.issues),
+          },
+          requestId: req.context.requestId,
+        });
+      }
+
+      const command: CreateUserCommand = {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        password: parsed.data.password,
+        age: parsed.data.age,
+      };
+
+      const user = await service.execute(command);
+
+      res
+        .status(201)
+        .location(`/users/${user.id}`)
+        .json({
+          user: toUserResponse(user),
+          requestId: req.context.requestId,
+        });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+```
+
+## 9. Composition Root
+
+Objects must be constructed somewhere. The application startup is the **composition root**:
+
+```ts
+const db = createDatabase(config.databaseUrl);
+const userRepository = new SqlUserRepository(db);
+const unitOfWork = new SqlUnitOfWork(db);
+const passwordHasher = new BcryptPasswordHasher({ cost: 12 });
+const clock = new SystemClock();
+
+const createUserService = new CreateUserService({
+  users: userRepository,
+  unitOfWork,
+  passwordHasher,
+  clock,
+});
+
+const router = express.Router();
+router.post("/users", createUserHandler(createUserService));
+```
+
+Deep layers do not construct their own dependencies. Startup selects implementations and wires them together.
+
+## 10. Background Outbox Worker
+
+After the transaction commits, a worker publishes the event:
+
+```ts
+async function processUserCreated(event: UserCreatedEvent) {
+  await emailService.sendWelcomeEmail({
+    userId: event.userId,
+    email: event.email,
+    idempotencyKey: event.id,
+  });
+}
+```
+
+The worker needs retry and idempotency because delivery may happen more than once. The HTTP request does not need to wait for an email provider to acknowledge the message.
+
+## Tracing the Successful Flow
+
+```text
+1. Express parses JSON
+2. Handler schema validates and normalizes input
+3. Handler constructs CreateUserCommand
+4. Service checks existing email
+5. Password dependency hashes plaintext
+6. Unit of work begins transaction
+7. Repository inserts user with default role
+8. Settings repository inserts defaults
+9. Outbox repository stores UserCreated event
+10. Transaction commits
+11. Service returns User
+12. Handler maps safe UserResponse
+13. Client receives 201 + Location
+14. Worker eventually sends welcome email
+```
+
+## Tracing Three Failure Paths
+
+### Invalid Input
+
+```text
+schema rejects → handler returns 400
+service/repository/database never run
+```
+
+### Existing Email Found
+
+```text
+service pre-check finds user → EmailAlreadyExistsError
+HTTP error layer returns 409
+```
+
+### Concurrent Duplicate
+
+```text
+pre-check sees none
+database unique constraint rejects insert
+repository recognizes violation
+service translates to EmailAlreadyExistsError
+HTTP layer returns 409
+```
+
+Both duplicate paths produce one public contract.
+
+## Testing the Feature by Boundary
+
+### Schema Tests
+
+Test missing, null, wrong type, unknown role, trimming, casing, sizes, and boundary ages.
+
+### Handler Tests
+
+Test command construction, `201`, `Location`, safe response, and error forwarding.
+
+### Service Tests
+
+Test default role, hashing, existing email, transaction steps, and persistence-conflict translation.
+
+### Repository Integration Tests
+
+Test real SQL, mappings, unique constraint, and transaction rollback.
+
+### End-to-End Tests
+
+Test actual HTTP request through a test database and verify no sensitive fields leave the API.
+
+## Architectural Variations
+
+This example is intentionally explicit. A smaller application may combine command mapping with validation middleware or use an ORM repository. A larger system may separate use-case services, domain entities, domain events, and adapters further.
+
+The non-negotiable principles are:
+
+- raw HTTP input does not flow directly into persistence;
+- business rules do not depend on Express;
+- persistence details do not choose HTTP responses;
+- database constraints protect concurrent stored truth;
+- public responses allowlist safe fields;
+- dependencies point inward through explicit contracts.
+
+## Suggested Feature Structure
+
+```text
+src/users/
+  create-user/
+    create-user.schema.ts
+    create-user.command.ts
+    create-user.service.ts
+    create-user.handler.ts
+    create-user.service.test.ts
+  user.ts
+  user.repository.ts
+  user.errors.ts
+  user.response.ts
+
+src/infrastructure/database/
+  sql-user.repository.ts
+  sql-unit-of-work.ts
+  migrations/
+
+src/app/
+  routes.ts
+  composition-root.ts
+  error-handler.ts
+```
+
+This keeps application policy separate from infrastructure while grouping the use case. A smaller project can use fewer files; the responsibility map matters more than the exact tree.
+
+## Compile-Time Types and Runtime Reality
+
+The example uses TypeScript contracts throughout, but types disappear at runtime. Three runtime boundaries still need protection:
+
+```text
+Network input → schema validation
+Database rows → repository mapping/validation
+External API responses → adapter validation
+```
+
+An interface cannot guarantee a payment provider or database returned a valid shape. Adapters must earn trust for external values.
+
+## Security Review of the Flow
+
+The complete feature should answer:
+
+- Is `role` impossible to assign through public input?
+- Is the password bounded before expensive hashing?
+- Is plaintext discarded and never logged?
+- Are SQL values parameterized?
+- Does the database enforce normalized email uniqueness?
+- Can error responses expose constraint or stack details?
+- Is `passwordHash` excluded through allowlisting?
+- Can outbox delivery duplicate email, and is it idempotent?
+- Are transaction repositories truly bound to one transaction?
+
+Architecture is not automatically secure, but clear boundaries give security rules identifiable enforcement points.
+
+## Performance Review of the Flow
+
+Creating a user involves a pre-check, password hash, transaction writes, and later email. Questions include:
+
+- Is the password hashing cost intentionally calibrated?
+- Can the pre-check use an indexed normalized email?
+- Is the transaction kept short?
+- Is slow email delivery outside the request?
+- Are logs and traces able to identify the slow step?
+
+Moving work into layers does not make it fast. It makes ownership observable enough to improve it.
+
+## Evolution Scenario: Adding Invitations
+
+Suppose registration now requires an invitation token.
+
+The handler schema accepts and validates the token representation. The command adds `invitationToken`. The service asks an invitation repository to verify unused invitation state and consumes it in the transaction. The user repository still only stores users. The response contract may remain unchanged.
+
+```text
+Handler: token is a bounded string
+Service: invitation exists, matches email, and is unused
+Repository: load/consume invitation records
+Database: unique/transaction constraints
+```
+
+The change crosses layers, but each layer changes for its own reason. That is healthy cross-layer evolution rather than leakage.
+
+## Evolution Scenario: Adding Another Transport
+
+A message consumer can reuse the service:
+
+```ts
+async function onImportUser(message: UnknownMessage) {
+  const command = importUserMessageSchema.parse(message);
+  await createUserService.execute(command);
+}
+```
+
+It has its own boundary validation and failure acknowledgment policy. The service and repository remain unchanged because they never depended on Express.
+
+## Checkpoint Questions
+
+### Why are both pre-check and unique constraint present?
+
+The pre-check improves the normal error path; the constraint closes the concurrency race.
+
+### Why use an outbox for welcome email?
+
+Database state and an external email provider cannot share one normal transaction. The outbox durably records delivery intent with the database change.
+
+### Where are concrete implementations selected?
+
+At the composition root during application startup, not inside business services.
+
+### Why does the response mapper avoid object spread?
+
+Explicit fields prevent future internal properties, especially secrets, from becoming public accidentally.
+
+## What I Learned in Part 6
+
+Clean architecture becomes real in the handoffs: validated command, application service contract, repository interface, transaction boundary, entity mapping, and safe response.
+
+Part 7 completes Day 7 by tracing errors across every layer and deciding what each layer should translate, preserve, and expose.

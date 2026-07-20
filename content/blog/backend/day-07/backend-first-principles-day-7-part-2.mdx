@@ -1,0 +1,461 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 2)
+description: Following one HTTP request down through router, handler, service, repository, and database, then tracing the result back into a safe response.
+slug: backend-first-principles-day-7-part-2
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 19 min read
+day: 7
+part: 2
+series: Learning Backend from First Principles
+order: 702
+published: true
+tags: [Request Lifecycle, Backend Architecture, Express]
+keywords: [backend request lifecycle, handler service repository flow, data flow backend]
+---
+# Following a Request Through Every Backend Layer
+
+> *“Data moves downward as a request becomes an operation, then upward as an internal result becomes HTTP.”*
+
+## From Static Boxes to a Moving Request
+
+Part 1 separated handler, service, and repository responsibilities. But a diagram of boxes did not yet tell me what actually happens when a client sends a request.
+
+I will follow one operation throughout this part:
+
+```http
+GET /users/123 HTTP/1.1
+Host: api.example.com
+Accept: application/json
+```
+
+The complete journey is:
+
+```text
+1. HTTP request arrives
+2. Middleware prepares or protects the request
+3. Router matches method and path
+4. Handler translates HTTP input
+5. Service executes the use case
+6. Repository performs persistence work
+7. Database returns stored data
+8. Result travels back through the layers
+9. Handler sends the HTTP response
+```
+
+Day 8 will study middleware deeply. For now, I am focusing on what happens once routing selects the application operation.
+
+## Step 1: The Router Chooses a Destination
+
+```ts
+router.get("/users/:id", userHandler.getById);
+```
+
+The router compares the method and path against registered routes. It captures `123` as the `id` parameter and invokes the selected handler.
+
+```text
+Method: GET
+Path:   /users/123
+Pattern:/users/:id
+Result: userHandler.getById
+```
+
+The router answers **where should this request go?** It should not query the user table or decide whether the user exists.
+
+## Step 2: The Handler Translates HTTP
+
+```ts
+async function getById(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = userIdSchema.parse(req.params.id);
+    const user = await userService.getById(userId);
+
+    res.status(200).json({ user: toUserResponse(user) });
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+The handler extracts an HTTP path parameter, converts it into the application type expected by the service, calls the use case, and formats the result.
+
+The service receives `userId`, not the entire Express request.
+
+## Step 3: The Service Executes the Use Case
+
+```ts
+class UserService {
+  constructor(private readonly users: UserRepository) {}
+
+  async getById(userId: string): Promise<User> {
+    const user = await this.users.findById(userId);
+
+    if (!user) {
+      throw new UserNotFoundError(userId);
+    }
+
+    return user;
+  }
+}
+```
+
+The service asks the repository for the user and turns absence into an application-level meaning: the requested user does not exist.
+
+It does not send `404`; HTTP translation belongs above it. A scheduled job calling the same service may handle that error differently.
+
+## Step 4: The Repository Talks to Persistence
+
+```ts
+class SqlUserRepository implements UserRepository {
+  constructor(private readonly db: Database) {}
+
+  async findById(id: string): Promise<User | null> {
+    const row = await this.db.oneOrNone<UserRow>(
+      `SELECT id, name, email, role, created_at
+       FROM users
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [id],
+    );
+
+    return row ? mapUserRow(row) : null;
+  }
+}
+```
+
+The repository knows the table, columns, placeholders, soft-delete representation, database client, and row mapping.
+
+The query is parameterized. The ID remains data rather than becoming executable SQL text.
+
+## Step 5: Data Travels Back Up
+
+```text
+Database row
+  ↓ repository maps
+User entity or null
+  ↓ service interprets
+User result or UserNotFoundError
+  ↓ handler maps
+HTTP 200 JSON or HTTP 404 error
+```
+
+The same layers participate in both directions, but each transformation has a purpose.
+
+### Success
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "user": {
+    "id": "123",
+    "name": "Alice",
+    "email": "alice@example.com",
+    "role": "user",
+    "createdAt": "2026-07-20T10:00:00.000Z"
+  }
+}
+```
+
+### Not Found
+
+```http
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "User not found"
+  }
+}
+```
+
+The repository returns `null`; it does not choose `404`. The service decides the application operation failed because a required user was absent. The HTTP boundary chooses the status.
+
+## The Downward and Upward Contracts
+
+| Direction | From → To | Data |
+| --- | --- | --- |
+| Down | Router → Handler | `req`, `res`, matched params |
+| Down | Handler → Service | validated application input |
+| Down | Service → Repository | persistence criteria/data |
+| Down | Repository → Database | parameterized query/ORM call |
+| Up | Database → Repository | row/result metadata |
+| Up | Repository → Service | entity, collection, count, or `null` |
+| Up | Service → Handler | use-case result or application error |
+| Up | Handler → Client | status, headers, public body |
+
+Explicit contracts prevent entire framework or ORM objects from leaking through every layer.
+
+## Parsing Is Not Validation
+
+Express JSON middleware may deserialize request bytes before the handler:
+
+```text
+JSON bytes → express.json() → JavaScript value on req.body
+```
+
+Successful parsing only proves that the bytes formed valid JSON. It does not prove the value matches a Create User contract.
+
+```json
+{ "role": "admin" }
+```
+
+This is valid JSON but may be forbidden input for public registration.
+
+Day 6 made this trust transition explicit:
+
+```text
+raw external value
+  ↓ runtime validation and transformation
+CreateUserCommand
+  ↓ service
+business operation
+```
+
+## Create User: A More Complex Journey
+
+```http
+POST /users
+Content-Type: application/json
+
+{
+  "name": " Belema ",
+  "email": "BELEMA@EMAIL.COM",
+  "password": "secret-password"
+}
+```
+
+The boundary produces:
+
+```ts
+type CreateUserCommand = {
+  name: string;
+  email: string;
+  password: string;
+};
+```
+
+```ts
+const command = {
+  name: "Belema",
+  email: "belema@email.com",
+  password: "secret-password",
+};
+```
+
+The service hashes the password through an injected dependency and requests persistence:
+
+```ts
+const passwordHash = await passwordHasher.hash(command.password);
+
+const user = await users.create({
+  name: command.name,
+  email: command.email,
+  passwordHash,
+  role: "user",
+});
+```
+
+The repository maps this persistence input to a database operation. The saved record travels back, and the handler maps it to a public response that excludes `passwordHash`.
+
+## Why Not Return the Database Row Directly?
+
+A row may contain:
+
+```ts
+{
+  id: "123",
+  email: "alice@example.com",
+  password_hash: "$2b$...",
+  verification_token_hash: "...",
+  deleted_at: null,
+  internal_risk_score: 4
+}
+```
+
+Returning it directly leaks storage naming and perhaps sensitive fields. The public contract should be allowlisted:
+
+```ts
+function toUserResponse(user: User) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
+```
+
+This mapper is part of the outward trust boundary.
+
+## A Trace Through Time
+
+```text
+T+0ms   request arrives
+T+1ms   route matched and ID validated
+T+2ms   handler calls service
+T+3ms   service calls repository
+T+8ms   database returns row
+T+9ms   repository maps row to User
+T+10ms  service returns User
+T+11ms  handler maps public response
+T+12ms  response begins
+```
+
+Real timings vary, but tracing reveals which layer owns latency. A slow query belongs to persistence investigation; a slow password hash is expected service work; slow serialization belongs near the response boundary.
+
+## Identity Changes Across the Journey
+
+The data does not merely travel; its meaning changes.
+
+```text
+"123" from URL
+  external string
+      ↓ validate
+UserId
+  trusted application identifier
+      ↓ repository
+$1 query parameter
+  database value
+      ↓ database
+UserRow
+  storage representation
+      ↓ map
+User
+  application representation
+      ↓ response map
+UserResponse
+  public representation
+```
+
+Using the same TypeScript type for all stages hides trust and representation boundaries. Branded IDs or small value objects can make invalid mixing harder in complex systems:
+
+```ts
+type UserId = string & { readonly __brand: "UserId" };
+```
+
+Not every application needs branded types, but the conceptual distinction always exists.
+
+## Read Flow Versus Write Flow
+
+A simple read may pass through with little service logic:
+
+```text
+GET /users/:id
+Handler validates ID
+Service requires existence
+Repository reads
+Handler maps response
+```
+
+A write usually has more coordination:
+
+```text
+POST /users
+Handler validates representation
+Service checks policy, hashes password, defines transaction
+Repository writes
+Database enforces constraints
+Service records event
+Handler returns 201
+```
+
+This explains why forcing identical complexity onto every endpoint can be wasteful. Architecture provides boundaries; each use case determines how much work crosses them.
+
+## Collection Flow and Pagination
+
+Consider:
+
+```http
+GET /users?role=admin&limit=20&cursor=abc
+```
+
+The handler validates query representation and constructs:
+
+```ts
+type ListUsersQuery = {
+  role?: UserRole;
+  limit: number;
+  cursor?: string;
+};
+```
+
+The service applies authorization or product rules, such as whether the caller may list admins. The repository performs a bounded stable query and returns a page. The handler serializes items and the next cursor.
+
+```text
+raw query strings
+  ↓ boundary parsing
+ListUsersQuery
+  ↓ service policy
+UserPage request
+  ↓ repository
+bounded rows + cursor
+  ↓ response mapping
+public page JSON
+```
+
+Without explicit flow, `req.query` can leak into an ORM filter and let clients control fields or query shapes never intended by the API.
+
+## Observability Across Layers
+
+A request ID can correlate the journey, but logs should describe events at the right level:
+
+```text
+HTTP boundary: POST /users returned 201 in 42ms
+Service: CreateUser completed for userId 123
+Repository metrics: users insert took 8ms
+```
+
+Logging every function entrance can create noise. Tracing and metrics can measure layer latency, while structured logs record important outcomes. Secrets and raw passwords never belong in any layer's logs.
+
+## Cancellation and Deadlines
+
+If the client disconnects, deeper work may continue unless dependencies support cancellation. A request deadline can travel as an application/infrastructure signal without passing the whole `req` object.
+
+```text
+HTTP abort signal
+  ↓ adapter converts
+application cancellation/deadline
+  ↓
+repository/HTTP dependency cooperates
+```
+
+Business operations that must finish once committed may have different cancellation rules. The service decides safe semantics; the adapter provides the transport signal.
+
+## Failures Follow the Same Boundaries
+
+| Failure | First discovered by | Meaning added by |
+| --- | --- | --- |
+| Invalid path ID | Boundary/handler | Bad HTTP input |
+| Required user absent | Repository returns `null` | Service creates `UserNotFoundError` |
+| Unique email conflict | Database/repository | Service/application conflict |
+| Unexpected DB outage | Repository/infrastructure | Error boundary returns safe server failure |
+
+Errors move upward just like successful results. Each layer should add meaning only when it understands the failure.
+
+## Checkpoint Questions
+
+### What does the router decide?
+
+It matches the HTTP method and path to a handler and captures route parameters. It does not execute business or persistence policy.
+
+### Why does the service receive an ID instead of `req`?
+
+The service needs application input, not the entire transport object. This reduces coupling and makes the use case callable outside Express.
+
+### Why does the repository return `null` instead of sending `404`?
+
+The repository knows only that no matching record exists. The service and HTTP boundary decide what absence means for the current operation.
+
+### Why should the response not serialize the stored row directly?
+
+Storage models contain internal names and potentially sensitive fields. Public response contracts should explicitly allowlist safe data.
+
+## What I Learned in Part 2
+
+The architecture is a sequence of translations. HTTP becomes validated application input, application input becomes persistence operations, stored results become domain results, and domain results become safe HTTP.
+
+Part 3 focuses on the handler—the layer where external HTTP meets the application.

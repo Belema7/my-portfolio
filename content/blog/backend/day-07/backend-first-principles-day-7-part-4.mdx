@@ -1,0 +1,487 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 4)
+description: Building framework-agnostic services that enforce business rules, orchestrate repositories and external systems, and define transactional use cases.
+slug: backend-first-principles-day-7-part-4
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 22 min read
+day: 7
+part: 4
+series: Learning Backend from First Principles
+order: 704
+published: true
+tags: [Service Layer, Business Logic, Dependency Injection]
+keywords: [service layer, business logic layer, use case architecture]
+---
+# The Service Layer: Where the Use Case Gets Its Meaning
+
+> *“A service accepts application data, enforces business rules, coordinates dependencies, and returns an application result.”*
+
+## The Question After the Handler
+
+Part 3 ended with a handler constructing a validated `CreateUserCommand`. The request is no longer raw HTTP input.
+
+Now the application must decide:
+
+- may this registration happen?
+- which role should be assigned?
+- how should the password be protected?
+- what must be stored atomically?
+- which external effects should happen?
+- what does failure mean?
+
+These are use-case decisions. They belong in the service layer.
+
+## A Framework-Agnostic Function
+
+The definition that helped me is:
+
+> **A service receives explicit application data, applies business rules and orchestration, calls dependencies, and returns a result without depending on HTTP.**
+
+```ts
+async function createUser(command: CreateUserCommand): Promise<User> {
+  // business operation
+}
+```
+
+No `req`, `res`, JSON, cookie, or status code appears in the contract.
+
+The same service could be invoked from:
+
+```text
+Express handler
+CLI command
+scheduled import
+message consumer
+GraphQL resolver
+test
+```
+
+Each adapter translates its external world into the same application command.
+
+## Four Service Responsibilities
+
+```text
+1. Receive trusted application input
+2. Enforce business rules
+3. Coordinate repositories and external services
+4. Return a result or meaningful application error
+```
+
+The service is often called the “business logic layer,” but **orchestration** is equally important. A use case may coordinate several components without containing a complicated formula.
+
+## Business Rules Versus Boundary Validation
+
+```text
+Boundary rule
+  email must be a string in an accepted format
+
+Business rule
+  registration requires a valid invitation
+
+Database invariant
+  normalized email must be unique at commit time
+```
+
+The service may assume runtime shape validation has succeeded, but it must still enforce business truth. A background job can call the service without going through the same HTTP handler, so essential business policy cannot live only in the controller.
+
+## A Complete Create User Service
+
+```ts
+type CreateUserDependencies = {
+  users: UserRepository;
+  passwordHasher: PasswordHasher;
+  unitOfWork: UnitOfWork;
+  events: DomainEventPublisher;
+  clock: Clock;
+};
+
+export class UserService {
+  constructor(private readonly deps: CreateUserDependencies) {}
+
+  async createUser(command: CreateUserCommand): Promise<User> {
+    const existing = await this.deps.users.findByEmail(command.email);
+
+    if (existing) {
+      throw new EmailAlreadyExistsError(command.email);
+    }
+
+    const passwordHash = await this.deps.passwordHasher.hash(command.password);
+    const now = this.deps.clock.now();
+
+    const user = await this.deps.unitOfWork.run(async (transaction) => {
+      const created = await transaction.users.create({
+        name: command.name,
+        email: command.email,
+        passwordHash,
+        role: "user",
+        createdAt: now,
+      });
+
+      await transaction.settings.createDefaultForUser(created.id);
+      await transaction.outbox.add({
+        type: "UserCreated",
+        payload: { userId: created.id, email: created.email },
+        occurredAt: now,
+      });
+
+      return created;
+    });
+
+    return user;
+  }
+}
+```
+
+The service assigns `role: "user"` even if a malicious client attempted to send another role. It coordinates user creation, default settings, and an outbox event in one transaction.
+
+## Why Inject Dependencies?
+
+The service needs password hashing, time, persistence, and event publication. If it imports global implementations directly, tests become slow and nondeterministic.
+
+Interfaces express what it needs:
+
+```ts
+interface PasswordHasher {
+  hash(password: string): Promise<string>;
+}
+
+interface Clock {
+  now(): Date;
+}
+
+interface UserRepository {
+  findByEmail(email: string): Promise<User | null>;
+  create(data: NewUserRecord): Promise<User>;
+}
+```
+
+Production supplies real dependencies; tests supply controlled fakes.
+
+```ts
+const clock = { now: () => new Date("2026-07-20T10:00:00Z") };
+const hasher = { hash: vi.fn().mockResolvedValue("hashed") };
+```
+
+Dependency injection is not only a testing trick. It makes the service's collaborators explicit.
+
+## Orchestrating Multiple Repositories
+
+A Delete User use case might require several facts:
+
+```ts
+async deleteUser(actor: Actor, userId: string): Promise<void> {
+  const user = await this.users.findById(userId);
+  if (!user) throw new UserNotFoundError(userId);
+
+  if (!actor.permissions.includes("user:delete")) {
+    throw new PermissionDeniedError();
+  }
+
+  if (user.role === "admin") {
+    throw new CannotDeleteAdminError();
+  }
+
+  const activeOrders = await this.orders.countActiveByUserId(userId);
+  if (activeOrders > 0) {
+    throw new UserHasActiveOrdersError(userId);
+  }
+
+  await this.unitOfWork.run(async (tx) => {
+    await tx.settings.deleteByUserId(userId);
+    await tx.users.softDelete(userId);
+    await tx.outbox.add({ type: "UserDeleted", payload: { userId } });
+  });
+}
+```
+
+The service owns the sequence because the sequence defines the business operation.
+
+## Transactions: One Business Action, Several Writes
+
+Creating a user and default settings should not leave half-finished state.
+
+```text
+Begin transaction
+  create user
+  create default settings
+  add outbox event
+Commit
+
+If any step fails → Roll back all database writes
+```
+
+The service decides **which operations must be atomic**. The repository or unit-of-work implementation knows **how the database transaction works**.
+
+This preserves responsibility:
+
+```text
+Service: these writes form one business unit
+Infrastructure: BEGIN, COMMIT, ROLLBACK mechanics
+```
+
+## External Calls and the Dual-Write Problem
+
+The original simple workflow might save a user and immediately send email:
+
+```ts
+const user = await users.create(data);
+await emailService.sendWelcomeEmail(user);
+```
+
+What if the database succeeds and email fails? Rolling back a committed database record may be impossible or undesirable. What if email succeeds but a later database commit fails?
+
+Database transactions cannot usually include an external email provider atomically.
+
+The transactional outbox pattern records the event in the same database transaction:
+
+```text
+Transaction
+  insert user
+  insert UserCreated event into outbox
+Commit
+        ↓
+background worker reads outbox
+        ↓
+sends email with retry/idempotency
+```
+
+This is more reliable than pretending every external side effect belongs inside one synchronous transaction.
+
+## Caching Is a Consistency Decision
+
+A read service may check a cache:
+
+```ts
+async getUser(userId: string): Promise<User> {
+  const cached = await cache.get<User>(`user:${userId}`);
+  if (cached) return cached;
+
+  const user = await users.findById(userId);
+  if (!user) throw new UserNotFoundError(userId);
+
+  await cache.set(`user:${userId}`, user, { ttlSeconds: 300 });
+  return user;
+}
+```
+
+But caching creates questions:
+
+- who invalidates the entry after update?
+- can stale data violate authorization?
+- what happens when the cache is unavailable?
+- is cache failure fatal or best-effort?
+- does the cache store internal or public representations?
+
+Putting `cache.get` in a service does not answer those questions. Cache policy is part of the use case's consistency design.
+
+## Service Errors Express Application Meaning
+
+```ts
+class EmailAlreadyExistsError extends Error {
+  readonly code = "EMAIL_ALREADY_EXISTS";
+}
+
+class UserHasActiveOrdersError extends Error {
+  readonly code = "USER_HAS_ACTIVE_ORDERS";
+}
+```
+
+The service throws meaning, not status codes:
+
+```text
+EmailAlreadyExistsError
+  HTTP handler may map to 409
+  CLI may print a message
+  message consumer may reject the event
+```
+
+This keeps the application rule reusable across transports.
+
+## What a Service Should Not Do
+
+### Read Express Objects
+
+```ts
+async createUser(req: Request, res: Response) { /* wrong boundary */ }
+```
+
+### Choose HTTP Status Codes
+
+```ts
+throw { status: 409, message: "..." }; // couples use case to HTTP
+```
+
+### Write Raw SQL
+
+SQL belongs in persistence implementations. The service should speak in repository operations.
+
+### Trust Arbitrary Input
+
+The service receives an explicit command, not an unvalidated object with extra fields.
+
+### Catch and Hide Every Error
+
+```ts
+try { /* ... */ } catch { return null; }
+```
+
+Turning every failure into `null` destroys important meaning. Catch only when the service can translate, compensate, retry, or add useful context.
+
+## Testing Business Rules Without HTTP or a Database
+
+```ts
+it("rejects an existing email", async () => {
+  const users = {
+    findByEmail: vi.fn().mockResolvedValue(existingUser),
+    create: vi.fn(),
+  };
+
+  const service = createService({ users });
+
+  await expect(service.createUser(command))
+    .rejects.toBeInstanceOf(EmailAlreadyExistsError);
+
+  expect(users.create).not.toHaveBeenCalled();
+});
+```
+
+Another test verifies the default role cannot be client-controlled, another verifies password hashing, and another verifies transaction composition.
+
+These tests focus on business behavior, not status codes or SQL syntax.
+
+## When a Service Becomes Too Large
+
+A `UserService` with fifty unrelated methods can become a new god object. Use-case-focused services are often clearer:
+
+```text
+CreateUser
+GetUser
+DeleteUser
+ChangeUserRole
+```
+
+The choice depends on project size, but one class per database table is not automatically the same as a well-defined application boundary.
+
+## Domain Service Versus Application Service
+
+The word “service” can hide two different roles.
+
+An **application service** coordinates a use case: load data, call domain logic, persist, publish events. A **domain service** contains business logic that does not naturally belong to one entity.
+
+```text
+CreateOrder application service
+  loads customer and inventory
+  calls PricingPolicy domain service
+  persists order
+  records event
+```
+
+Small applications can keep both ideas in one use-case service. The distinction becomes useful when business logic grows and orchestration begins to obscure reusable domain rules.
+
+## Ordering External Operations
+
+The sequence of calls is a business decision:
+
+```text
+reserve inventory → authorize payment → create order
+```
+
+But failures reveal complexity. If payment succeeds and order creation fails, the service may need compensation. Distributed systems rarely provide one transaction across inventory, payment, and a local database.
+
+Possible strategies include:
+
+- make operations idempotent;
+- use sagas/compensating actions;
+- persist state transitions before external calls;
+- publish durable events through an outbox;
+- retry only transient failures with bounded backoff.
+
+The service owns the workflow policy, while adapters own provider protocols.
+
+## Concurrency and Optimistic Locking
+
+Suppose two admins update the same user. Both load version `4`; one saves first. Without concurrency control, the second may silently overwrite the first.
+
+```sql
+UPDATE users
+SET name = $1, version = version + 1
+WHERE id = $2 AND version = $3;
+```
+
+If zero rows change, the repository reports a version conflict. The service decides whether to retry, reject, or reload based on use-case semantics.
+
+This is another boundary:
+
+```text
+Repository: update affected zero rows under expected version
+Service: requested state was stale
+HTTP: 409 Conflict or 412 Precondition Failed, depending contract
+```
+
+## Time and Randomness as Dependencies
+
+Calls such as `new Date()` and `crypto.randomUUID()` look harmless but make tests nondeterministic. Important business time can come through dependencies:
+
+```ts
+interface Clock { now(): Date }
+interface IdGenerator { next(): string }
+```
+
+A password reset expiry test can then assert exact boundaries without sleeping or mocking global time.
+
+Not every timestamp needs this abstraction, but policy-relevant time benefits from control.
+
+## Service Result Types
+
+Exceptions are one way to represent failure. Another is an explicit result:
+
+```ts
+type CreateUserResult =
+  | { ok: true; user: User }
+  | { ok: false; reason: "EMAIL_EXISTS" };
+```
+
+Results make expected branches visible in the type system; exceptions can keep the success path concise and work well with centralized error handling. The project should choose consistently based on language and framework ergonomics.
+
+Unexpected bugs should not be disguised as expected result variants.
+
+## Service-Level Authorization
+
+Broad authentication can occur before the service, but essential permission rules should remain protected at the use-case boundary:
+
+```ts
+async changeRole(command: ChangeRoleCommand) {
+  if (!command.actor.permissions.includes("user:change-role")) {
+    throw new PermissionDeniedError();
+  }
+
+  // continue operation
+}
+```
+
+This protects the rule when the service is called from a CLI, message handler, or new transport that might not share the original HTTP middleware.
+
+## Checkpoint Questions
+
+### Why should the service not assume HTTP?
+
+Business operations may be invoked from other adapters, and HTTP-specific dependencies make testing and reuse harder.
+
+### Who decides that several writes need one transaction?
+
+The service defines the business unit of work; infrastructure implements transaction mechanics.
+
+### Why can email not simply join the database transaction?
+
+An external email provider does not share the local database transaction. Reliable workflows often use an outbox and background delivery.
+
+### Does the service validate anything?
+
+It enforces business rules and invariants. Boundary schemas handle external representation and runtime shape. The word “validation” spans different responsibilities.
+
+## What I Learned in Part 4
+
+The service is the heart of the use case because it owns business meaning and orchestration while remaining independent of HTTP and storage mechanics.
+
+Part 5 moves to the repository—the boundary that translates application persistence needs into database operations.

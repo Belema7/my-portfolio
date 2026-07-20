@@ -1,0 +1,379 @@
+---
+title: Day 7 — Handler, Service, and Repository Architecture (Part 1)
+description: Why growing endpoints become difficult to change, and how separation of concerns creates clear handler, service, and repository boundaries.
+slug: backend-first-principles-day-7-part-1
+date: '2026-07-20'
+category: Learning Journey
+readingTime: 18 min read
+day: 7
+part: 1
+series: Learning Backend from First Principles
+order: 701
+published: true
+tags: [Backend Architecture, Separation of Concerns, TypeScript]
+keywords: [handler service repository architecture, three layer architecture, separation of concerns]
+---
+# Why One Endpoint Should Not Become the Entire Application
+
+> *“The goal is not more files. The goal is to give every kind of decision one clear owner.”*
+
+## The Endpoint That Tried to Do Everything
+
+In Day 6, I learned that incoming data cannot be trusted merely because it came from my own frontend. I followed one Create User request through parsing, validation, transformation, business rules, and database constraints.
+
+But that lesson created a new architectural question.
+
+Once the request is valid, where should all the remaining work live?
+
+My first answer was one route function:
+
+```ts
+app.post("/users", async (req, res) => {
+  // validate input
+  // normalize email
+  // check whether email exists
+  // hash password
+  // insert user
+  // create default settings
+  // send welcome email
+  // catch database errors
+  // choose HTTP status
+  // shape public response
+});
+```
+
+At first, this felt convenient. I could see the entire operation in one place. There were fewer files and no unfamiliar abstractions.
+
+Then the comments became real code.
+
+The route learned about HTTP headers, validation schemas, business policies, password hashing, SQL or ORM behavior, transactions, email delivery, database errors, status codes, and public response formatting. A change to any of those responsibilities meant changing the same function.
+
+The problem was not just that the function became long.
+
+> **Was it difficult because it had many lines, or because one function owned decisions that change for completely different reasons?**
+
+That distinction changed how I understood clean architecture.
+
+## Random Helpers Do Not Automatically Create Architecture
+
+I could split the route into helpers:
+
+```ts
+async function createUserHelper(req, res) {
+  // validate req.body
+  // hash password
+  // execute SQL
+  // select HTTP status
+}
+```
+
+The route is shorter, but the helper still knows Express, business rules, password policy, persistence, and HTTP responses. I moved code without creating a meaningful boundary.
+
+A real boundary answers questions such as:
+
+- Which part is allowed to know about HTTP?
+- Which part owns the business decision?
+- Which part knows how data is stored?
+- What shape crosses from one layer to another?
+- Where should a change naturally belong?
+
+Architecture is about responsibility and dependency, not the number of folders.
+
+## Separation of Concerns
+
+The simplest definition that clicked for me is:
+
+> **Code that changes for different reasons should not be forced to live in the same place.**
+
+Consider a Create User operation:
+
+| Concern | It changes when... |
+| --- | --- |
+| HTTP handler | route contract, status, headers, or response shape changes |
+| Service | registration policy or use-case sequence changes |
+| Repository | query, ORM, storage mapping, or persistence technology changes |
+| Database | schema, constraints, indexes, or transaction rules change |
+
+These may change together during a feature, but they are not the same responsibility.
+
+## The Three Main Layers
+
+The architecture gives each kind of decision a home:
+
+| Layer | Owns | Should not own |
+| --- | --- | --- |
+| Handler/controller | HTTP extraction, boundary result, service call, HTTP response | Business workflow or SQL |
+| Service | Use-case orchestration and business rules | Express `req`/`res` or database-specific queries |
+| Repository | Persistence operations and record mapping | HTTP responses or business policy |
+
+The high-level lifecycle becomes:
+
+```text
+Client Request
+      ↓
+Router
+      ↓
+Handler / Controller
+      ↓
+Service
+      ↓
+Repository
+      ↓
+Database
+```
+
+The result returns upward:
+
+```text
+Database Result
+      ↑
+Repository
+      ↑
+Service
+      ↑
+Handler
+      ↑
+HTTP Response
+```
+
+The golden rule I want to remember is:
+
+> **The handler receives and translates HTTP, the service owns the use case, and the repository talks to persistence. Keep those responsibilities separate.**
+
+## A Restaurant Analogy
+
+I picture a restaurant.
+
+The waiter receives the customer's order in the language of the menu. The kitchen decides how the meal must be prepared. The storekeeper tracks ingredients and communicates with inventory.
+
+```text
+Customer request → Waiter → Kitchen → Inventory
+HTTP request     → Handler → Service → Repository
+```
+
+The waiter should not leave the dining room to query warehouse shelves. The storekeeper should not decide whether a customer is allowed to substitute an ingredient. The kitchen should not choose the HTTP status code printed on a web response.
+
+The analogy has limits. Real code boundaries exchange explicit data structures, and a repository is not literally a warehouse employee. But it helps me see why one participant should not own the entire operation.
+
+## What Do We Gain?
+
+### Testability
+
+A service that accepts a command and repository contract can be tested without Express or a real database:
+
+```ts
+const repository = {
+  findByEmail: vi.fn().mockResolvedValue(null),
+  create: vi.fn().mockResolvedValue(savedUser),
+};
+
+const service = new UserService(repository, passwordHasher);
+const result = await service.createUser(command);
+```
+
+### Maintainability
+
+A response-field change belongs in the HTTP boundary. A registration-policy change belongs in the service. An index or query optimization belongs in persistence.
+
+### Replaceable Infrastructure
+
+If services depend on repository contracts rather than raw ORM clients, persistence details can change with less impact on business rules.
+
+### Consistency
+
+Handlers follow one HTTP policy, services use shared business errors, and repositories map storage results predictably.
+
+### Reduced Coupling
+
+The service does not need to know whether it was called from Express, a scheduled job, a message consumer, or a command-line tool.
+
+## The Cost and the Risk of Overengineering
+
+Separation is not free:
+
+- more names and files;
+- more data contracts and handoffs;
+- more decisions about ownership;
+- more dependency wiring;
+- a risk of adding abstractions before they solve a real problem.
+
+A tiny read-only prototype may not need a class and interface for every arrow. One simple route can call a small query function without becoming unmaintainable.
+
+The opposite mistake is creating layers that only forward values:
+
+```ts
+handler → service.getUser(id) → repository.getUser(id) → ORM.getUser(id)
+```
+
+This can still be reasonable if the boundaries are expected to grow or provide test seams, but adding three files does not automatically make the design clean.
+
+> **Use the fewest boundaries that clearly separate decisions the application actually needs to protect.**
+
+## Layers Are Responsibilities, Not Necessarily Classes
+
+The architecture can use functions:
+
+```ts
+export function createUserService(dependencies: Dependencies) {
+  return async function createUser(command: CreateUserCommand) {
+    // business rules
+  };
+}
+```
+
+It can use classes:
+
+```ts
+class UserService {
+  constructor(private users: UserRepository) {}
+}
+```
+
+It can organize code by feature rather than one global `services` directory:
+
+```text
+users/
+  create-user.handler.ts
+  create-user.service.ts
+  user.repository.ts
+```
+
+The file layout and programming style are secondary. The important boundary is what each part knows and why it changes.
+
+## A Responsibility Classification Exercise
+
+| Operation | Natural owner | Reason |
+| --- | --- | --- |
+| Read `req.params.id` | Handler | HTTP representation |
+| Decide public registration cannot assign `admin` | Service/boundary policy | Business/security rule |
+| Hash a password | Service through dependency | Use-case security operation |
+| Execute parameterized `INSERT` | Repository | Persistence concern |
+| Enforce unique email under concurrency | Database | Stored-data invariant |
+| Return `201 Created` | Handler | HTTP semantics |
+| Hide `passwordHash` | Response mapper/handler | Public contract |
+
+Some decisions sit near a boundary between layers, so consistency matters more than pretending there is always one universal answer.
+
+## Dependency Direction
+
+The arrows in a request diagram show runtime calls, but architecture also has compile-time dependencies.
+
+```text
+Handler → Service contract → Repository contract
+                              ↑
+                    SQL implementation
+```
+
+The service can define the repository capability it needs. A SQL or ORM adapter implements that contract. This is dependency inversion: business policy does not need to import a concrete database client.
+
+Without inversion:
+
+```ts
+class UserService {
+  async createUser(command: CreateUserCommand) {
+    return prisma.user.create({ data: command });
+  }
+}
+```
+
+The service now knows Prisma input shapes and errors. With a contract:
+
+```ts
+interface UserRepository {
+  create(data: NewUserRecord): Promise<User>;
+}
+
+class UserService {
+  constructor(private readonly users: UserRepository) {}
+}
+```
+
+The persistence implementation depends on the application contract rather than forcing the application to depend on the implementation.
+
+## Coupling and Cohesion
+
+Two terms helped me judge boundaries:
+
+**Coupling** asks how strongly one part depends on another. **Cohesion** asks whether the code inside one part belongs together.
+
+A handler with SQL has high coupling to the database and low cohesion because HTTP translation and persistence mechanics change for different reasons.
+
+A focused repository has high cohesion: its query and mapping code changes together when persistence changes. A service depending on a narrow repository interface has lower coupling than one depending on the entire ORM client.
+
+The goal is not zero coupling—software components must cooperate. The goal is explicit, narrow, directional coupling.
+
+## Feature Slices Versus Horizontal Folders
+
+A small project often begins with:
+
+```text
+controllers/
+services/
+repositories/
+```
+
+As the codebase grows, finding one feature requires jumping across large global folders. A feature slice keeps related boundaries near each other:
+
+```text
+users/
+  create-user/
+    create-user.handler.ts
+    create-user.service.ts
+    create-user.schema.ts
+  user.repository.ts
+  sql-user.repository.ts
+```
+
+The layers still exist, but the primary organization follows business capability. This can improve discoverability and reduce accidental dependencies across unrelated domains.
+
+## Architecture Under Change
+
+I tested the design with change scenarios:
+
+| Change | Expected impact |
+| --- | --- |
+| Return `Location` header | Handler only |
+| Registration now requires invitation | Service and its dependency |
+| Move from raw SQL to an ORM | Repository implementation |
+| Add unique normalized-email constraint | Database and error translation |
+| Add CLI user import | New adapter reusing service |
+
+If every change edits every layer, the boundaries may be leaky. Some cross-layer changes are legitimate—a new field can affect contract, service, persistence, and response—but each edit should still reflect that layer's own concern.
+
+## The “Pass-Through Layer” Question
+
+Sometimes a service contains only:
+
+```ts
+return users.findById(id);
+```
+
+Should I delete it? Maybe.
+
+Reasons to keep the service boundary include a stable use-case API, authorization or caching expected soon, and consistency across a feature. Reasons to remove it include needless indirection in a simple application with no business decision.
+
+I should make that tradeoff consciously rather than obey “every route needs three classes.”
+
+## Checkpoint Questions
+
+### Why is a long function not automatically bad?
+
+Length is a symptom, not the root cause. The deeper problem is owning responsibilities that change for unrelated reasons.
+
+### Does creating more files guarantee separation of concerns?
+
+No. A helper that still knows HTTP, business rules, and SQL preserves the same coupling under a different filename.
+
+### Why should the service avoid Express objects?
+
+Business rules become easier to test and reuse when they accept explicit application data rather than transport-specific `req` and `res` objects.
+
+### Do all endpoints require all three layers?
+
+Not always. A trivial endpoint may not need a meaningful service. Boundaries should solve actual complexity rather than satisfy a diagram mechanically.
+
+## What I Learned in Part 1
+
+The three-layer architecture solves a responsibility problem, not a file-length problem. Handlers translate HTTP, services own use cases, and repositories own persistence.
+
+Part 2 follows one request down and back up these layers so the architecture becomes an execution model rather than a static diagram.
