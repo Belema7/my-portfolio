@@ -4,7 +4,7 @@ import type { Project } from "@/types/content";
 import { Badge } from "@/components/ui/Badge";
 
 export function ProjectCard({ project }: { project: Project }) {
-  const { title, slug, description, problem, techStack, image, type, liveUrl, githubUrl } =
+  const { title, slug, description, challenge, techStack, image, type, liveUrl, githubUrl } =
     project;
 
   const visibleTech = techStack.slice(0, 4);
@@ -44,10 +44,10 @@ export function ProjectCard({ project }: { project: Project }) {
           {description}
         </p>
 
-        {/* Problem block */}
+        {/* Challenge block */}
         <div className="mt-3 hidden border-t border-[var(--color-border)] pt-3 sm:block">
-          <p className="label-numbered mb-1">// Problem</p>
-          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">{problem}</p>
+          <p className="label-numbered mb-1">// Challenge</p>
+          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)] line-clamp-3">{challenge}</p>
         </div>
 
         {/* Tech stack */}

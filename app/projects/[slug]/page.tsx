@@ -55,7 +55,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         <div className="mt-6 flex flex-wrap gap-3">
           {project.liveUrl && (
             <AppButton href={project.liveUrl} external>
-              Live Demo
+              Live Site
             </AppButton>
           )}
           {project.githubUrl && (
@@ -76,19 +76,31 @@ export default async function ProjectDetailPage({ params }: Props) {
           />
         </div>
 
-        <CaseStudySection title="Overview">{project.overview}</CaseStudySection>
-        <CaseStudySection title="Problem">{project.problem}</CaseStudySection>
-        <CaseStudySection title="Solution">{project.solution}</CaseStudySection>
+        {/* ── Case Study Sections ──────────────────────────── */}
 
-        <CaseStudyList title="Main Features" items={project.features} />
+        <CaseStudySection title="Project Summary">
+          {project.projectSummary}
+        </CaseStudySection>
+
+        <CaseStudySection title="Client">
+          {project.client}
+        </CaseStudySection>
+
+        <CaseStudySection title="Challenge">
+          {project.challenge}
+        </CaseStudySection>
+
+        <CaseStudySolution solution={project.solution} />
+
+        <CaseStudyList title="Results" items={project.results} />
+
+        <CaseStudyList title="My Role" items={project.myRole} />
+
         <CaseStudyTechStack techStack={project.techStack} />
 
-        {project.architectureNotes && (
-          <CaseStudySection title="Architecture">{project.architectureNotes}</CaseStudySection>
-        )}
-
-        <CaseStudyList title="Challenges" items={project.challenges} />
-        <CaseStudyList title="What I Learned" items={project.lessons} />
+        <CaseStudySection title="Key Takeaways">
+          {project.keyTakeaways}
+        </CaseStudySection>
 
         {project.screenshots.length > 1 && (
           <div className="mt-12">
@@ -135,6 +147,27 @@ function CaseStudySection({
   );
 }
 
+function CaseStudySolution({ solution }: { solution: string }) {
+  const paragraphs = solution.split("\n\n").filter(Boolean);
+  return (
+    <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
+      <h2 className="text-lg font-semibold tracking-tight text-[var(--color-primary)]">
+        Solution
+      </h2>
+      <div className="mt-3 space-y-4">
+        {paragraphs.map((paragraph, i) => (
+          <p
+            key={i}
+            className="leading-relaxed text-[var(--color-text-secondary)]"
+          >
+            {paragraph}
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function CaseStudyList({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
@@ -160,7 +193,7 @@ function CaseStudyTechStack({ techStack }: { techStack: string[] }) {
   return (
     <section className="mt-10 rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
       <h2 className="text-lg font-semibold tracking-tight text-[var(--color-primary)]">
-        Tech Stack
+        Technologies
       </h2>
       <div className="mt-4 flex flex-wrap gap-2">
         {techStack.map((tech) => (

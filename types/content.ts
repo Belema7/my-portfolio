@@ -9,19 +9,19 @@ export type Project = {
   title: string;
   slug: string;
   description: string;
-  overview: string;
-  problem: string;
+  projectSummary: string;
+  client: string;
+  challenge: string;
   solution: string;
+  results: string[];
+  myRole: string[];
+  keyTakeaways: string;
   image: string;
   techStack: string[];
   type: ProjectType;
   featured: boolean;
   liveUrl?: string;
   githubUrl?: string;
-  features: string[];
-  challenges: string[];
-  lessons: string[];
-  architectureNotes?: string;
   screenshots: string[];
 };
 
