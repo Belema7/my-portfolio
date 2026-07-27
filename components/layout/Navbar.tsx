@@ -10,15 +10,13 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/projects", label: "Projects", index: "001" },
-  { href: "/learning", label: "Learning", index: "002" },
-  { href: "/writing",  label: "Writing",  index: "003" },
-  { href: "/about",    label: "About",    index: "004" },
-  { href: "/contact",  label: "Contact",  index: "005" },
+  { href: "/writing",  label: "Writing",  index: "002" },
+  { href: "/about",    label: "About",    index: "003" },
+  { href: "/contact",  label: "Contact",  index: "004" },
 ];
 
 const mobileNavLinks = [
   ...navLinks,
-  { href: "/shelf", label: "Shelf", index: "006" },
 ];
 
 /** Geometric logo mark — two horizontal stacked bars like ▣ */
