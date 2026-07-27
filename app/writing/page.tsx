@@ -31,6 +31,8 @@ export default async function WritingPage(props: Props) {
   return (
     <main className="section">
       <Container>
+        <TabsNavigation tabs={tabs} activeTabId={tab} />
+
         <p className="label-numbered">Insights / 002</p>
         <h1 className="mt-4 text-4xl font-bold md:text-6xl">
           {tab === "writing" && "Writing"}
@@ -42,8 +44,6 @@ export default async function WritingPage(props: Props) {
           {tab === "learning" && "Structured learning journeys where I document concepts from first principles, connect theory to implementation, and record what I genuinely understand."}
           {tab === "shelf" && "Books I have finished and films, series, and documentaries I have watched."}
         </p>
-
-        <TabsNavigation tabs={tabs} activeTabId={tab} />
 
       </Container>
       
