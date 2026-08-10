@@ -1,0 +1,879 @@
+---
+title: "Why Express Exists: The Layer Between Node.js and an Application"
+description: Understanding the gap between Node's HTTP module and a maintainable web application, what Express adds, how its core architecture works, and where the framework deliberately stops.
+slug: backend-first-principles-day-10-part-1
+date: '2026-08-10'
+category: Learning Journey
+readingTime: 22 min read
+day: 10
+part: 1
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Express.js from First Principles
+partSlug: part-01
+order: 1001
+published: true
+tags: [Express, Node.js, Web Frameworks, Backend Architecture]
+keywords: [why Express exists, what Express does, Express architecture, Node HTTP vs Express]
+---
+# Why Express Exists: The Layer Between Node.js and an Application
+
+> *“Express does not replace Node.js HTTP. It organizes the work that begins after an HTTP request reaches my application.”*
+
+## The Question After Designing an API
+
+Day 9 taught me how to design an HTTP API as a coherent contract. I learned to think in resources, representations, methods, status codes, idempotency, pagination, filtering, sorting, and domain actions.
+
+By the end of that day, I could describe what a well-designed API should do.
+
+But a design is not yet a running server.
+
+Eventually, a real Node.js process must receive a request, inspect its method and URL, select the correct handler, parse input, run shared policies, and construct a response. Node's built-in `http` module gives me the primitives needed to do that, but it does not organize the whole application for me.
+
+That left the next question:
+
+> **What sits between Node's low-level HTTP primitives and the application I actually want to build?**
+
+Express is one answer to that question.
+
+It is not a replacement runtime, a database toolkit, or a complete application architecture. Express is a small web framework that adds routing, middleware composition, and convenient request-response APIs on top of Node.js.
+
+Day 10 begins by understanding why that layer exists before I depend on it.
+
+## 1. Introduction: The Need for Express
+
+### What Raw Node.js Already Gives Me
+
+Node.js can create an HTTP server without Express:
+
+```js
+import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ message: "Hello" }));
+});
+
+server.listen(3000);
+```
+
+This is already a real server. Node listens for connections, parses incoming HTTP messages, gives my callback a request object, and gives me a response object that can write back to the client.
+
+Express does not make any of those capabilities possible for the first time. Node already has them.
+
+The gap appears when the application grows.
+
+Suppose I need these routes:
+
+```text
+GET    /books
+GET    /books/:bookId
+POST   /books
+PATCH  /books/:bookId
+DELETE /books/:bookId
+```
+
+With only the raw HTTP module, I must decide how to:
+
+- separate the pathname from the query string;
+- compare both method and path;
+- recognize dynamic values such as `:bookId`;
+- decode URL components safely;
+- collect and parse a streamed request body;
+- reject malformed JSON and oversized payloads;
+- set status codes and content types consistently;
+- reuse authentication and logging across routes;
+- distinguish unmatched routes from application failures;
+- keep all of this understandable as the route count grows.
+
+I could implement every one of those features myself. The question is not whether I can. The question is whether rebuilding the same general web-application machinery is the best use of my attention.
+
+### The Growing `if` Statement
+
+A small raw Node server can begin like this:
+
+```js
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (req.method === "GET" && url.pathname === "/books") {
+    return listBooks(req, res);
+  }
+
+  if (req.method === "POST" && url.pathname === "/books") {
+    return createBook(req, res);
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/books/")) {
+    const bookId = url.pathname.split("/")[2];
+    return getBook(req, res, bookId);
+  }
+
+  res.statusCode = 404;
+  res.end("Not Found");
+});
+```
+
+This works for a few routes, but several concerns are already mixed together:
+
+```text
+HTTP transport
+  + URL parsing
+  + route matching
+  + parameter extraction
+  + handler selection
+  + error behavior
+  + response formatting
+```
+
+As more routes arrive, the conditional tree grows. Shared behavior gets copied or hidden in helpers that every branch must remember to call. The problem is no longer receiving HTTP. It is consistently coordinating application behavior around HTTP.
+
+### Why Frameworks Exist
+
+A framework packages recurring decisions and gives them a shared vocabulary.
+
+Instead of inventing a route table, a middleware convention, and response helpers for every project, I can use interfaces understood by the framework and by other developers:
+
+```js
+app.get("/books", listBooks);
+app.get("/books/:bookId", getBook);
+app.post("/books", createBook);
+```
+
+The value is larger than shorter syntax.
+
+Frameworks can improve:
+
+- **productivity**—common web behavior does not need to be rebuilt;
+- **consistency**—routes and cross-cutting concerns follow recognizable patterns;
+- **maintainability**—the code communicates intent instead of low-level plumbing;
+- **collaboration**—developers share conventions and terminology;
+- **ecosystem reuse**—well-known extension points allow compatible packages and tools.
+
+The tradeoff is abstraction. When I use Express, some control flow becomes framework-managed. If I only memorize `app.get()` and `res.json()`, bugs involving route order, middleware flow, or response state can feel mysterious.
+
+That is why I want to learn Express from the bottom up: not to avoid the abstraction, but to know what it is doing for me.
+
+## 2. Express in the Node.js Ecosystem
+
+### Express Is a Layer, Not a Separate Runtime
+
+The relationship is:
+
+```text
+Operating system networking
+        ↓
+Node.js runtime and core HTTP module
+        ↓
+Express routing and middleware layer
+        ↓
+My handlers and application logic
+        ↓
+Database, queues, external services
+```
+
+My Express application still runs inside Node.js. It still receives Node request and response objects. It still depends on the event loop, streams, sockets, headers, and HTTP rules I studied earlier.
+
+Express makes those primitives easier to compose into a web application.
+
+### What Express Adds
+
+Express mainly adds three families of capability.
+
+#### 1. Routing
+
+Express maps an HTTP method and a path pattern to one or more callbacks:
+
+```js
+app.get("/books/:bookId", getBook);
+app.post("/books", createBook);
+```
+
+The router checks whether the request matches and makes named path values available through `req.params`.
+
+#### 2. Middleware Composition
+
+Express lets functions participate in an ordered request-response pipeline:
+
+```js
+app.use(requestId);
+app.use(express.json());
+app.use(authentication);
+app.use("/books", booksRouter);
+app.use(errorHandler);
+```
+
+Each layer can inspect or enrich the request, change the response, pass control forward, or finish the cycle.
+
+#### 3. Request and Response Conveniences
+
+Express enhances the native objects with APIs such as:
+
+```js
+req.params
+req.query
+req.get("authorization")
+
+res.status(201)
+res.json({ data: book })
+res.send("Created")
+res.set("Location", `/books/${book.id}`)
+```
+
+These APIs reduce repeated header, serialization, and routing work. They do not change the underlying HTTP meaning.
+
+### What Express Does Not Do
+
+Understanding the boundary is as important as understanding the features.
+
+Express does not choose or provide my:
+
+- database;
+- ORM or query builder;
+- database schema;
+- authentication strategy;
+- authorization policy;
+- runtime validation rules;
+- business logic;
+- folder structure;
+- service and repository boundaries;
+- logging and observability strategy;
+- background-job system;
+- deployment platform.
+
+It also does not make an API secure, RESTful, scalable, or maintainable automatically.
+
+This code uses Express, but the design is still weak:
+
+```js
+app.post("/doEverything", async (req, res) => {
+  // trust all input
+  // query the database directly
+  // mix authorization with persistence
+  // expose internal errors
+  // return 200 for every outcome
+});
+```
+
+Express gives me a mechanism. Earlier days still guide how I use it:
+
+```text
+Day 5  → authentication and authorization decisions
+Day 6  → validation and transformation
+Day 7  → handler, service, and repository boundaries
+Day 8  → middleware and request context
+Day 9  → REST and HTTP interface design
+Day 10 → implementing those ideas with Express
+```
+
+That sequence changes how I see the framework. Express is not the architecture. It is one tool inside the architecture.
+
+## 3. Core Features: A First Deep Dive
+
+### Routing: Method Plus Path Plus Callbacks
+
+An Express route has three main questions:
+
+```text
+Which HTTP method?
+Which path pattern?
+Which callback or callback chain should run?
+```
+
+```js
+app.get("/books/:bookId", (req, res) => {
+  const { bookId } = req.params;
+  res.json({ id: bookId });
+});
+```
+
+For `GET /books/book_123`, Express matches the method and path, extracts `book_123`, and exposes it as `req.params.bookId`.
+
+The method is not decoration. These are different routes:
+
+```js
+app.get("/books", listBooks);
+app.post("/books", createBook);
+```
+
+That maps naturally to the HTTP semantics from Day 9. The path identifies the collection; the method communicates the general operation.
+
+Routing removes my manual conditional tree, but it does not remove design responsibility. I must still choose meaningful resource paths, correct methods, safe parameter handling, and predictable outcomes.
+
+### Middleware: An Ordered Chain of Responsibility
+
+Express describes itself as a routing and middleware framework. An application is largely an ordered series of functions.
+
+```js
+function requestLogger(req, res, next) {
+  console.log(req.method, req.originalUrl);
+  next();
+}
+
+app.use(requestLogger);
+```
+
+Middleware resembles the **Chain of Responsibility** pattern: a request moves through an ordered chain of potential processors. Each processor decides what to do and whether control should continue.
+
+```text
+Request
+  ↓
+Request ID middleware
+  ↓
+JSON parser
+  ↓
+Authentication middleware
+  ↓
+Route handler
+  ↓
+Response
+```
+
+A middleware has several possible outcomes:
+
+```text
+next()       → continue through normal middleware
+next(error)  → enter the error-handling path
+res.send(...) → finish the response
+no action    → leave the request hanging
+```
+
+Day 8 explored these mechanics in depth. Express now gives me the concrete framework in which that mental model operates.
+
+The important detail is that the chain is not discovered from folder names. It is created by registration order.
+
+### Response Helpers: `status()`, `json()`, and `send()`
+
+The native Node response API is explicit:
+
+```js
+res.statusCode = 201;
+res.setHeader("Content-Type", "application/json");
+res.end(JSON.stringify({ data: book }));
+```
+
+Express can express the same intent more directly:
+
+```js
+res.status(201).json({ data: book });
+```
+
+These helpers have different responsibilities:
+
+| API | Main responsibility |
+| --- | --- |
+| `res.status(code)` | Sets the HTTP response status |
+| `res.json(value)` | Serializes a value as JSON and sends it |
+| `res.send(value)` | Sends a response body with type-aware behavior |
+| `res.set(name, value)` | Sets a response header |
+| `res.render(view, data)` | Renders a configured server-side template |
+
+`res.status()` does not complete the response by itself. It changes the status that will be sent later:
+
+```js
+res.status(404);
+res.json({ error: "Book not found" });
+```
+
+Because Express response methods usually return the response object, they can be chained:
+
+```js
+return res
+  .status(201)
+  .set("Location", `/books/${book.id}`)
+  .json({ data: book });
+```
+
+The chain is convenient, but HTTP still has one response lifecycle. Once headers and a terminal body are sent, another handler must not attempt a second response.
+
+### A Clarification About `.param()`
+
+It is easy to group `.param()` with request and response helpers because its name sounds similar. However, in modern Express, parameter callbacks belong to the application or router:
+
+```js
+app.param("bookId", async (req, res, next, bookId) => {
+  try {
+    const book = await bookRepository.findById(bookId);
+
+    if (!book) {
+      return res.status(404).json({ error: "Book not found" });
+    }
+
+    req.book = book;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+When a matching route contains `:bookId`, the callback can validate or resolve that parameter before the route handler runs.
+
+```js
+app.get("/books/:bookId", (req, res) => {
+  res.json({ data: req.book });
+});
+```
+
+The distinctions are:
+
+```text
+req.params.bookId   → the captured value for this request
+app.param(...)      → registers preprocessing for a named parameter
+router.param(...)   → the router-scoped form of that registration
+```
+
+This is not the same thing as a general `req.param()` helper. Keeping the ownership clear prevents me from memorizing a misleading API category.
+
+### Template Engine Support and Server-Side Rendering
+
+Express is commonly used for JSON APIs, but it can also render HTML on the server.
+
+A template engine combines a template with runtime data:
+
+```text
+Template file + application data → generated HTML → browser
+```
+
+For example, after installing and configuring a compatible view engine:
+
+```js
+app.set("view engine", "pug");
+
+app.get("/books/:bookId", async (req, res, next) => {
+  try {
+    const book = await bookRepository.findById(req.params.bookId);
+    res.render("book", { book });
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+Here the response is HTML rather than JSON. Express delegates the template transformation to the configured engine and sends the result.
+
+Template engines are optional. Express does not force an application to be:
+
+- an API-only server;
+- a server-rendered website;
+- a backend for a single-page application;
+- a particular combination of those approaches.
+
+That flexibility is useful, but it is another decision the application owner must make.
+
+## 4. Express Architecture: How the Pieces Fit
+
+### The Application Object: `app`
+
+I create an Express application by calling the exported `express` function:
+
+```js
+import express from "express";
+
+const app = express();
+```
+
+The resulting `app` object is the central composition point. It can:
+
+- register routes with `app.get()`, `app.post()`, and other method APIs;
+- mount middleware with `app.use()`;
+- configure settings with `app.set()`;
+- register parameter callbacks with `app.param()`;
+- configure template engines with `app.engine()`;
+- begin listening through `app.listen()`.
+
+```js
+app.use(express.json());
+app.get("/health", healthHandler);
+app.use("/books", booksRouter);
+app.use(errorHandler);
+app.listen(3000);
+```
+
+I can think of `app` as both a configuration surface and a request dispatcher.
+
+```text
+Application startup
+  ↓ registers layers on app
+Request arrives
+  ↓ app dispatches through matching layers
+One layer completes the response
+```
+
+The registration phase builds the behavior that the request phase later executes.
+
+### `req` Extends Node's Request Object
+
+Node's HTTP server provides an `http.IncomingMessage` for an incoming request. Express enhances that same underlying object with framework-specific properties and methods.
+
+```text
+Node request capabilities
+  method, url, headers, readable stream, socket information
+        +
+Express request capabilities
+  params, query, route information, convenience methods
+        =
+req used by an Express handler
+```
+
+This matters because `req` is not a plain object containing already-trusted application input. It is still connected to the HTTP request and includes data controlled by the client.
+
+```js
+app.get("/books/:bookId", (req, res) => {
+  console.log(req.method);        // native HTTP concept
+  console.log(req.headers);       // native HTTP headers
+  console.log(req.params.bookId); // Express route extraction
+  console.log(req.query);         // Express-parsed query data
+});
+```
+
+Express makes input easier to access. It does not make that input valid or safe. Parameters, query values, body properties, and headers still cross a trust boundary and need deliberate validation.
+
+### `res` Extends Node's Response Object
+
+Node supplies an `http.ServerResponse`. Express enhances it with methods for common web responses.
+
+```text
+Node response capabilities
+  statusCode, setHeader, write, end, stream lifecycle
+        +
+Express response capabilities
+  status, send, json, redirect, render
+        =
+res used by an Express handler
+```
+
+The native behavior remains available:
+
+```js
+app.get("/native-style", (req, res) => {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/plain");
+  res.end("Still a Node response");
+});
+```
+
+But Express helpers communicate the common intention more clearly:
+
+```js
+app.get("/express-style", (req, res) => {
+  res.status(200).send("Enhanced by Express");
+});
+```
+
+Understanding the inheritance relationship prevents a false mental model in which Express owns HTTP independently of Node.
+
+### The Middleware Stack
+
+Every route and middleware registration contributes a layer to an ordered stack.
+
+```js
+app.use(requestId);
+app.use(logger);
+app.use(express.json());
+app.use("/api", apiRouter);
+app.use(notFound);
+app.use(errorHandler);
+```
+
+Conceptually:
+
+```text
+Position 1  requestId       all paths
+Position 2  logger          all paths
+Position 3  JSON parser     matching content types
+Position 4  apiRouter       paths under /api
+Position 5  notFound        anything still unmatched
+Position 6  errorHandler    forwarded/thrown failures
+```
+
+Express evaluates the stack in registration order and runs layers that match the current path, method, and normal-or-error flow.
+
+### Order Is Behavior
+
+These two applications contain the same pieces but do not behave the same way.
+
+Correct parser placement:
+
+```js
+app.use(express.json());
+app.post("/books", createBook);
+```
+
+Incorrect parser placement:
+
+```js
+app.post("/books", createBook);
+app.use(express.json());
+```
+
+In the second version, the route runs before the later parser can populate `req.body`.
+
+The same issue appears with authorization:
+
+```js
+app.use(authentication);
+app.get("/account", getAccount);
+```
+
+If the route is registered first and finishes the response, authentication registered later cannot travel backward through the stack to protect it.
+
+This gives me one of the most important Express rules:
+
+> **Registration order is not organization alone; registration order changes execution.**
+
+### A Request Trace
+
+For `POST /api/books`, the lifecycle might look like this:
+
+```text
+Node receives an HTTP request
+  ↓
+Express app begins dispatch
+  ↓ requestId matches and adds req.requestId
+  ↓ logger matches and records the request
+  ↓ express.json matches and parses JSON
+  ↓ /api router mount matches
+  ↓ POST /books route matches
+  ↓ handler calls the service
+  ↓ handler uses res.status(201).json(...)
+Node sends the HTTP response
+```
+
+Express coordinates the path through the application. My code still owns the policies and business decisions inside that path.
+
+## 5. Why Express? The Tradeoffs
+
+### Pros
+
+#### Minimal Core
+
+Express focuses primarily on routing, middleware, and HTTP conveniences. It does not require a database, template engine, validation library, or application layering strategy.
+
+That makes it suitable for many shapes of application.
+
+#### Flexibility
+
+I can use Express for:
+
+- a small JSON API;
+- a server-rendered website;
+- a modular monolith;
+- a webhook receiver;
+- an internal service;
+- a backend that coordinates several external systems.
+
+I can choose libraries based on the problem instead of following one required stack.
+
+#### A Large Ecosystem
+
+The middleware interface gives packages a common integration point. Logging, security headers, sessions, CORS, file uploads, and many other concerns can be added through middleware.
+
+An ecosystem is not an automatic quality guarantee. Every dependency still needs review for maintenance, security, behavior, and necessity.
+
+#### An Approachable API
+
+The first useful Express application is small:
+
+```js
+import express from "express";
+
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Hello");
+});
+
+app.listen(3000);
+```
+
+The surface is easy to enter because it maps closely to concepts I already know: methods, paths, requests, responses, and ordered handlers.
+
+### Cons
+
+#### Unopinionated Can Become Undirected
+
+Express gives me freedom, but freedom does not answer:
+
+```text
+Where does validation belong?
+Should handlers call the database directly?
+How are errors represented?
+Where does authorization run?
+How are features grouped?
+How are dependencies constructed?
+```
+
+Without deliberate conventions, two developers can build unrelated architectures inside the same codebase.
+
+#### No Built-In Project Structure
+
+Express does not require controllers, services, repositories, modules, or feature folders. A beginner can place the entire application in one file because nothing prevents it.
+
+```js
+// app.js grows to contain routes, SQL, validation,
+// authentication, email, errors, and configuration.
+```
+
+That is not an Express bug. It is a consequence of the framework's boundary. The application must supply structure.
+
+#### Easy Beginnings Can Hide Production Work
+
+Creating a route is easy. Operating a trustworthy service still requires:
+
+- validation and output contracts;
+- authentication and authorization;
+- safe error handling;
+- timeouts and graceful shutdown;
+- logs, metrics, and tracing;
+- database constraints and transaction policy;
+- dependency security and updates;
+- testing across the real middleware order;
+- proxy and deployment configuration.
+
+The shortest “Hello World” is not a picture of total production complexity. It is only a small entry point.
+
+### The Real Tradeoff
+
+```text
+Express chooses less framework policy
+              ↓
+More freedom for the application
+              ↓
+More architectural responsibility for the team
+```
+
+That can be excellent when I understand the choices. It can be overwhelming when I expect the framework to make choices it deliberately leaves open.
+
+## Express Compared With Raw Node.js
+
+| Concern | Raw Node.js HTTP | Express |
+| --- | --- | --- |
+| Receive HTTP requests | Built in | Uses Node underneath |
+| Method access | `req.method` | `req.method` |
+| Route matching | Build or add it | `app.METHOD()` and routers |
+| Path parameters | Build or add it | `req.params` |
+| Body handling | Consume and parse stream | Built-in/third-party middleware |
+| Response status | `res.statusCode` | `res.status()` plus native API |
+| JSON response | Set headers and serialize | `res.json()` |
+| Shared pipeline | Build or compose it | Middleware stack |
+| Database/auth/business rules | Application responsibility | Still application responsibility |
+
+The table reveals the central idea: Express standardizes application-level HTTP coordination. It does not replace the platform or the domain.
+
+## Common Misconceptions
+
+### “Express Is a Web Server Instead of Node”
+
+Express creates an application that works with Node's HTTP server. Node remains the runtime and HTTP foundation.
+
+### “Express Automatically Parses Every Request Body”
+
+Body parsing depends on registered middleware and matching content types. If the relevant parser did not run, `req.body` is not magically populated.
+
+### “Using Express Gives My Application an Architecture”
+
+Express provides a dispatch and middleware architecture. It does not decide the boundaries of my business application.
+
+### “Middleware Always Runs”
+
+Middleware only runs when execution reaches it and its mount conditions match. Earlier terminal responses, errors, paths, methods, and registration order all affect the result.
+
+### “Shorter Code Means HTTP No Longer Matters”
+
+`res.status(201).json(...)` is concise, but it still commits an HTTP status, headers, and a representation. Express syntax sits on top of HTTP semantics; it does not replace them.
+
+### “Minimal Means Incomplete”
+
+Minimal means Express intentionally has a narrow core. Whether that is a strength or weakness depends on the application and the team's ability to make consistent choices.
+
+## Checkpoint Questions
+
+### Why use Express if Node can already create an HTTP server?
+
+Node provides the HTTP primitives. Express adds reusable routing, middleware composition, and request-response conveniences that reduce repeated application plumbing.
+
+### Does Express replace Node's request and response objects?
+
+No. Express enhances the native Node request and response objects through its API while preserving their underlying capabilities.
+
+### Is Express a complete backend architecture?
+
+No. It provides a web framework layer. The application still needs boundaries for validation, business logic, persistence, authentication, errors, observability, and deployment.
+
+### Is `.param()` a response helper?
+
+No. `app.param()` and `router.param()` register callbacks for named route parameters. `req.params` contains the values captured from the current route.
+
+### Why does middleware order matter?
+
+Express searches forward through the registered stack. A layer can only affect requests that reach it, so parsing, authentication, routing, not-found handling, and error handling must be ordered deliberately.
+
+### Must an Express application return JSON?
+
+No. It can send JSON, text, files, redirects, streams, or server-rendered HTML through a configured template engine.
+
+## 6. Setting the Stage
+
+This part answers why Express exists and where it fits. It intentionally stops before treating a copied setup command as understanding.
+
+The next parts will turn the architecture into something observable:
+
+```text
+Create the first Express application
+  ↓
+Understand app.listen() and the Node HTTP server
+  ↓
+Build and match routes
+  ↓
+Read parameters, queries, headers, and bodies
+  ↓
+Construct correct responses
+  ↓
+Compose application and router middleware
+  ↓
+Handle not-found cases and failures
+  ↓
+Apply structure, validation, and testing
+```
+
+As I build, I want to keep asking two questions:
+
+1. What work is Express doing here?
+2. What responsibility still belongs to my application?
+
+Those questions should stop the framework from becoming magic.
+
+## What I Learned in Part 1
+
+Before this part, I thought Express was mainly a faster way to write routes.
+
+Now my mental model is more precise:
+
+```text
+Node.js provides the runtime and HTTP primitives.
+Express adds an ordered routing and middleware layer.
+req and res remain enhanced Node objects.
+Helpers make HTTP intentions easier to express.
+Registration order defines request behavior.
+The framework supplies mechanisms, not my domain architecture.
+Minimal freedom creates architectural responsibility.
+```
+
+The idea that finally clicked is:
+
+> **Express fills the coordination gap between receiving a raw HTTP request and running a maintainable application, but it deliberately leaves the application's most important design decisions to me.**
+
+Part 2 will move from the architectural map to the first running Express server and trace exactly what happens when the application starts listening for requests.
+
+## References
+
+- [Express 5 application API](https://expressjs.com/en/5x/api/application/)
+- [Express 5 request API](https://expressjs.com/en/5x/api/request/)
+- [Express 5 response API](https://expressjs.com/en/5x/api/response/)
+- [Using Express middleware](https://expressjs.com/en/guide/using-middleware/)
+- [Using template engines with Express](https://expressjs.com/en/5x/guide/using-template-engines/)
+- [Node.js HTTP documentation](https://nodejs.org/api/http.html)
