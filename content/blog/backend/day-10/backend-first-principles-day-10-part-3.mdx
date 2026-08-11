@@ -1,0 +1,1225 @@
+---
+title: "Express Routing Turns HTTP Intent Into Executable Code"
+description: Understanding Express routes as method, path, and handler declarations, with dynamic parameters, query strings, route order, middleware chains, modular routers, nesting, and API versioning.
+slug: backend-first-principles-day-10-part-3
+date: '2026-08-11'
+category: Learning Journey
+readingTime: 28 min read
+day: 10
+part: 3
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Express.js from First Principles
+partSlug: part-03
+order: 1003
+published: true
+tags: [Express, Routing, Route Parameters, Query Strings, REST APIs]
+keywords: [Express routing from first principles, Express route parameters, req.params vs req.query, Express Router, route order]
+---
+# Express Routing Turns HTTP Intent Into Executable Code
+
+> *“A route is the point where an HTTP request stops being only a message and becomes a deliberate application action.”*
+
+## The Question After Starting the Server
+
+Part 2 turned an empty directory into a reproducible Express project. I created a package manifest, installed Express, chose ES modules, added development scripts, and traced `app.listen()` down to a Node HTTP server listening on a TCP port.
+
+The process can now receive requests.
+
+But receiving a request is only the beginning. A useful application must decide which code owns it.
+
+```text
+GET /posts
+GET /posts/post_123
+POST /posts
+PATCH /posts/post_123
+GET /posts?author=belema&page=2
+```
+
+All of these requests can arrive through the same server and port. Their methods, paths, and query strings express different intentions.
+
+That returns me to the central question from Day 3:
+
+> **Once a request reaches the server, how does the application decide which code should run?**
+
+The answer is routing. This time, I am not studying routing only as an architectural concept. I am implementing it through Express.
+
+## 1. Routing as the Core of a Web API
+
+### Returning to Day 3
+
+Day 3 built the conceptual map of routing:
+
+```text
+Static routes       identify fixed endpoints
+Dynamic routes      capture resource identifiers
+Query parameters    modify a collection view
+Nested routes       express relationships
+Versioned routes    preserve evolving contracts
+Catch-all routes    handle unmatched requests
+```
+
+Those ideas were independent of any framework. Express gives them concrete syntax and an execution model.
+
+```js
+app.get("/posts", listPosts);
+app.get("/posts/:postId", getPost);
+app.post("/posts", createPost);
+app.patch("/posts/:postId", updatePost);
+app.delete("/posts/:postId", deletePost);
+```
+
+The declarations are compact, but they represent the same routing decision:
+
+```text
+Incoming request
+  ↓ inspect method
+  ↓ match path against registered layers
+  ↓ extract named values
+  ↓ execute matching handler chain
+  ↓ produce or delegate the response
+```
+
+### What Raw Node.js Would Require
+
+With Node's HTTP module alone, I could build a router manually:
+
+```js
+import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (req.method === "GET" && url.pathname === "/posts") {
+    return listPosts(req, res);
+  }
+
+  if (req.method === "POST" && url.pathname === "/posts") {
+    return createPost(req, res);
+  }
+
+  res.statusCode = 404;
+  res.end("Not Found");
+});
+```
+
+As the API grows, I would also need to implement:
+
+- path-pattern matching;
+- dynamic segment extraction;
+- decoding parameter values;
+- wildcard behavior;
+- route-specific handler chains;
+- modular route groups;
+- ordered traversal;
+- normal and error control flow.
+
+Express does not invent routing as a concept. It gives me a tested vocabulary and dispatcher for work every web application already needs.
+
+### Declarative Does Not Mean Static
+
+When I register this route:
+
+```js
+app.get("/posts/:postId", getPost);
+```
+
+Express does not call `getPost` at startup. It records a rule:
+
+```text
+Later, if a request is GET
+and its path matches /posts/:postId,
+capture the dynamic segment
+and invoke getPost.
+```
+
+This separates two phases:
+
+```text
+Startup phase
+  build the ordered routing/middleware stack
+
+Request phase
+  traverse that stack for one incoming request
+```
+
+That distinction explains why registration order matters later in this part.
+
+## 2. Anatomy of an Express Route
+
+The basic Express routing shape is:
+
+```js
+app.METHOD(PATH, HANDLER);
+```
+
+For example:
+
+```js
+app.get("/posts/:postId", getPost);
+```
+
+Every piece answers a different question:
+
+| Part | Question |
+| --- | --- |
+| `METHOD` | Which HTTP method does this behavior accept? |
+| `PATH` | Which URL path shape does it match? |
+| `HANDLER` | What code runs after the request matches? |
+
+The route is not identified by the path alone. Method and path work together.
+
+### METHOD: The HTTP Verb Carries Meaning
+
+Express exposes methods corresponding to HTTP request methods:
+
+```js
+app.get("/posts", listPosts);
+app.post("/posts", createPost);
+app.put("/posts/:postId", replacePost);
+app.patch("/posts/:postId", updatePost);
+app.delete("/posts/:postId", deletePost);
+```
+
+The method should reflect the HTTP semantics studied in Day 9:
+
+| Method | Common API meaning | Safety/idempotency expectation |
+| --- | --- | --- |
+| `GET` | Retrieve a representation | Safe and idempotent |
+| `POST` | Create within a collection or execute non-idempotent processing | Not inherently idempotent |
+| `PUT` | Replace the target representation | Idempotent |
+| `PATCH` | Apply a partial modification | Not guaranteed idempotent by the method alone |
+| `DELETE` | Request removal of the target | Idempotent in intended effect |
+
+Express will not enforce those semantics for me. This is syntactically possible but conceptually wrong:
+
+```js
+app.get("/posts/:postId/delete", deletePost);
+```
+
+The framework sees a valid GET route. The API designer must recognize that a safe retrieval method should not delete state.
+
+The distinction becomes visible when the same path supports different methods:
+
+```text
+GET    /posts/post_123 → retrieve the post
+PUT    /posts/post_123 → replace the post
+PATCH  /posts/post_123 → partially update the post
+DELETE /posts/post_123 → delete the post
+```
+
+The resource identity stays stable while the method communicates the general interaction.
+
+### PATH: Static Routes
+
+A static route contains only literal path segments:
+
+```js
+app.get("/health", healthCheck);
+app.get("/posts", listPosts);
+app.get("/users/me", getCurrentUser);
+```
+
+These paths match their declared shapes. The query string is not part of route-path matching, so these requests reach the same route:
+
+```text
+GET /posts
+GET /posts?page=2
+GET /posts?sort=-publishedAt
+```
+
+The route chooses the collection. The query string describes a requested view of that collection.
+
+### PATH: Dynamic Routes
+
+A colon introduces a named dynamic segment:
+
+```js
+app.get("/posts/:postId", getPost);
+```
+
+This one declaration can match many concrete paths:
+
+```text
+/posts/post_123
+/posts/post_456
+/posts/my-first-express-post
+```
+
+The route shape remains stable while the segment identifies a particular resource.
+
+### PATH: Wildcard Routes in Express 5
+
+A wildcard captures the remaining path after a prefix:
+
+```js
+app.get("/files/*filepath", (req, res) => {
+  res.json({ segments: req.params.filepath });
+});
+```
+
+For:
+
+```text
+GET /files/images/posts/cover.png
+```
+
+Express 5 captures:
+
+```js
+req.params.filepath;
+// ["images", "posts", "cover.png"]
+```
+
+Two Express 5 details matter:
+
+1. A wildcard must have a name, such as `*filepath`.
+2. Its captured value is an array of path segments.
+
+`/files/*filepath` requires something after `/files/`. To define a catch-all that also includes the root path, Express 5 uses braces:
+
+```js
+app.get("/{*splat}", notFoundPage);
+```
+
+Many older tutorials use unnamed patterns such as `*` or `/*`. Those patterns should not be copied into an Express 5 application.
+
+Wildcards should be used deliberately. A broad wildcard registered too early can consume requests intended for more specific routes.
+
+### HANDLER: The Destination After Matching
+
+A handler is a callback that receives the request and response objects:
+
+```js
+function getPost(req, res) {
+  const { postId } = req.params;
+  res.status(200).json({ id: postId });
+}
+
+app.get("/posts/:postId", getPost);
+```
+
+The route identifies when the function should run. The handler translates HTTP input into an application operation and translates the result back into HTTP.
+
+A handler should not become the entire application:
+
+```text
+Router  → selects the handler
+Handler → maps HTTP to/from a use case
+Service → owns business behavior
+Repository → owns persistence interaction
+```
+
+The router is the receptionist from Day 3. It directs the request; it does not need to perform every business operation itself.
+
+## 3. Dynamic Routes: Route Parameters
+
+### What `:param` Means
+
+In this route:
+
+```js
+app.get("/users/:userId", getUser);
+```
+
+`:userId` means:
+
+> Match one path segment at this position, decode it, and store the captured value under the key `userId`.
+
+For this request:
+
+```http
+GET /users/user_42 HTTP/1.1
+Host: localhost:3000
+```
+
+the handler sees:
+
+```js
+req.params.userId;
+// "user_42"
+```
+
+The colon belongs in the route declaration, not in the actual request URL:
+
+```text
+Route pattern: /users/:userId
+Actual URL:    /users/user_42
+Captured:      { userId: "user_42" }
+```
+
+### Multiple Parameters
+
+A route can capture more than one segment:
+
+```js
+app.get("/users/:userId/posts/:postId", (req, res) => {
+  const { userId, postId } = req.params;
+
+  res.json({
+    userId,
+    postId,
+  });
+});
+```
+
+For:
+
+```text
+GET /users/user_42/posts/post_99
+```
+
+the captured values are conceptually:
+
+```js
+{
+  userId: "user_42",
+  postId: "post_99"
+}
+```
+
+The names are application vocabulary. Express does not know whether `userId` points to a real user or whether `postId` belongs to that user.
+
+Those are validation, lookup, authorization, and relationship checks performed after matching.
+
+### Parameters Are Strings, Not Domain Objects
+
+Capturing an ID does not load a resource:
+
+```js
+app.get("/posts/:postId", async (req, res) => {
+  const postId = req.params.postId;
+  const post = await postService.findById(postId);
+
+  if (!post) {
+    return res.status(404).json({
+      error: "Post not found",
+    });
+  }
+
+  return res.json({ data: post });
+});
+```
+
+The lifecycle is:
+
+```text
+URL segment
+  ↓ Express captures and decodes a string
+req.params.postId
+  ↓ application validates identifier shape
+service/repository lookup
+  ↓ application confirms existence and access
+resource representation
+```
+
+If an application uses numeric identifiers, conversion must be explicit:
+
+```js
+const userId = Number(req.params.userId);
+
+if (!Number.isSafeInteger(userId) || userId <= 0) {
+  return res.status(400).json({
+    error: "userId must be a positive integer",
+  });
+}
+```
+
+`Number("42")` produces `42`; `Number("42abc")` produces `NaN`. This is stricter than accepting a partial numeric prefix accidentally.
+
+### Parameter Names Communicate Meaning
+
+This works:
+
+```js
+app.get("/users/:id/posts/:id2", handler);
+```
+
+This communicates more clearly:
+
+```js
+app.get("/users/:userId/posts/:postId", handler);
+```
+
+Good names make route logs, validation errors, handler code, and API documentation easier to read.
+
+### A Path Match Is Not Authorization
+
+If a request matches:
+
+```text
+GET /users/user_42/posts/post_99
+```
+
+Express has established only that the URL has the expected shape. It has not established:
+
+- that either resource exists;
+- that the post belongs to the user;
+- that the authenticated caller can read it;
+- that the identifiers have valid domain formats.
+
+Routing is selection, not trust.
+
+## 4. Query Strings
+
+### What Query Strings Are For
+
+Query strings usually modify how a resource or collection is represented without changing its primary identity.
+
+```text
+GET /posts?status=published
+GET /posts?page=2&limit=20
+GET /posts?sort=-publishedAt
+GET /posts?authorId=user_42&tag=express
+```
+
+The path remains `/posts`. The client is asking for a filtered, paginated, or sorted view.
+
+This aligns with the collection-query contracts from Day 9:
+
+```text
+Filtering  → which members qualify?
+Pagination → which bounded window is returned?
+Sorting    → in what stable order?
+Search     → which members match a search expression?
+Projection → which representation fields are included?
+```
+
+### Accessing `req.query`
+
+Express exposes the parsed query through `req.query`:
+
+```js
+app.get("/posts", (req, res) => {
+  const { status, page, limit, sort } = req.query;
+
+  res.json({
+    filters: { status },
+    pagination: { page, limit },
+    sort,
+  });
+});
+```
+
+For:
+
+```text
+GET /posts?status=published&page=2&limit=20&sort=-publishedAt
+```
+
+the simple mental model is:
+
+```js
+{
+  status: "published",
+  page: "2",
+  limit: "20",
+  sort: "-publishedAt"
+}
+```
+
+However, `req.query` is produced by the application's configured query parser. Repeated keys and parser settings can produce shapes other than a single string.
+
+Like `req.params`, query input is untrusted.
+
+### Query Strings Are Not Part of Route Matching
+
+I do not declare this:
+
+```js
+// Incorrect mental model
+app.get("/posts?page=:page", handler);
+```
+
+I declare the collection route once:
+
+```js
+app.get("/posts", listPosts);
+```
+
+and inspect query values inside validation or handler logic:
+
+```js
+function listPosts(req, res) {
+  const page = req.query.page;
+  // validate and use page
+}
+```
+
+These all match `app.get("/posts", ...)`:
+
+```text
+/posts
+/posts?page=1
+/posts?page=2
+/posts?status=draft
+```
+
+### Converting and Validating Types
+
+URLs carry textual data. The string `"2"` is not yet the number `2`, and a query key might be absent, repeated, or malformed.
+
+A deliberate parser can make the contract explicit:
+
+```js
+function positiveInteger(value, fallback) {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string") return undefined;
+
+  const number = Number(value);
+
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    return undefined;
+  }
+
+  return number;
+}
+
+app.get("/posts", (req, res) => {
+  const page = positiveInteger(req.query.page, 1);
+  const limit = positiveInteger(req.query.limit, 20);
+
+  if (page === undefined || limit === undefined || limit > 100) {
+    return res.status(400).json({
+      error: "page and limit must be valid positive integers; limit cannot exceed 100",
+    });
+  }
+
+  return res.json({ page, limit, data: [] });
+});
+```
+
+This code distinguishes:
+
+```text
+missing value   → use documented default
+valid string    → convert to application number
+wrong shape     → reject
+invalid number  → reject
+excessive limit → reject bounded-work violation
+```
+
+Booleans also need explicit rules:
+
+```js
+function optionalBoolean(value) {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+```
+
+JavaScript's `Boolean("false")` is `true` because any non-empty string is truthy. Blind coercion would reverse the client's apparent meaning.
+
+### Allowlist Filtering and Sorting
+
+Query parameters should not be passed directly into database APIs:
+
+```js
+// Dangerous design
+database.posts.findMany({
+  where: req.query,
+  orderBy: req.query.sort,
+});
+```
+
+Instead, map public query vocabulary to approved internal behavior:
+
+```js
+const allowedStatuses = new Set(["draft", "published", "archived"]);
+const allowedSorts = new Map([
+  ["publishedAt", { publishedAt: "asc" }],
+  ["-publishedAt", { publishedAt: "desc" }],
+  ["title", { title: "asc" }],
+]);
+
+const status = req.query.status;
+const sort = req.query.sort ?? "-publishedAt";
+
+if (status !== undefined && (
+  typeof status !== "string" ||
+  !allowedStatuses.has(status)
+)) {
+  return res.status(400).json({ error: "Unsupported status filter" });
+}
+
+if (typeof sort !== "string" || !allowedSorts.has(sort)) {
+  return res.status(400).json({ error: "Unsupported sort field" });
+}
+```
+
+The URL contract should expose supported product behavior, not the full power of an ORM.
+
+## 5. Route Parameters Versus Query Strings
+
+### The Identity Test
+
+The simplest distinction is:
+
+```text
+Route parameter → which resource or nested resource?
+Query string    → which view of that resource or collection?
+```
+
+Examples:
+
+```text
+GET /posts/post_123
+              ↑ identifies one post
+
+GET /posts?status=published&page=2
+           ↑ filters and paginates the posts collection
+```
+
+### Required Identity Versus Optional Modification
+
+A path parameter is normally required for that route to match:
+
+```js
+app.get("/posts/:postId", getPost);
+```
+
+`/posts` and `/posts/post_123` represent different resource scopes: collection and member.
+
+Query parameters are often optional modifiers with defaults:
+
+```text
+/posts                default collection view
+/posts?page=2         second page
+/posts?authorId=42    filtered view
+```
+
+This is a strong heuristic, not a law that removes all design judgment.
+
+### Real-World Comparisons
+
+| Requirement | Better shape | Reason |
+| --- | --- | --- |
+| Retrieve post 123 | `/posts/123` | `123` identifies the target resource |
+| List published posts | `/posts?status=published` | Status filters the collection |
+| List page 3 | `/posts?page=3` | Page selects a collection window |
+| Retrieve comments for post 123 | `/posts/123/comments` | Comments are a related collection |
+| Retrieve comment 9 | `/comments/9` | Stable canonical comment identity |
+| Search posts | `/posts?q=express` | Search changes collection selection |
+| Retrieve author profile | `/authors/42` | Author ID identifies the resource |
+| Sort posts newest first | `/posts?sort=-publishedAt` | Sorting changes representation order |
+
+### A Misleading Design
+
+This technically works:
+
+```text
+GET /post?id=123
+```
+
+But a resource-oriented API more clearly expresses identity as:
+
+```text
+GET /posts/123
+```
+
+Likewise, making every filter part of the path can create artificial resources:
+
+```text
+GET /posts/status/published/sort/newest/page/2
+```
+
+This is usually clearer as:
+
+```text
+GET /posts?status=published&sort=-publishedAt&page=2
+```
+
+The path names the collection; the query describes the view.
+
+### Caching Implications
+
+HTTP caches generally include the target URI in the cache key, so different query combinations can become different cache entries:
+
+```text
+/posts?page=1
+/posts?page=2
+/posts?page=1&sort=title
+/posts?page=1&sort=-publishedAt
+```
+
+That is appropriate because the representations may differ, but uncontrolled query combinations can fragment cache usefulness. The application must define canonical parameter names, stable ordering rules, and explicit cache policy.
+
+A resource path does not automatically make a response cacheable, and a query string does not automatically make it uncacheable. Method semantics, response headers, authorization, and cache configuration still decide reuse.
+
+### SEO Implications
+
+For public indexable pages, stable descriptive paths are easier to communicate and can represent canonical resources clearly:
+
+```text
+/posts/express-routing-from-first-principles
+```
+
+Query variants for filtering and sorting can generate many URLs with overlapping content:
+
+```text
+/posts?sort=newest
+/posts?sort=oldest
+/posts?page=1
+/posts?tag=express&sort=newest
+```
+
+That does not mean query strings are “bad for SEO.” It means public sites should manage crawlable variants, internal linking, canonical URLs, and duplicate views intentionally.
+
+For a private JSON API, search-engine indexing may be irrelevant. URL design should still prioritize stable resource identity and predictable contracts.
+
+## 6. Route Order and Middleware
+
+### Express Searches Forward
+
+Routes and middleware enter an ordered stack when they are registered. Express searches forward for matching layers.
+
+Consider:
+
+```js
+app.get("/users/:userId", (req, res) => {
+  res.send(`User ${req.params.userId}`);
+});
+
+app.get("/users/me", (req, res) => {
+  res.send("Current user profile");
+});
+```
+
+For:
+
+```text
+GET /users/me
+```
+
+the dynamic pattern `/users/:userId` matches first and captures:
+
+```js
+{ userId: "me" }
+```
+
+Because its handler sends a response, the later `/users/me` route never runs.
+
+The clearer order is:
+
+```js
+app.get("/users/me", getCurrentUser);
+app.get("/users/:userId", getUserById);
+```
+
+The specific path is tested before the generic dynamic shape.
+
+### Order Is Part of Correctness
+
+The same principle affects catch-alls:
+
+```js
+app.get("/{*splat}", notFoundPage);
+app.get("/posts", listPosts); // unreachable for GET /posts
+```
+
+The catch-all belongs after the routes it is intended to fall behind:
+
+```js
+app.get("/posts", listPosts);
+app.get("/{*splat}", notFoundPage);
+```
+
+I can read the stack as a decision sequence, not just a list of declarations.
+
+### Multiple Handlers on One Route
+
+Express routes can accept a chain of callbacks:
+
+```js
+app.patch(
+  "/posts/:postId",
+  authenticate,
+  validatePostId,
+  authorizePostUpdate,
+  validatePatchBody,
+  updatePost,
+);
+```
+
+The flow is:
+
+```text
+PATCH /posts/:postId matches
+  ↓ authenticate caller
+  ↓ validate identifier
+  ↓ authorize operation
+  ↓ validate body
+  ↓ execute update handler
+  ↓ send response
+```
+
+Each non-terminal callback receives `next` and hands off explicitly:
+
+```js
+function validatePostId(req, res, next) {
+  if (!req.params.postId.startsWith("post_")) {
+    return res.status(400).json({
+      error: "Invalid post identifier",
+    });
+  }
+
+  next();
+}
+```
+
+Authentication can terminate early:
+
+```js
+function authenticate(req, res, next) {
+  const token = req.get("authorization");
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Authentication required",
+    });
+  }
+
+  req.user = verifyToken(token);
+  next();
+}
+```
+
+The route handler does not run unless every earlier guard continues successfully.
+
+### Routes Are Middleware Layers
+
+This connects Part 3 back to Day 8:
+
+```text
+Application middleware
+  ↓
+Mounted router middleware
+  ↓
+Matching route callback chain
+  ↓
+Not-found middleware
+  ↓
+Error middleware when a failure is forwarded/thrown
+```
+
+Routes are not a separate universe beside middleware. Express routing is built into the same ordered dispatch model.
+
+### Global, Router, and Route-Specific Policy
+
+The scope of a policy should determine where it is registered:
+
+```js
+app.use(requestId);                  // all requests
+app.use("/api", rateLimitApi);      // API subtree
+app.use("/api/v1/posts", postsRouter);
+```
+
+Inside the posts router:
+
+```js
+router.get("/", listPosts);                         // public
+router.post("/", authenticate, createPost);         // protected
+router.patch("/:postId", authenticate, updatePost); // protected
+```
+
+This avoids forcing public reads through policies intended only for writes while keeping shared behavior at the correct boundary.
+
+## 7. Advanced Routing Patterns
+
+### `app.route()` for One Path With Several Methods
+
+When several methods share one path, `app.route()` can group them:
+
+```js
+app
+  .route("/posts/:postId")
+  .get(getPost)
+  .put(authenticate, replacePost)
+  .patch(authenticate, updatePost)
+  .delete(authenticate, deletePost);
+```
+
+This makes the resource surface easy to scan:
+
+```text
+/posts/:postId
+  GET     retrieve
+  PUT     replace
+  PATCH   partially update
+  DELETE  remove
+```
+
+It does not change HTTP behavior. It is an organizational API for registering methods against one path.
+
+I would not force every route into a chain. If handlers have very different middleware or are easier to understand separately, individual declarations remain valid.
+
+### `express.Router()` for Modular Routes
+
+As the application grows, one server file should not own every route. `express.Router()` creates a modular routing and middleware unit—a mini-application for a route subtree.
+
+```js
+// src/routes/posts-router.js
+import express from "express";
+
+export const postsRouter = express.Router();
+
+postsRouter.get("/", listPosts);
+postsRouter.post("/", authenticate, createPost);
+postsRouter.get("/:postId", getPost);
+postsRouter.patch("/:postId", authenticate, updatePost);
+postsRouter.delete("/:postId", authenticate, deletePost);
+```
+
+The application mounts it:
+
+```js
+// src/server.js
+import { postsRouter } from "./routes/posts-router.js";
+
+app.use("/api/v1/posts", postsRouter);
+```
+
+The final paths are composed from the mount path and router paths:
+
+```text
+Mount path /api/v1/posts + router path /        → /api/v1/posts
+Mount path /api/v1/posts + router path /:postId → /api/v1/posts/:postId
+```
+
+The router does not need to repeat the prefix. That makes it reusable and keeps feature routes together.
+
+### A Router Is Also Middleware
+
+A router can be passed to `app.use()` because it participates in the middleware interface:
+
+```text
+Request enters app
+  ↓ matches /api/v1/posts mount
+Request enters postsRouter
+  ↓ router searches its own ordered stack
+Matching route or middleware runs
+```
+
+This nesting is composition, not a second server. The request remains in one Express/Node request-response cycle.
+
+### Nested Routers and `mergeParams`
+
+Suppose comments belong under a post:
+
+```text
+/api/v1/posts/:postId/comments
+```
+
+I can mount a comments router below the parent parameter:
+
+```js
+app.use(
+  "/api/v1/posts/:postId/comments",
+  commentsRouter,
+);
+```
+
+By default, a new router does not preserve parent parameters. If the comments router needs `postId`, I create it with `mergeParams: true`:
+
+```js
+// src/routes/comments-router.js
+import express from "express";
+
+export const commentsRouter = express.Router({
+  mergeParams: true,
+});
+
+commentsRouter.get("/", (req, res) => {
+  const { postId } = req.params;
+  res.json({ postId, comments: [] });
+});
+
+commentsRouter.get("/:commentId", (req, res) => {
+  const { postId, commentId } = req.params;
+  res.json({ postId, commentId });
+});
+```
+
+The composed route becomes:
+
+```text
+GET /api/v1/posts/post_123/comments/comment_9
+
+Parent capture: postId = "post_123"
+Child capture:  commentId = "comment_9"
+```
+
+Nested paths should express useful relationships, but nesting every database relationship creates long, fragile URLs. A comment may also have a canonical route such as `/comments/:commentId` when it has stable identity outside the parent view.
+
+### Route Versioning
+
+A mount path can create a version boundary:
+
+```js
+app.use("/api/v1/posts", v1PostsRouter);
+```
+
+Later, a genuinely incompatible contract could be mounted separately:
+
+```js
+app.use("/api/v1/posts", v1PostsRouter);
+app.use("/api/v2/posts", v2PostsRouter);
+```
+
+Versioning is not permission to duplicate the application for every additive field. It is a compatibility strategy for public contracts.
+
+The router mount makes the boundary visible, but the API still needs:
+
+- a definition of compatible versus breaking changes;
+- deprecation and migration guidance;
+- observability of version usage;
+- an overlap and retirement policy.
+
+### A Complete Blog Router Map
+
+```text
+/api/v1
+├── /posts
+│   ├── GET  /                 list/filter posts
+│   ├── POST /                 create post
+│   ├── GET  /:postId          retrieve post
+│   ├── PATCH /:postId         update post
+│   ├── DELETE /:postId        delete post
+│   └── /:postId/comments
+│       ├── GET  /             list post comments
+│       └── POST /             create post comment
+├── /comments
+│   ├── GET    /:commentId     retrieve canonical comment
+│   ├── PATCH  /:commentId     update comment
+│   └── DELETE /:commentId     delete comment
+└── /authors
+    ├── GET /                  list authors
+    ├── GET /:authorId         retrieve author
+    └── GET /:authorId/posts   list author's posts
+```
+
+This map is more than folder organization. It is the public resource contract clients will depend on.
+
+## Checkpoints: Test Your Understanding
+
+### □ Conceptual check
+
+**What is the difference between a route parameter and a query string, and when would I use each?**
+
+A route parameter occupies a named path segment and usually identifies a resource or nested resource, such as `/posts/:postId`. A query string usually modifies the selected representation or collection through filtering, pagination, sorting, or search, such as `/posts?status=published&page=2`. Parameters answer “which resource?” while queries often answer “which view?”
+
+### □ Code check
+
+**Write a route that captures a user ID and returns `User {id} page`. Write another that accepts a `?page=` query parameter.**
+
+```js
+app.get("/users/:userId", (req, res) => {
+  res.send(`User ${req.params.userId} page`);
+});
+
+app.get("/users", (req, res) => {
+  const page = req.query.page === undefined
+    ? 1
+    : Number(req.query.page);
+
+  if (!Number.isSafeInteger(page) || page <= 0) {
+    return res.status(400).json({
+      error: "page must be a positive integer",
+    });
+  }
+
+  return res.json({ page, users: [] });
+});
+```
+
+The second route converts and validates the query value rather than assuming it is already a number.
+
+### □ Order check
+
+**If I define `app.get("/users/:id")` before `app.get("/users/me")`, what happens and why?**
+
+`GET /users/me` matches the dynamic route first because `me` is a valid single path segment. Express captures `{ id: "me" }`. If that first handler sends a response, traversal finishes and the later static route does not run. Register `/users/me` first or design non-overlapping identifier shapes deliberately.
+
+### □ First-principles connection
+
+**How does Express's routing system implement the concepts studied in Day 3?**
+
+Express stores ordered method/path/handler declarations. When a request arrives from Node's HTTP server, it traverses that stack, compares the HTTP method and path, extracts dynamic values, and invokes the matching callback chain. Static paths, parameters, query access, nested routers, version mounts, and catch-alls are concrete implementations of Day 3's routing map.
+
+### □ REST check
+
+**Design RESTful routes for a blog API with posts, comments, and authors.**
+
+| Interaction | Method and path |
+| --- | --- |
+| List/filter posts | `GET /posts?authorId=...&page=...` |
+| Create post | `POST /posts` |
+| Retrieve post | `GET /posts/:postId` |
+| Partially update post | `PATCH /posts/:postId` |
+| Delete post | `DELETE /posts/:postId` |
+| List comments for post | `GET /posts/:postId/comments` |
+| Create comment for post | `POST /posts/:postId/comments` |
+| Retrieve comment | `GET /comments/:commentId` |
+| Update comment | `PATCH /comments/:commentId` |
+| Delete comment | `DELETE /comments/:commentId` |
+| List authors | `GET /authors` |
+| Retrieve author | `GET /authors/:authorId` |
+| List an author's posts | `GET /authors/:authorId/posts` |
+
+The nouns identify resources and relationships; methods express interactions; query parameters shape collection views.
+
+## Common Routing Mistakes
+
+- treating the path alone as the route and ignoring the HTTP method;
+- using GET routes for state changes;
+- putting query strings inside the declared route path;
+- assuming `req.params` or `req.query` contains trusted typed data;
+- passing query values directly into ORM filtering and sorting;
+- placing `/users/:id` before the special `/users/me` route;
+- registering a catch-all before ordinary routes;
+- copying unnamed Express 4 wildcard syntax into Express 5;
+- assuming a captured parameter proves that a resource exists;
+- assuming route matching performs authorization;
+- nesting URLs according to every database foreign key;
+- forgetting `mergeParams: true` when a child router needs parent parameters;
+- creating `/v2` for changes that are actually backward compatible;
+- placing database and business logic directly in every route declaration;
+- creating inconsistent parameter names such as `id`, `postID`, and `post_id` across one API.
+
+## What I Learned in Part 3
+
+Before this part, `app.get()` looked like a convenient shortcut for an `if` statement.
+
+Now I see the complete routing model:
+
+```text
+METHOD expresses HTTP intent.
+PATH identifies a static or dynamic resource shape.
+HANDLER maps a matched request into application behavior.
+req.params contains captured path segments.
+req.query contains an untrusted requested view of the resource.
+Route order changes which matching layer receives control.
+Handler chains apply route-specific policy.
+Routers compose modular path subtrees.
+Nested routers require deliberate parameter inheritance.
+Version mounts create compatibility boundaries.
+```
+
+The idea that finally clicked is:
+
+> **Express routing is an ordered decision system: method and path select a handler chain, but the application must still validate meaning, enforce access, preserve HTTP semantics, and design a coherent resource contract.**
+
+Part 4 will follow the request object after routing: where Express gets parameters, query values, headers, and bodies, how those inputs differ, and why every one of them remains untrusted.
+
+## References
+
+- [Express 5 routing guide](https://expressjs.com/en/5x/guide/routing/)
+- [Express 5 request API](https://expressjs.com/en/5x/api/request/)
+- [Express 5 Router API](https://expressjs.com/en/5x/api/router/)
+- [Express 5 migration guide](https://expressjs.com/en/guide/migrating-5/)
+- [HTTP caching specification: RFC 9111](https://www.rfc-editor.org/rfc/rfc9111)
+- [Google Search URL structure guidance](https://developers.google.com/search/docs/crawling-indexing/url-structure)
