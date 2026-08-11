@@ -1,0 +1,1035 @@
+---
+title: "Project Setup Is the First Architectural Decision"
+description: Building an Express project from an empty folder while understanding package.json, dependency installation, scripts, nodemon, module systems, and the Node HTTP server beneath app.listen().
+slug: backend-first-principles-day-10-part-2
+date: '2026-08-11'
+category: Learning Journey
+readingTime: 25 min read
+day: 10
+part: 2
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Express.js from First Principles
+partSlug: part-02
+order: 1002
+published: true
+tags: [Express, Node.js, npm, Project Setup, JavaScript Modules]
+keywords: [Express project setup, package.json explained, dependencies vs devDependencies, CommonJS vs ES modules, nodemon]
+---
+# Project Setup Is the First Architectural Decision
+
+> *“Project setup is not ceremony before the real work. It defines how the work will be installed, started, understood, and reproduced.”*
+
+## The Question After Understanding Express
+
+Part 1 explained why Express exists. Node.js already gives me an HTTP server, request and response objects, streams, sockets, and the ability to listen on a port. Express adds an organized routing and middleware layer on top of those primitives.
+
+Now I want to move from the idea of an Express application to a running project.
+
+It is tempting to copy four commands, paste a server snippet, see “Listening on port 3000,” and call the setup complete:
+
+```text
+mkdir app
+cd app
+npm init -y
+npm install express
+```
+
+Those commands work, but copying them without understanding creates a fragile kind of progress. I would know how to repeat the ritual without knowing what state each step creates, which files matter, or why another machine can reconstruct the project.
+
+The real question for this part is:
+
+> **How does an empty directory become a reproducible Express application, and what responsibility does each setup decision carry?**
+
+## 1. The Foundation: Why Project Setup Matters
+
+### Organized Development Begins Before the First Route
+
+Project organization is not about creating the largest possible folder tree. It is about making important boundaries visible.
+
+At the beginning, I need only a small structure:
+
+```text
+express-first-principles/
+├── src/
+│   └── server.js
+├── package.json
+├── package-lock.json
+└── node_modules/
+```
+
+Each item has a different responsibility:
+
+| Item | Responsibility |
+| --- | --- |
+| `src/` | Source code I own |
+| `server.js` | Initial process entry point |
+| `package.json` | Project metadata, scripts, dependency declarations, and runtime conventions |
+| `package-lock.json` | Exact resolved dependency tree for reproducible installation |
+| `node_modules/` | Installed package files generated on this machine |
+
+This structure is small, but it separates authored source, declared configuration, locked dependency resolution, and generated installation output.
+
+I do not need controllers, services, repositories, middleware folders, configuration modules, and tests before the application has those responsibilities. Premature structure can hide the same confusion as no structure.
+
+My rule is:
+
+> **Create a boundary when the code has a responsibility worth naming—not merely because a tutorial has a folder with that name.**
+
+### `package.json` as the Project's DNA
+
+The `package.json` file is often described as a project's DNA because it records important instructions about the package:
+
+```json
+{
+  "name": "express-first-principles",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "..."
+  },
+  "devDependencies": {
+    "nodemon": "..."
+  }
+}
+```
+
+It answers questions such as:
+
+- What is this package called?
+- Which module system should Node use for `.js` files?
+- Which commands represent normal project tasks?
+- Which packages are required at runtime?
+- Which packages are needed only while developing?
+- Which version ranges are acceptable?
+
+The metaphor has a limit. `package.json` does not contain the whole application, and its dependency ranges do not always identify one exact installation. That is why `package-lock.json` also matters.
+
+```text
+package.json
+  declares intent and acceptable dependency ranges
+
+package-lock.json
+  records the exact resolved dependency tree
+
+node_modules/
+  contains the installed result
+```
+
+I should normally commit both `package.json` and `package-lock.json`. I should not commit `node_modules`, because it is generated, large, platform-sensitive, and reconstructable from the manifests.
+
+### Setup Is Where First Principles Meet the Framework
+
+The setup commands do not replace what I learned earlier. They connect it.
+
+```text
+Day 1  process and operating-system foundations
+Day 2  networking, TCP, HTTP, and ports
+Day 3  routing
+Day 4  representations and serialization
+Day 8  middleware pipelines
+Day 9  REST API design
+Day 10 Express implementation
+```
+
+When I write `app.listen(3000)`, I am not invoking unexplained framework magic. I am asking a Node HTTP server to bind to a network endpoint and begin accepting connections.
+
+When I write `app.get("/books", handler)`, I am registering application behavior for a combination of HTTP method and path.
+
+When I call `res.json(data)`, I am creating an HTTP representation with a status, headers, and serialized body.
+
+Express shortens the code. The underlying concepts remain.
+
+## 2. Setting Up the Environment: Why Each Step Exists
+
+### Step 0: Confirm the Runtime
+
+Before creating an Express 5 project, I confirm that Node.js and npm are available:
+
+```bash
+node --version
+npm --version
+```
+
+Express 5 requires Node.js 18 or newer. In a real project, I would also declare and enforce a supported Node version so local development, continuous integration, and production do not silently use incompatible runtimes.
+
+The important distinction is:
+
+```text
+Node.js → runs the JavaScript application
+npm     → manages the package manifest, dependency installation, and scripts
+Express → runs inside Node as an installed application dependency
+```
+
+### Step 1: Create an Isolated Project Directory
+
+```bash
+mkdir express-first-principles
+cd express-first-principles
+mkdir src
+```
+
+The directory creates a package boundary. The nearest `package.json` will control important Node and npm behavior inside this tree, including how `.js` files are interpreted.
+
+Isolation prevents unrelated files and dependencies from becoming accidental parts of the application. It also gives version control, editors, tooling, and deployment systems a clear project root.
+
+The `src` directory is not required by Express. I choose it to distinguish source code from project-level configuration and generated output.
+
+### Step 2: Create the Package Manifest
+
+```bash
+npm init -y
+```
+
+`npm init` creates `package.json`. Without `-y`, npm asks interactive questions about fields such as the package name and version. The `-y` flag accepts generated defaults immediately.
+
+That convenience does not mean every default is correct. I still review the result.
+
+For this learning application, I want a manifest shaped like this:
+
+```json
+{
+  "name": "express-first-principles",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {}
+}
+```
+
+I added two deliberate fields:
+
+- `"private": true` prevents accidental publication to the npm registry;
+- `"type": "module"` tells Node to interpret `.js` files in this package as ES modules.
+
+`npm init -y` is not architecture by itself. It gives me a manifest that I then make intentional.
+
+### Step 3: Install Express
+
+```bash
+npm install express
+```
+
+This command performs several connected actions:
+
+```text
+Read package.json
+  ↓
+Resolve an Express version and its dependency tree
+  ↓
+Download package contents
+  ↓
+Install them under node_modules
+  ↓
+Add Express to dependencies
+  ↓
+Create or update package-lock.json
+```
+
+After installation, the project contains a declaration similar to:
+
+```json
+{
+  "dependencies": {
+    "express": "^5.x.x"
+  }
+}
+```
+
+The exact version is written by npm at installation time, so I do not need to type or guess it manually.
+
+Express belongs in `dependencies` because the running server imports it:
+
+```js
+import express from "express";
+```
+
+If Express is absent in production, the application cannot start.
+
+### Direct and Transitive Dependencies
+
+Express is a **direct dependency** because my code names and imports it. Express itself depends on other packages; those are **transitive dependencies** from my application's perspective.
+
+```text
+My application
+  ↓ direct dependency
+Express
+  ↓ transitive dependencies
+Packages used internally by Express
+```
+
+I should not manually copy Express into the project or directly import one of its internal transitive packages merely because it appears in `node_modules`. If my application directly needs a package, I should declare it as my own dependency.
+
+This prevents my code from relying on an implementation detail that could disappear when Express changes its internal dependency tree.
+
+### `package.json`, the Lockfile, and `node_modules`
+
+These three pieces are related but not interchangeable:
+
+```text
+package.json       human-reviewed dependency intent
+package-lock.json  exact dependency resolution
+node_modules       materialized installation
+```
+
+If I delete `node_modules`, I delete installed copies—not the declarations needed to reconstruct them.
+
+Running this again restores the dependency tree:
+
+```bash
+npm install
+```
+
+When the lockfile is compatible with the manifest, npm uses its exact resolved versions. In continuous integration, `npm ci` is usually stronger because it requires the manifest and lockfile to agree instead of quietly updating the lockfile.
+
+```bash
+npm ci
+```
+
+That is why the lockfile belongs in version control while `node_modules` normally belongs in `.gitignore`.
+
+### Step 4: Add Standard Scripts
+
+After creating `src/server.js`, I add scripts:
+
+```json
+{
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  }
+}
+```
+
+Now the application can be started with:
+
+```bash
+npm start
+```
+
+and the development watcher can run with:
+
+```bash
+npm run dev
+```
+
+The script is more than an alias that saves typing.
+
+It creates a stable project interface:
+
+```text
+Developer on Linux       ┐
+Developer on Windows     ├─ npm run dev
+Continuous integration  ┤
+Project documentation   ┘
+                         ↓
+              one declared command
+```
+
+If the entry point or tool changes later, callers can keep using the same project command while the manifest changes internally.
+
+npm scripts also make locally installed executables available from `node_modules/.bin`, which is why the script can say `nodemon` without requiring a global installation.
+
+## 3. The Basic Server Explained
+
+### The Complete First Server
+
+With ES modules enabled, `src/server.js` can contain:
+
+```js
+import express from "express";
+
+const app = express();
+const PORT = 3000;
+
+app.get("/", (req, res) => {
+  res.status(200).send("Hello from Express");
+});
+
+const server = app.listen(PORT, (error) => {
+  if (error) {
+    throw error;
+  }
+
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
+```
+
+This is short, but every line carries a responsibility.
+
+### Line 1: Import the Framework
+
+```js
+import express from "express";
+```
+
+Node resolves the package named `express` from the installed dependency tree. The default import gives this module access to Express's exported application factory.
+
+This line depends on several setup decisions:
+
+```text
+package.json declares Express
+  ↓
+npm installs Express in node_modules
+  ↓
+"type": "module" enables import syntax in .js
+  ↓
+Node resolves and loads the package
+```
+
+If Express was not installed, Node would fail during module resolution before the server could start.
+
+### Line 2: Create the Express Application
+
+```js
+const app = express();
+```
+
+Calling `express()` creates the application object introduced in Part 1. It stores settings and the ordered routing/middleware stack.
+
+There is also a deeper implementation detail: the Express application is a callable function designed to handle Node HTTP requests. That allows it to be passed directly to `http.createServer()`.
+
+At this moment no port is open. I have created and configured an application, not yet started a listening server.
+
+### Line 3: Name the Port
+
+```js
+const PORT = 3000;
+```
+
+A port identifies a network endpoint on the machine. Naming it makes the value's role explicit and avoids scattering the number through the file.
+
+For a local lesson, a constant is enough. A deployed application commonly receives its port through environment configuration:
+
+```js
+const PORT = Number(process.env.PORT ?? 3000);
+```
+
+That allows the hosting environment to choose the listening port while preserving `3000` as a local default.
+
+Configuration is still input. A mature application validates that the value is a valid port instead of trusting any string silently.
+
+### Lines 4–6: Register a Route
+
+```js
+app.get("/", (req, res) => {
+  res.status(200).send("Hello from Express");
+});
+```
+
+`app.get()` registers a route for:
+
+```text
+HTTP method: GET
+Path:        /
+Handler:     the callback function
+```
+
+It does not immediately run the handler. It adds a layer to the application so Express can call the handler later when a matching request arrives.
+
+The callback receives:
+
+- `req`, the Express-enhanced Node request;
+- `res`, the Express-enhanced Node response.
+
+`res.status(200)` sets the success status. `res.send(...)` chooses and sends the response body, completing this simple request-response cycle.
+
+### What Raw Node Would Handle Manually
+
+The equivalent raw Node server might look like this:
+
+```js
+import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (req.method === "GET" && url.pathname === "/") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end("Hello from Node");
+    return;
+  }
+
+  res.statusCode = 404;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end("Not Found");
+});
+```
+
+Express's route registration handles the reusable method/path dispatch. Its response helpers handle common status, body, and content-type behavior.
+
+The comparison is not:
+
+```text
+Node = incapable
+Express = capable
+```
+
+It is:
+
+```text
+Node = primitives I compose myself
+Express = established composition around those primitives
+```
+
+### Lines 7–13: Begin Listening
+
+```js
+const server = app.listen(PORT, (error) => {
+  if (error) {
+    throw error;
+  }
+
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
+```
+
+`app.listen()` creates a Node HTTP server with the Express application as its request callback, then delegates to the server's `listen()` method.
+
+Conceptually, it is a convenience for:
+
+```js
+import { createServer } from "node:http";
+
+const server = createServer(app);
+server.listen(PORT);
+```
+
+The return value is a Node `http.Server`, not a special unrelated Express server. Keeping the reference allows later lifecycle work such as graceful shutdown:
+
+```js
+server.close();
+```
+
+The callback runs after the asynchronous bind succeeds. In Express 5, a listening error such as an already-used port can be received by that callback.
+
+### Connecting `app.listen(3000)` to TCP
+
+When the application listens on port `3000`, the chain reaches below Express:
+
+```text
+app.listen(3000)
+  ↓ Express convenience method
+http.Server.listen(3000)
+  ↓ Node networking layer
+Operating system binds a TCP listening socket
+  ↓
+Client opens a TCP connection to host:3000
+  ↓
+HTTP request bytes travel over the connection
+  ↓
+Node parses the HTTP message
+  ↓
+Express dispatches the request through its stack
+```
+
+For the ordinary HTTP server used here, this is TCP—not UDP.
+
+Day 2 explained why that distinction matters. TCP provides the reliable ordered byte stream on which traditional HTTP/1.1 communication depends. Express begins its work after the network and HTTP layers have delivered a request into the Node server.
+
+Port `3000` does not mean “Express.” It is simply the local port chosen for this process. Another service could use that port when this server is not running, but two ordinary listeners cannot bind the same address and port simultaneously. That conflict produces an error such as `EADDRINUSE`.
+
+### Express Abstracts Without Erasing
+
+Express hides repeated coordination details from my application code, but the native layer is still reachable:
+
+```js
+app.get("/inspect", (req, res) => {
+  console.log(req.socket.remoteAddress);
+  console.log(res.statusCode);
+
+  res.send("Inspected native properties");
+});
+```
+
+The useful mental model is transparent layering:
+
+```text
+Express API
+  uses and enhances
+Node HTTP API
+  uses
+Node networking and streams
+  use
+operating-system sockets
+```
+
+I can work at the Express layer without pretending the lower layers disappeared.
+
+## 4. Development Tools: Nodemon
+
+### The Manual Restart Loop
+
+Node loads the source code when the process starts. If I edit `server.js`, the already-running process does not automatically replace its loaded code.
+
+Without a watcher, the loop is:
+
+```text
+Edit file
+  ↓
+Stop server
+  ↓
+Start server again
+  ↓
+Send request
+  ↓
+Observe result
+```
+
+The manual stop-start steps are small, but they repeat constantly and interrupt concentration.
+
+### What Nodemon Does
+
+Nodemon watches files and restarts the Node process when relevant changes are detected.
+
+```bash
+npm install --save-dev nodemon
+```
+
+Then I expose it through the project script:
+
+```json
+{
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  }
+}
+```
+
+Running:
+
+```bash
+npm run dev
+```
+
+changes the feedback loop to:
+
+```text
+Edit file
+  ↓
+Nodemon detects change
+  ↓
+Nodemon stops and restarts Node
+  ↓
+Send request
+  ↓
+Observe result
+```
+
+Nodemon is a process monitor for development. It does not change Express, add routing, or become part of the running application logic.
+
+### Restarting Is Not Hot Module Replacement
+
+This distinction matters:
+
+```text
+Nodemon restart
+  old process exits
+  new process starts
+  in-memory state is lost
+
+Hot module replacement
+  parts of a running program may be replaced
+  while preserving selected runtime state
+```
+
+If I keep books in an in-memory array, a Nodemon restart recreates that array from the source code. This is expected and is another reason durable application state belongs in an appropriate storage system.
+
+### Development Versus Production
+
+Automatic restarts on source-file changes are helpful while writing code. They are not a production reliability strategy.
+
+In production:
+
+- source files should not normally change underneath the running process;
+- restarts should be controlled by deployment or process-management infrastructure;
+- health checks, graceful shutdown, logs, and failure policy matter;
+- the runtime should not carry unnecessary file-watching tools.
+
+That is why Nodemon belongs in `devDependencies`, while Express belongs in `dependencies`.
+
+## 5. The Dependency Distinction
+
+### `dependencies`
+
+Packages under `dependencies` are needed for the application to run in its deployed form.
+
+```json
+{
+  "dependencies": {
+    "express": "..."
+  }
+}
+```
+
+The production server imports Express, so removing it breaks startup.
+
+### `devDependencies`
+
+Packages under `devDependencies` support development, testing, linting, type-checking, or build workflows but are not required by the final running process.
+
+```json
+{
+  "devDependencies": {
+    "nodemon": "..."
+  }
+}
+```
+
+The application can run with `node src/server.js` without Nodemon. Nodemon improves the development loop; it is not imported by the server.
+
+### Installation Commands Express Intent
+
+Runtime dependency:
+
+```bash
+npm install express
+```
+
+Development dependency:
+
+```bash
+npm install --save-dev nodemon
+```
+
+The shorter development flag is equivalent:
+
+```bash
+npm install -D nodemon
+```
+
+This classification communicates lifecycle intent to developers and deployment systems.
+
+### What Happens During a Production Install?
+
+A plain install from the project root normally installs both `dependencies` and `devDependencies`:
+
+```bash
+npm install
+```
+
+If I run that unchanged in a production runtime image, tools such as Nodemon, test runners, and linters may be installed even though the server does not need them.
+
+Possible costs include:
+
+- a larger installation and deployment artifact;
+- longer dependency download and installation time;
+- more files and packages to scan and maintain;
+- a broader dependency surface inside the runtime environment.
+
+For a production runtime that does not need development packages, I can omit them explicitly:
+
+```bash
+npm ci --omit=dev
+```
+
+`npm ci` uses the committed lockfile and fails if it disagrees with `package.json`. `--omit=dev` resolves development dependencies for lockfile consistency but does not physically install them on disk.
+
+### The Build-Stage Nuance
+
+“Never install devDependencies in production” is too simplistic.
+
+Some applications need development tools to create the deployable artifact:
+
+```text
+Build stage
+  install dependencies + devDependencies
+  compile, bundle, generate, or test
+  produce runtime artifact
+
+Runtime stage
+  copy artifact
+  install/include only runtime requirements
+  start application
+```
+
+For this plain JavaScript Express server, Nodemon is not needed to build or run anything. Omitting it from the runtime is straightforward.
+
+In a TypeScript project, the compiler may be a devDependency required in the build stage even though the compiled production process does not need the compiler afterward.
+
+The real rule is:
+
+> **Install each dependency in the stages where its responsibility is required.**
+
+## 6. Module Systems: CommonJS Versus ES Modules
+
+### Why Two Systems Exist
+
+Node.js existed before JavaScript had one widely implemented standard module system for both browsers and servers. Node adopted CommonJS, built around `require()` and `module.exports`.
+
+JavaScript later standardized ECMAScript modules, commonly called ES modules or ESM, using `import` and `export`. Node added native support while preserving CommonJS compatibility because an enormous ecosystem already depended on it.
+
+That history leaves modern Node projects with two valid systems.
+
+### CommonJS Example
+
+If the package uses `"type": "commonjs"` or has no `type` field, a `.js` file can use CommonJS:
+
+```js
+const express = require("express");
+
+const app = express();
+const PORT = 3000;
+
+app.get("/", (req, res) => {
+  res.send("Hello from CommonJS");
+});
+
+app.listen(PORT, (error) => {
+  if (error) throw error;
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
+```
+
+Exporting and importing application code looks like:
+
+```js
+// books-service.js
+function listBooks() {
+  return [];
+}
+
+module.exports = { listBooks };
+```
+
+```js
+// server.js
+const { listBooks } = require("./books-service.js");
+```
+
+CommonJS is historically natural in Node and remains common in older codebases, scripts, and packages.
+
+### ES Module Example
+
+With `"type": "module"` in `package.json`, `.js` files use ESM:
+
+```js
+import express from "express";
+
+const app = express();
+const PORT = 3000;
+
+app.get("/", (req, res) => {
+  res.send("Hello from ES modules");
+});
+
+app.listen(PORT, (error) => {
+  if (error) throw error;
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
+```
+
+Exports and imports use standardized syntax:
+
+```js
+// books-service.js
+export function listBooks() {
+  return [];
+}
+```
+
+```js
+// server.js
+import { listBooks } from "./books-service.js";
+```
+
+Notice the explicit `.js` extension in the relative import. Native Node ESM follows URL-like resolution and does not automatically add extensions for relative paths.
+
+### How Node Decides
+
+The main explicit signals are:
+
+```text
+package.json "type": "module"    → .js uses ESM
+package.json "type": "commonjs" → .js uses CommonJS
+.mjs                              → always ESM
+.cjs                              → always CommonJS
+```
+
+Being explicit is better than relying on Node to infer ambiguous source syntax.
+
+### Practical Differences
+
+| Concern | CommonJS | ES modules |
+| --- | --- | --- |
+| Import syntax | `require()` | `import` |
+| Export syntax | `module.exports` | `export` |
+| `.js` package marker | `type: commonjs` or traditional default | `type: module` |
+| Forced file extension | `.cjs` | `.mjs` |
+| Relative import extensions | Commonly resolved by Node conventions | Must be explicit |
+| Top-level `await` | Not directly available | Supported |
+| Browser-standard syntax | No | Yes |
+| `__dirname`/`__filename` | Provided | Use `import.meta`-based APIs |
+
+There are interoperability rules between the systems, but mixing them carelessly adds complexity. A project should choose a clear default and cross the boundary deliberately when required.
+
+### How I Choose
+
+For a new modern project, I generally choose ES modules because:
+
+- the syntax is standardized in JavaScript;
+- it aligns with modern frontend and backend code;
+- static imports make dependencies visible;
+- Node supports it directly;
+- top-level `await` and `import.meta` belong naturally to the system.
+
+I would choose or retain CommonJS when:
+
+- maintaining an existing CommonJS codebase;
+- integrating with tooling that still expects CommonJS;
+- making a small change where migration cost provides no real value;
+- working inside a package whose established conventions use it.
+
+The wrong approach is to convert a stable project only because one syntax looks newer, or to mix both systems without understanding package boundaries and interoperability.
+
+For this Day 10 project, I will use ES modules and declare the choice explicitly:
+
+```json
+{
+  "type": "module"
+}
+```
+
+## The Complete Setup Flow
+
+The complete sequence is now understandable rather than ceremonial:
+
+```bash
+mkdir express-first-principles
+cd express-first-principles
+npm init -y
+mkdir src
+npm install express
+npm install --save-dev nodemon
+```
+
+Then I deliberately configure `package.json`:
+
+```json
+{
+  "name": "express-first-principles",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "..."
+  },
+  "devDependencies": {
+    "nodemon": "..."
+  }
+}
+```
+
+I do not manually replace the installed version values with `...`; they remain the real values written by npm. The ellipses here only keep the lesson independent of one installation date.
+
+The runtime flow is:
+
+```text
+npm run dev
+  ↓ npm reads scripts.dev
+local nodemon executable starts
+  ↓ nodemon launches Node
+Node loads src/server.js as ESM
+  ↓ Node resolves Express
+express() creates the application
+  ↓ app.get() registers a route
+app.listen() creates/listens with a Node HTTP server
+  ↓ operating system binds TCP port 3000
+application waits for requests
+```
+
+## Checkpoints: Test Your Understanding
+
+### □ Dependency distinction
+
+**What would happen if I ran `npm install` in production with devDependencies, and why could that be problematic?**
+
+A normal root install can install both production and development dependencies. The application may still run, but the runtime environment can contain Nodemon, test runners, linters, and other tools it does not need. That increases installation time, artifact size, maintenance work, and dependency surface. After any required build stage, a production runtime can use a lockfile-based install such as `npm ci --omit=dev` when development packages are unnecessary.
+
+### □ First-principles connection
+
+**How does `app.listen(3000)` connect to the TCP/UDP concepts from Day 2?**
+
+Express creates a Node HTTP server and delegates to its `listen()` method. The Node networking layer asks the operating system to bind a TCP listening socket to port `3000`. Clients establish TCP connections to that endpoint and send HTTP messages over the reliable ordered byte stream. The ordinary server in this lesson does not listen for UDP datagrams.
+
+### □ Code comprehension
+
+**What does `app.get("/", ...)` do that raw Node.js would force me to handle manually?**
+
+It registers a handler against the combination of the `GET` method and `/` path. With raw Node HTTP, I would need to parse the request URL, compare its pathname, inspect `req.method`, select the callback, and create consistent unmatched-route behavior myself or through another abstraction.
+
+### □ Decision making
+
+**When would I choose CommonJS over ES modules, or vice versa?**
+
+I would normally use ES modules for a new project because they use standardized `import`/`export` syntax and align with the modern JavaScript ecosystem. I would retain or choose CommonJS for an established CommonJS codebase, compatible legacy tooling, or a context where migration cost outweighs the benefit. The decision should follow project constraints, not fashion.
+
+### □ Practical check
+
+**What happens if I delete `node_modules` and run `npm install` again, and why does it work?**
+
+npm reads `package.json` and the compatible `package-lock.json`, downloads the required packages, and reconstructs `node_modules`. It works because `node_modules` is generated installation output rather than the authoritative dependency declaration. If the lockfile is removed too, npm may resolve newer versions allowed by the manifest's version ranges, so the result is less strictly reproducible.
+
+## Common Setup Mistakes
+
+- committing `node_modules` instead of the manifest and lockfile;
+- installing Nodemon globally and forgetting to declare the project's tool dependency;
+- placing Express in `devDependencies` even though production imports it;
+- copying `import` syntax without declaring the package's module type;
+- mixing `require()` and `import` without understanding the boundary;
+- treating `npm init -y` defaults as reviewed decisions;
+- assuming Nodemon preserves in-memory state across restarts;
+- hard-coding a deployment port without allowing environment configuration;
+- describing `app.listen()` as UDP or as a server unrelated to Node;
+- using `npm install` in CI when strict lockfile synchronization is required;
+- believing successful startup proves the application is production-ready.
+
+## What I Learned in Part 2
+
+Before this part, project setup looked like a short list of commands I needed to memorize before writing routes.
+
+Now I see a chain of declared and reproducible decisions:
+
+```text
+The project directory creates a boundary.
+package.json declares identity, scripts, module type, and dependencies.
+package-lock.json records an exact resolved dependency tree.
+node_modules materializes that tree locally.
+Express is a runtime dependency.
+Nodemon is a development dependency and process watcher.
+npm scripts create a stable interface for project tasks.
+ESM and CommonJS are explicit module-loading contracts.
+app.listen() reaches Node HTTP and an operating-system TCP socket.
+```
+
+The idea that finally clicked is:
+
+> **A good setup makes the application reproducible without hiding its foundations: npm reconstructs the dependency environment, Node provides the runtime and network server, and Express provides the request-handling layer.**
+
+Part 3 will move from one route to Express routing itself: how method and path matching work, how parameters are captured, and why route registration order changes behavior.
+
+## References
+
+- [Installing Express 5](https://expressjs.com/en/5x/starter/installing/)
+- [Express 5 application API](https://expressjs.com/en/5x/api/application/)
+- [npm package.json documentation](https://docs.npmjs.com/files/package.json/)
+- [npm dependencies and devDependencies](https://docs.npmjs.com/specifying-dependencies-and-devdependencies-in-a-package-json-file/)
+- [npm install documentation](https://docs.npmjs.com/cli/install/)
+- [Node.js package and module-system documentation](https://nodejs.org/api/packages.html)
+- [Node.js networking documentation](https://nodejs.org/api/net.html)
+- [Nodemon project documentation](https://github.com/remy/nodemon)
