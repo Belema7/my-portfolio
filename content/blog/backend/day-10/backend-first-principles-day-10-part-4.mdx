@@ -1,0 +1,317 @@
+---
+title: "From One Server File to Routes and Controllers"
+description: Refactoring a monolithic Express server into route and controller layers while preserving clear responsibilities, request flow, testability, and centralized error handling.
+slug: backend-first-principles-day-10-part-4
+date: '2026-08-12'
+category: Learning Journey
+readingTime: 10 min read
+day: 10
+part: 4
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Express.js from First Principles
+partSlug: part-04
+order: 1004
+published: true
+tags: [Express, Controllers, Routers, Separation of Concerns, Backend Architecture]
+keywords: [Express routes and controllers, Express project structure, separation of concerns, Express Router architecture]
+---
+# From One Server File to Routes and Controllers
+
+> *“Splitting files is useful only when each file receives a clear responsibility.”*
+
+## 1. The Problem With Monolithic Code
+
+Part 3 taught me how Express matches methods and paths. Putting the first few routes directly in `server.js` is reasonable:
+
+```js
+app.get("/posts", async (req, res) => { /* ... */ });
+app.get("/posts/:postId", async (req, res) => { /* ... */ });
+app.post("/posts", async (req, res) => { /* ... */ });
+app.patch("/posts/:postId", async (req, res) => { /* ... */ });
+app.delete("/posts/:postId", async (req, res) => { /* ... */ });
+```
+
+The problem begins when every callback also validates input, applies business rules, queries storage, formats errors, and sends responses. `server.js` becomes responsible for application setup and every feature.
+
+The symptoms are familiar:
+
+- route declarations are buried inside implementation details;
+- validation and error code are duplicated;
+- changing one feature risks unrelated routes;
+- tests require starting too much of the application;
+- merge conflicts increase as developers edit the same file.
+
+Spaghetti code is not simply long code. It is code whose responsibilities and dependencies are difficult to trace.
+
+## 2. Separation of Concerns From First Principles
+
+**Separation of concerns** means grouping code by the job it owns and limiting what each part needs to know.
+
+Day 7 introduced this flow:
+
+```text
+Route → Handler/Controller → Service → Repository
+```
+
+Each layer answers a different question:
+
+| Layer | Responsibility |
+| --- | --- |
+| Route | Which method and path select this operation? |
+| Controller | How does HTTP input map to a use case and its result map back to HTTP? |
+| Service | What business operation should happen? |
+| Repository | How is data read or persisted? |
+
+This improves:
+
+- **maintainability** because changes have a predictable home;
+- **testability** because boundaries can be tested independently;
+- **scalability of the codebase** because new features do not enlarge one central file forever.
+
+It does not mean every function needs its own file. Separation is valuable when it clarifies ownership, not when it only increases folders.
+
+## 3. Routes: The Routing Layer
+
+`express.Router()` creates a modular route and middleware stack. I can organize routes around a resource:
+
+```js
+// src/routes/posts-routes.js
+import express from "express";
+import {
+  createPost,
+  deletePost,
+  getPost,
+  listPosts,
+  updatePost,
+} from "../controllers/posts-controller.js";
+
+export const postsRouter = express.Router();
+
+postsRouter.get("/", listPosts);
+postsRouter.get("/:postId", getPost);
+postsRouter.post("/", createPost);
+postsRouter.patch("/:postId", updatePost);
+postsRouter.delete("/:postId", deletePost);
+```
+
+The route file should make the public surface easy to scan. It owns method, path, and route-specific middleware selection. It should not contain database queries or large business workflows.
+
+The server mounts the router:
+
+```js
+// src/server.js
+import express from "express";
+import { postsRouter } from "./routes/posts-routes.js";
+
+const app = express();
+
+app.use(express.json());
+app.use("/api/v1/posts", postsRouter);
+```
+
+The mount prefix combines with the router paths:
+
+```text
+/api/v1/posts + /        → /api/v1/posts
+/api/v1/posts + /:postId → /api/v1/posts/:postId
+```
+
+Unlike routes defined directly on `app`, a router can be moved, versioned, tested, or mounted with resource-specific middleware as one unit.
+
+## 4. Controllers: The Handler Layer
+
+A controller bridges HTTP and application logic. Its single responsibility is to translate:
+
+```text
+req → use-case input → service result → HTTP response
+```
+
+```js
+// src/controllers/posts-controller.js
+import * as postsService from "../services/posts-service.js";
+
+export async function listPosts(req, res) {
+  const posts = await postsService.list({
+    status: req.query.status,
+  });
+
+  res.status(200).json({ data: posts });
+}
+
+export async function getPost(req, res) {
+  const post = await postsService.getById(req.params.postId);
+
+  if (!post) {
+    return res.status(404).json({ error: "Post not found" });
+  }
+
+  return res.status(200).json({ data: post });
+}
+
+export async function createPost(req, res) {
+  const post = await postsService.create(req.body);
+  return res.status(201).json({ data: post });
+}
+
+export async function updatePost(req, res) {
+  const post = await postsService.update(
+    req.params.postId,
+    req.body,
+  );
+  return res.status(200).json({ data: post });
+}
+
+export async function deletePost(req, res) {
+  await postsService.remove(req.params.postId);
+  return res.status(204).send();
+}
+```
+
+Controllers read HTTP-facing inputs from `req.params`, `req.query`, and `req.body`, then choose an appropriate response status and representation.
+
+They should not own complex domain rules or persistence details. This is a warning sign:
+
+```js
+// Controller doing validation, pricing rules, SQL,
+// email delivery, and HTTP response formatting itself.
+```
+
+Those jobs should move to focused validation, service, and repository boundaries.
+
+### Error Propagation
+
+A controller can forward an error explicitly:
+
+```js
+export function getPost(req, res, next) {
+  postsService.getById(req.params.postId, (error, post) => {
+    if (error) return next(error);
+    return res.json({ data: post });
+  });
+}
+```
+
+`next(error)` tells Express to skip remaining normal handlers and search forward for error-handling middleware.
+
+With Express 5, a returned async handler's thrown error or rejected promise is forwarded automatically:
+
+```js
+export async function getPost(req, res) {
+  const post = await postsService.getById(req.params.postId);
+  return res.json({ data: post });
+}
+```
+
+The global error handler must be registered after the routes and keep all four parameters:
+
+```js
+app.use("/api/v1/posts", postsRouter);
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+
+  console.error(error);
+  return res.status(500).json({
+    error: "Internal server error",
+  });
+});
+```
+
+## 5. How a Request Travels
+
+For `GET /api/v1/posts/post_42`:
+
+```text
+Node HTTP server
+  ↓
+server.js: global middleware
+  ↓
+server.js: /api/v1/posts mount matches
+  ↓
+postsRouter: GET /:postId matches
+  ↓
+getPost controller reads req.params.postId
+  ↓
+postsService applies the use case
+  ↓
+postsRepository reads storage
+  ↓
+result returns through service and controller
+  ↓
+controller sends the HTTP response
+```
+
+On failure, the direction changes:
+
+```text
+service throws/rejects
+  ↓
+Express 5 forwards the error
+  ↓
+normal handlers are skipped
+  ↓
+global error middleware formats a safe response
+```
+
+The files are separate, but the request remains one continuous Express middleware cycle.
+
+## 6. Why This Architecture Matters
+
+- **Testing:** Controllers can be called with controlled request, response, and service collaborators without opening a TCP port. Services can be tested without Express at all.
+- **Reusability:** A compatible controller can serve multiple routes, while services are even more reusable because they do not depend on HTTP objects.
+- **Collaboration:** Developers can work on different resource modules and layers with fewer conflicts.
+- **Future changes:** New routes reuse existing use cases, persistence can change behind repositories, and HTTP formatting remains in controllers.
+
+Architecture does not guarantee quality, but it gives change a safer direction.
+
+## Checkpoints
+
+### What is the single responsibility of a controller?
+
+Translate HTTP input into a use-case call and translate the result into an HTTP response. It should not own database access or complex business rules.
+
+### How do I refactor five routes out of `server.js`?
+
+Create one `postsRouter` containing the five method/path declarations, export five controller functions, import them into the router, and mount that router once from `server.js`.
+
+### What is the complete architectural flow?
+
+```text
+Request → Route → Controller → Service → Repository
+Response ← Controller ← Service ← Repository
+                       ↘ error middleware on failure
+```
+
+### Why use `express.Router()` instead of only `app`?
+
+It groups related routes and middleware into a mountable module, keeps `server.js` focused on application composition, and makes resource boundaries easier to navigate and test.
+
+### How does `next(error)` reach global error middleware?
+
+Express switches from normal traversal to error traversal, skips ordinary handlers, and searches forward for middleware with `(error, req, res, next)`. Therefore, global error middleware belongs after the routes.
+
+## What I Learned in Part 4
+
+Splitting code is not the goal. Clear ownership is.
+
+```text
+server.js composes the application.
+routes select handlers.
+controllers translate HTTP.
+services own use cases.
+repositories own persistence access.
+error middleware translates failures safely.
+```
+
+> **A maintainable Express application grows by adding focused modules, not by making `server.js` understand every feature.**
+
+Part 5 will examine Express middleware in practice and show how shared concerns run before and around these route-controller flows.
+
+## References
+
+- [Express 5 Router API](https://expressjs.com/en/5x/api/router/)
+- [Express error-handling guide](https://expressjs.com/en/guide/error-handling/)
+- [Using Express middleware](https://expressjs.com/en/guide/using-middleware/)
