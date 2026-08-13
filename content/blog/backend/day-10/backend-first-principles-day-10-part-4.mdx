@@ -4,7 +4,7 @@ description: Refactoring a monolithic Express server into route and controller l
 slug: backend-first-principles-day-10-part-4
 date: '2026-08-12'
 category: Learning Journey
-readingTime: 10 min read
+readingTime: 15 min read
 day: 10
 part: 4
 series: Learning Backend from First Principles
@@ -46,6 +46,42 @@ The symptoms are familiar:
 
 Spaghetti code is not simply long code. It is code whose responsibilities and dependencies are difficult to trace.
 
+### How the Monolith Grows
+
+A single route can quietly accumulate several layers of work:
+
+```js
+app.post("/posts", async (req, res) => {
+  const { title, body, authorId } = req.body;
+
+  if (!title || !body || !authorId) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  const author = await database.authors.findById(authorId);
+
+  if (!author) {
+    return res.status(404).json({ error: "Author not found" });
+  }
+
+  const post = await database.posts.insert({
+    title,
+    body,
+    authorId,
+    status: "draft",
+  });
+
+  await emailService.notifyEditors(post);
+  return res.status(201).json({ data: post });
+});
+```
+
+The code may work, but the handler now knows about HTTP validation, author lookup, business defaults, database insertion, notifications, and response formatting. The next route may repeat some of those rules differently.
+
+The maintenance problem appears when a rule changes. If drafts now require an editor, I must search every route that can create or import a post. If database access changes, HTTP handlers must change. If I want to reuse post creation from a background job, the only implementation expects `req` and `res`.
+
+The problem is coupling: responsibilities that change for different reasons are tied together.
+
 ## 2. Separation of Concerns From First Principles
 
 **Separation of concerns** means grouping code by the job it owns and limiting what each part needs to know.
@@ -72,6 +108,32 @@ This improves:
 - **scalability of the codebase** because new features do not enlarge one central file forever.
 
 It does not mean every function needs its own file. Separation is valuable when it clarifies ownership, not when it only increases folders.
+
+### Boundaries Follow Reasons to Change
+
+Each layer changes under different pressure:
+
+```text
+Route changes       when the public URL or middleware policy changes
+Controller changes  when the HTTP contract changes
+Service changes     when a business rule changes
+Repository changes  when persistence behavior changes
+```
+
+For example, changing `POST /posts` to return `202 Accepted` affects the controller contract. Requiring editor approval affects the service. Moving from an in-memory collection to PostgreSQL affects the repository.
+
+Good separation keeps those changes from spreading unnecessarily. The dependency direction should also remain clear:
+
+```text
+Route depends on controller
+Controller depends on service
+Service depends on repository abstraction
+
+Repository should not import the controller.
+Service should not construct an Express response.
+```
+
+This is the practical connection to Day 7: outer HTTP details call inward toward application behavior. The business rules should not need to know which Express route started them.
 
 ## 3. Routes: The Routing Layer
 
@@ -120,6 +182,38 @@ The mount prefix combines with the router paths:
 ```
 
 Unlike routes defined directly on `app`, a router can be moved, versioned, tested, or mounted with resource-specific middleware as one unit.
+
+### A Resource-Oriented Project Shape
+
+After the refactor, a small project might look like:
+
+```text
+src/
+├── server.js
+├── routes/
+│   └── posts-routes.js
+├── controllers/
+│   └── posts-controller.js
+├── services/
+│   └── posts-service.js
+├── repositories/
+│   └── posts-repository.js
+└── middleware/
+    └── error-handler.js
+```
+
+This layer-based structure is easy to understand for a small application. A larger codebase might group the same responsibilities by feature instead:
+
+```text
+src/
+└── posts/
+    ├── posts-routes.js
+    ├── posts-controller.js
+    ├── posts-service.js
+    └── posts-repository.js
+```
+
+Neither shape is automatically superior. The important part is that the responsibility boundaries remain visible and imports flow predictably.
 
 ## 4. Controllers: The Handler Layer
 
@@ -181,6 +275,58 @@ They should not own complex domain rules or persistence details. This is a warni
 
 Those jobs should move to focused validation, service, and repository boundaries.
 
+### Mapping Input Instead of Passing Express Everywhere
+
+A controller should avoid passing the complete request object into the service:
+
+```js
+// Avoid making the service depend on Express
+await postsService.create(req);
+```
+
+Instead, it should create a plain use-case input:
+
+```js
+export async function createPost(req, res) {
+  const command = {
+    title: req.body.title,
+    body: req.body.body,
+    authorId: req.user.id,
+  };
+
+  const post = await postsService.create(command);
+
+  return res
+    .status(201)
+    .set("Location", `/api/v1/posts/${post.id}`)
+    .json({ data: post });
+}
+```
+
+Now the service receives application data rather than Express objects:
+
+```js
+// src/services/posts-service.js
+import * as postsRepository from "../repositories/posts-repository.js";
+
+export async function create(command) {
+  const existing = await postsRepository.findByTitle(command.title);
+
+  if (existing) {
+    throw new Error("A post with this title already exists");
+  }
+
+  return postsRepository.insert({
+    ...command,
+    status: "draft",
+  });
+}
+```
+
+The service can now be called from an Express controller, a command-line script, a scheduled job, or a test without inventing fake `req` and `res` objects.
+
+The controller still owns HTTP decisions such as `201`, `Location`, and the JSON envelope. The service owns the rule that a title must be unique and a new post begins as a draft.
+
 ### Error Propagation
 
 A controller can forward an error explicitly:
@@ -220,6 +366,19 @@ app.use((error, req, res, next) => {
 });
 ```
 
+In a real application, expected service errors should carry stable categories so the error middleware can map them deliberately:
+
+```text
+Validation error → 400
+Unauthenticated  → 401
+Forbidden        → 403
+Not found        → 404
+Conflict         → 409
+Unexpected error → 500
+```
+
+The global handler should not expose database messages or stack traces to clients. It can log internal details while sending a safe public error representation.
+
 ## 5. How a Request Travels
 
 For `GET /api/v1/posts/post_42`:
@@ -258,6 +417,23 @@ global error middleware formats a safe response
 
 The files are separate, but the request remains one continuous Express middleware cycle.
 
+### Composition Still Happens in One Place
+
+Separating modules does not mean hiding how the application is assembled. `server.js` should remain the composition root:
+
+```js
+const app = express();
+
+app.use(express.json());
+app.use("/api/v1/posts", postsRouter);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+app.listen(PORT);
+```
+
+This file answers the high-level questions: which global middleware runs, which routers are mounted, in what order errors are handled, and where the server starts. Feature details live elsewhere, but the application flow remains readable.
+
 ## 6. Why This Architecture Matters
 
 - **Testing:** Controllers can be called with controlled request, response, and service collaborators without opening a TCP port. Services can be tested without Express at all.
@@ -266,6 +442,50 @@ The files are separate, but the request remains one continuous Express middlewar
 - **Future changes:** New routes reuse existing use cases, persistence can change behind repositories, and HTTP formatting remains in controllers.
 
 Architecture does not guarantee quality, but it gives change a safer direction.
+
+### What Testing Looks Like
+
+The service is the easiest layer to test independently because it accepts plain data and returns a result:
+
+```js
+const post = await postsService.create({
+  title: "Express Architecture",
+  body: "Clear boundaries matter.",
+  authorId: "user_42",
+});
+
+expect(post.status).toBe("draft");
+```
+
+A controller unit test can provide small request and response substitutes and replace the service collaborator. That verifies input mapping and HTTP output without binding a network port:
+
+```js
+const req = {
+  body: { title: "Routing", body: "..." },
+  user: { id: "user_42" },
+};
+
+const res = createResponseSpy();
+
+await createPost(req, res);
+
+expect(res.status).toHaveBeenCalledWith(201);
+expect(res.json).toHaveBeenCalled();
+```
+
+This does not replace HTTP integration tests. Integration tests still prove that router mounting, middleware order, body parsing, controllers, and error handlers work together. Separation lets me choose the smallest useful test for each risk.
+
+### Reuse Has a Boundary
+
+The same controller can serve compatible routes, but controllers remain coupled to Express-style `req`, `res`, and HTTP semantics. The service is the more reusable application boundary.
+
+```text
+Express route ─┐
+Admin command ─┼→ post service → repository
+Background job ┘
+```
+
+This prevents “reusability” from becoming an excuse to make controllers enormous. Thin controllers make the underlying use case available to other entry points.
 
 ## Checkpoints
 
