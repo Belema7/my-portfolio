@@ -1,0 +1,147 @@
+---
+title: "One Codebase, Many Environments"
+description: Why development, test, staging, and production each need different configuration, how their priorities differ, and how the same code changes behaviour through configuration alone.
+slug: backend-first-principles-day-17-part-6
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 4 min read
+day: 17
+part: 6
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1706
+published: true
+tags: [Configuration Management, Environments, Deployment]
+keywords: [development staging production configuration, environment specific config, connection pool size per environment]
+---
+# One Codebase, Many Environments
+
+> *“The code stays the same. The configuration decides how it behaves.”*
+
+## Why Configuration Differs Per Environment
+
+A backend usually runs in several environments. Each one exists for a different reason, so each has **different priorities** — things it needs that the others do not need, or should not have.
+
+Configuration is designed around those priorities.
+
+## The Four Environments and Their Priorities
+
+### Development
+
+Running on `localhost` on my own machine.
+
+```text
+Priority: developer productivity and debugging
+```
+
+I want to work fast and catch issues fast: verbose `debug` logs, local databases, fast reloads, detailed error output.
+
+### Test
+
+An environment created automatically — for example, by a GitHub Actions workflow — to run unit tests, integration tests, and other checks.
+
+```text
+Priority: automated validation and quality assurance
+```
+
+It needs predictable, isolated settings: test databases, fake or sandbox API keys, deterministic behaviour.
+
+### Staging
+
+A hosted version of the application that works **as similarly to production as possible**.
+
+```text
+Priority: mirror production, so issues are found before users see them
+```
+
+It lets the team understand how production will behave and fix or debug problems early.
+
+But there is a second, competing priority: **cost**. A staging environment that matches production exactly would cost as much as production in cloud bills, and most teams do not want that.
+
+```text
+Staging priorities: mirror production + minimize cloud costs
+```
+
+### Production
+
+The real system, used by real users.
+
+```text
+Priority: reliability, security, and performance
+```
+
+Quiet `info` logs, strict security settings, real secrets, sizes tuned for real traffic.
+
+## Summary of Priorities
+
+| Environment | Main priority | Typical choices |
+| --- | --- | --- |
+| Development | Productivity, debugging | `debug` logs, local services |
+| Test | Automated validation | Isolated databases, sandbox keys |
+| Staging | Mirror production, low cost | Production-like setup, smaller resources |
+| Production | Reliability, security, performance | `info` logs, real secrets, tuned limits |
+
+## Example: Database Pool Size
+
+The same setting, `DB_MAX_POOL_SIZE`, gets a different value in each environment:
+
+```text
+Development → 10
+Staging     → 2
+Production  → 50
+```
+
+**Development: 10.** On localhost, 10 connections are plenty while building and testing features. Modern laptops handle it easily.
+
+**Production: 50.** A large user base and unpredictable traffic spikes need many concurrent connections, so the pool is bigger.
+
+**Staging: 2.** Staging is mostly used by developers and testers, not real traffic. Keeping the pool tiny means a smaller, cheaper database. Some delay is acceptable in exchange for saving money on cloud costs.
+
+## Same Code, Different Behaviour
+
+The important part: **the application code is identical in every environment**.
+
+```ts
+const pool = createPool({
+  connectionString: settings.database.url,
+  max: settings.database.maxPoolSize, // 10, 2, or 50 depending on environment
+});
+```
+
+If these values were hardcoded, changing behaviour between environments would mean changing code. With centralized configuration:
+
+```text
+Change the configuration → the behaviour changes → the code is untouched
+```
+
+That is exactly what configuration management is for.
+
+## Keep Environments Clearly Separated
+
+A few practical rules help keep environments safe:
+
+- Each environment has **its own credentials** — staging should never hold production database passwords.
+- Use **test/sandbox keys** outside production (for example, Stripe test keys).
+- Make the current environment **explicit** (`APP_ENV=production`) instead of guessing it.
+
+## Checkpoint Questions
+
+### What is the main priority of each environment?
+
+Development: productivity and debugging. Test: automated validation. Staging: mirroring production at low cost. Production: reliability, security, and performance.
+
+### Why might staging have a smaller pool size than development?
+
+Because staging is used by a few developers and testers, and a smaller database saves cloud costs. Some delay is acceptable there.
+
+### How does configuration let behaviour change without code changes?
+
+The code reads values like pool size from configuration, so each environment can provide different values while the code stays identical.
+
+## What I Learned in Part 6
+
+Each environment exists for a different purpose, so each gets configuration that fits its priorities. The code never changes — only the configuration does — and that is what makes one codebase work everywhere.
+
+Part 7 covers the most important part: securing and validating configuration.

@@ -1,0 +1,181 @@
+---
+title: "Where Configuration Lives: Environment Variables and Files"
+description: How environment variables and .env files work, how deployments inject configuration from secret managers, and why YAML and TOML files are popular for structured configuration.
+slug: backend-first-principles-day-17-part-4
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 4 min read
+day: 17
+part: 4
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1704
+published: true
+tags: [Configuration Management, Environment Variables, YAML]
+keywords: [environment variables, dotenv, .env file, yaml config, toml config, json vs yaml configuration]
+---
+# Where Configuration Lives: Environment Variables and Files
+
+> *“Where you store configuration depends on security, speed, and environment.”*
+
+## The Storage Question
+
+Once I know what configuration I have, the next question is where to keep it. The answer depends on:
+
+```text
+- Security  → how sensitive is it?
+- Speed     → how fast must it be read, and how often does it change?
+- Environment → local machine, CI, containers, cloud?
+```
+
+The main storage options are:
+
+```text
+1. Environment variables   ← this part
+2. Configuration files     ← this part
+3. Key-value stores        ← Part 5
+4. Secret managers         ← Part 5
+```
+
+## 1. Environment Variables
+
+The most common place to store configuration. Environment variables are a **feature of the operating system** — every process has a set of key-value pairs it can read.
+
+They are common in Node.js apps, but every language supports them: Python, Go, Java, and more.
+
+```ts
+const port = process.env.PORT;          // Node.js
+```
+
+```go
+port := os.Getenv("PORT")               // Go
+```
+
+### Locally: The `.env` File
+
+On my local machine, I keep values in a `.env` file:
+
+```text
+# .env
+PORT=8080
+DATABASE_URL=postgres://localhost:5432/shop_dev
+LOG_LEVEL=debug
+```
+
+A library such as **dotenv** reads this file and loads the values into the process environment. Without it, I would have to set each one manually with `export`:
+
+```bash
+export PORT=8080
+export DATABASE_URL=postgres://localhost:5432/shop_dev
+```
+
+The library does not invent anything new — it just saves me from setting variables by hand.
+
+The `.env` file must be listed in `.gitignore`. A common practice is to commit a `.env.example` with the variable names and fake values, so teammates know what to set.
+
+### In Deployment: Injected by the Platform
+
+In containers, Kubernetes, or cloud platforms, there is no `.env` file. The platform injects environment variables when it starts the application.
+
+A typical deployment flow:
+
+```text
+1. Deployment is triggered
+2. Pipeline fetches configuration and secrets from a secret manager
+   (HashiCorp Vault, AWS Parameter Store, Azure Key Vault, Google Secret Manager)
+3. Values are loaded into the application's environment
+4. Application starts and reads its environment variables
+```
+
+The application code stays the same — it always reads environment variables. Only the way they are provided changes.
+
+## 2. Configuration Files
+
+Files are better than environment variables for **larger, structured, or nested** configuration.
+
+### JSON
+
+```json
+{
+  "server": { "port": 8080 },
+  "log": { "level": "debug" }
+}
+```
+
+JSON is everywhere, but it has one big weakness for configuration: **no comments**. I cannot explain why a value is set the way it is.
+
+### YAML
+
+YAML is more popular for configuration today because it supports comments, which helps teams share knowledge:
+
+```yaml
+server:
+  port: 8080
+  # Increase if image generation requests start timing out
+  timeout: 90s
+
+log:
+  level: debug   # use "info" in production
+
+database:
+  max_pool_size: 10
+```
+
+### TOML
+
+A newer format, also heavily used for configuration. It reads like an INI file, with clear sections:
+
+```toml
+[server]
+port = 8080
+timeout = "90s"
+
+[log]
+level = "debug"
+```
+
+| Format | Comments | Nesting | Typical use |
+| --- | --- | --- | --- |
+| JSON | ❌ | ✅ | Machine-generated config, tooling |
+| YAML | ✅ | ✅ | Most open-source backends, Kubernetes |
+| TOML | ✅ | ✅ (sections) | Rust and Go tooling, app config |
+
+### How Real Projects Do It
+
+Looking at real open-source codebases makes this concrete:
+
+- **Authelia** (an authentication server written in Go) keeps its settings in a single `configuration.yml`: server, log level, storage, notifications, identity providers, regulation, and session settings — all in one YAML file.
+- **Apache Answer** (an Apache incubator project) uses `config.yaml` files for application settings: which port the server runs on, the database (SQLite for local development), and Swagger UI settings.
+
+Storing configuration in YAML files is very common across open-source projects.
+
+### Files and Secrets
+
+Files are great for non-sensitive structure, but secrets in committed config files have the same problem as hardcoded secrets. A common approach:
+
+```text
+config.yaml        → non-secret settings (committed)
+environment vars   → secrets and per-environment overrides (not committed)
+```
+
+## Checkpoint Questions
+
+### What does a library like dotenv actually do?
+
+It reads a `.env` file and loads its values into the process environment, so I do not have to `export` each variable manually.
+
+### How do environment variables reach an app in production?
+
+The deployment pipeline or platform fetches them — often from a secret manager — and injects them into the environment before the app starts.
+
+### Why is YAML preferred over JSON for configuration?
+
+Because YAML supports comments, so the team can explain values directly in the config file.
+
+## What I Learned in Part 4
+
+Environment variables are the most common way to provide configuration: `.env` files locally, injected by the platform in production. Files like YAML and TOML are better for larger, structured settings, and real open-source projects use them heavily.
+
+Part 5 covers centralized options: key-value stores, secret managers, and combining sources.

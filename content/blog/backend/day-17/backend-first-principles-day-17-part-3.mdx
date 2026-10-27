@@ -1,0 +1,196 @@
+---
+title: "The Types of Configuration Every Backend Has"
+description: Application settings, database configuration, external service credentials, feature flags, infrastructure, security, performance tuning, and business rules — what each type contains and why it matters.
+slug: backend-first-principles-day-17-part-3
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 5 min read
+day: 17
+part: 3
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1703
+published: true
+tags: [Configuration Management, Feature Flags, Performance]
+keywords: [types of configuration, application settings, feature flags, log level, timeout configuration, connection pool size]
+---
+# The Types of Configuration Every Backend Has
+
+> *“Not all configuration is created equal.”*
+
+## Why Types Matter
+
+Different kinds of configuration need different treatment. The type decides:
+
+```text
+- Where it should be stored
+- How it should be protected
+- Who can access it
+- Which environments can see it
+```
+
+So before deciding *where* configuration lives, I need to know *what kind* it is.
+
+## 1. Application Settings
+
+The most common type, found in almost every backend. These control how the application itself runs.
+
+### Log Level
+
+```text
+Development → debug   (see everything while building)
+Production  → info    (avoid flooding valuable production logs)
+```
+
+During development, `debug` logs help me tell different events apart. In production, too many logs cost money and bury the important ones, so the level is raised to `info`.
+
+### Port
+
+```text
+Local       → 8080
+Production  → whatever the VPS, container, or Kubernetes setup expects
+```
+
+### Connection Pool Size
+
+Most backends use **connection pooling** to reuse database connections instead of opening a new one for every request. The **maximum pool size** is configuration, because the right value depends on traffic and environment.
+
+### Timeout Values
+
+A timeout decides how long the server waits for a request to complete.
+
+Example: the server timeout is **60 seconds**. A request asks the backend to generate an AI image and return it as base64. Image generation takes **about 80 seconds** on average.
+
+```text
+Request starts → 60s timeout reached → request dropped
+→ client receives a timeout error (often 504 Gateway Timeout from a proxy)
+```
+
+The code is fine. The **configuration** is wrong for this workload. Timeouts must match what the application actually does.
+
+## 2. Database Configuration
+
+Everything the application needs to connect to the database:
+
+```text
+Host       → where the database runs
+Port       → 5432
+Username   → app_user
+Password   → ••••••••
+Name       → shop_production
+```
+
+These combine into a **connection URL** used at runtime:
+
+```text
+postgres://app_user:password@db.example.com:5432/shop_production
+```
+
+It can also include extra settings, such as **query timeouts** — how long a query may run before it is cancelled.
+
+## 3. External Service Configuration
+
+Every external service has its own configuration, usually an **API key** used to initialize its client:
+
+| Service type | Example | Configuration |
+| --- | --- | --- |
+| Email | Mailchimp, Resend | API key, sender address |
+| Payments | Stripe | API key, webhook secret |
+| Authentication | Clerk | API keys |
+
+Whatever provider I choose, its configuration has to be managed.
+
+## 4. Feature Flags
+
+Feature flags let me **enable or disable features dynamically**, without deploying new code.
+
+Back to the e-commerce example. There is an existing checkout flow:
+
+```text
+Order details → Payment details → Proceed to payment
+```
+
+I build a **new checkout flow** using a different API. I do not want to release it to everyone at once. I want to:
+
+- Run an **A/B test**
+- Enable it only for a **segment of users** — for example, users in the US — while keeping it off for users in India
+
+```ts
+const useNewCheckout = flags.isEnabled("new-checkout", { country: user.country });
+
+return useNewCheckout ? newCheckout(order) : oldCheckout(order);
+```
+
+If the new flow has problems, I switch the flag off — no rollback, no redeploy.
+
+## 5. Other Types
+
+### Infrastructure Configuration
+
+DevOps-related settings: regions, instance sizes, replicas, networking, deployment settings.
+
+### Security Configuration
+
+```text
+- JWT secret
+- Session secret
+- Session timeout
+- Allowed CORS origins
+```
+
+Anything security-related that affects how the application behaves.
+
+### Performance Tuning Parameters
+
+Values that tune runtime performance. For example, a Go backend can set environment variables like `GOMAXPROCS` to control how many CPU cores the Go runtime uses.
+
+Other examples: cache durations, worker counts, batch sizes, pool sizes.
+
+### Business Rules
+
+Rules enforced by application logic but kept in centralized configuration so they can change without code changes:
+
+```text
+- Maximum order amount per user
+- Free shipping threshold
+- Number of login attempts before lockout
+```
+
+## Summary Table
+
+| Type | Examples | Usually sensitive? |
+| --- | --- | --- |
+| Application settings | Log level, port, pool size, timeouts | No |
+| Database | Host, port, user, password, name | Yes (credentials) |
+| External services | Stripe, Resend, Clerk API keys | Yes |
+| Feature flags | New checkout on/off, user segments | No |
+| Infrastructure | Regions, replicas, instance sizes | Sometimes |
+| Security | JWT secret, session timeout | Yes |
+| Performance tuning | `GOMAXPROCS`, cache TTLs | No |
+| Business rules | Max order amount | No |
+
+## Checkpoint Questions
+
+### Why should log level differ between development and production?
+
+`debug` helps during development, while `info` in production avoids flooding expensive logs and hiding important events.
+
+### How can a timeout value break a working feature?
+
+If the timeout is shorter than the operation needs — like a 60-second timeout for 80-second image generation — the request is dropped even though the code is correct.
+
+### What problem do feature flags solve?
+
+They enable or disable features dynamically, for all users or specific segments, without redeploying code.
+
+### Why keep business rules in configuration?
+
+So limits like a maximum order amount can be changed centrally without editing and redeploying code.
+
+## What I Learned in Part 3
+
+Configuration comes in many types — application settings, database, external services, feature flags, infrastructure, security, performance, and business rules. Knowing the type tells me how sensitive a value is and how it should be handled.
+
+Part 4 looks at where configuration is stored, starting with environment variables and files.

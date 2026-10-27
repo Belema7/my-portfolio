@@ -1,0 +1,226 @@
+---
+title: "Securing and Validating Configuration"
+description: Never hardcoding secrets, using secret managers for encryption at rest and in transit, least-privilege access control, rotation, and validating every configuration value at startup with Zod or go-playground/validator.
+slug: backend-first-principles-day-17-part-7
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 17
+part: 7
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1707
+published: true
+tags: [Configuration Management, Security, Validation, Go, Zod]
+keywords: [never hardcode secrets, least privilege, secret rotation, validate environment variables, zod env validation, go-playground validator]
+---
+# Securing and Validating Configuration
+
+> *“If you take one thing from this day: always validate your configuration.”*
+
+## Security First
+
+Some of these rules are obvious, but they are worth writing down so nothing is missed.
+
+## Rule 1: Never Hardcode Secrets
+
+Production database URLs, Clerk API keys, email provider keys, payment keys — **none of them belong in the codebase**.
+
+```ts
+// ❌ Never
+const stripe = new Stripe("sk_live_51Hx...");
+
+// ✅ Always
+const stripe = new Stripe(settings.stripe.secretKey);
+```
+
+Code is copied, shared, reviewed, and stored in Git history forever. A secret in code is a secret that has already started leaking.
+
+## Rule 2: Use a Secret Manager When Possible
+
+Use a cloud secrets management service whenever possible:
+
+```text
+- HashiCorp Vault
+- AWS Parameter Store / Secrets Manager
+- Azure Key Vault
+- Google Secret Manager
+```
+
+When it comes to security, a little over-engineering is a good idea. These services already handle essential protections for me:
+
+### Encryption at Rest
+
+Wherever the secret manager stores my configuration, it **encrypts it first**. Even if the underlying storage were exposed, the values would be unreadable.
+
+### Encryption in Transit
+
+When my application or pipeline fetches configuration through an API call, the values travel **encrypted**. They are only decrypted inside my trusted environment — using credentials held by my infrastructure, CI pipeline (like GitHub Actions secrets), or Kubernetes setup.
+
+```text
+Stored:     encrypted 🔒
+Fetched:    encrypted in transit 🔒
+Used:       decrypted only inside my trusted environment
+```
+
+With a dedicated secret manager, I do not have to build any of this myself.
+
+## Rule 3: Access Control With Least Privilege
+
+In a team of any real size, I should decide **who can access which configuration**, following the **principle of least privilege**: everyone gets only what they need for their job.
+
+| Role | Should access |
+| --- | --- |
+| Frontend developers | Backend API URL, frontend integration keys |
+| Backend developers | Databases, Redis, Elasticsearch, service keys |
+| DevOps team | Cloud infrastructure access (for example, EC2 instances) |
+
+A frontend developer does not need the production database password. A backend developer does not need root cloud credentials. Fewer people with access means fewer ways for a secret to leak.
+
+## Rule 4: Rotate Secrets Periodically
+
+API keys, JWT secrets, database passwords — all should be **rotated** on a regular schedule.
+
+```text
+Old key leaked six months ago, unnoticed
+→ with rotation: it stopped working long ago ✅
+→ without rotation: still works today ❌
+```
+
+Rotation limits how long a leaked secret stays useful.
+
+## Rule 5: Always Validate Configuration
+
+This is the most important lesson of the whole day.
+
+A very common pattern is to load environment variables and then read them wherever needed:
+
+```ts
+const timeout = process.env.REQUEST_TIMEOUT; // string | undefined — never checked
+```
+
+Nothing checks whether the value exists, or whether it is valid. A missing or wrong value is very hard to spot in production. The system either **breaks** or — worse — **behaves strangely**, and nobody immediately connects the strange behaviour to a missing variable.
+
+### Validate at Load Time, From Every Source
+
+The fix: when configuration is loaded — at startup, right after deployment, before the application starts serving — **validate every value**, no matter where it came from:
+
+```text
+- Environment variables
+- config.yaml
+- AWS Parameter Store
+- Any other source
+```
+
+Use a proper validation library, and decide for each value:
+
+- Is it **required**?
+- Is it **optional** with a **default** set in the application code?
+- What **type and format** must it have?
+
+If anything is invalid, stop the application with a clear message.
+
+### TypeScript: Zod
+
+```ts
+import { z } from "zod";
+
+const ConfigSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "staging", "production"]),
+  PORT: z.coerce.number().int().positive().default(8080),
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  DATABASE_URL: z.url(),
+  DB_MAX_POOL_SIZE: z.coerce.number().int().min(1).max(200).default(10),
+  STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
+  JWT_SECRET: z.string().min(32),
+});
+
+const result = ConfigSchema.safeParse(process.env);
+
+if (!result.success) {
+  console.error("Invalid configuration:", z.prettifyError(result.error));
+  process.exit(1);
+}
+
+export const config = result.data; // typed and trusted
+```
+
+### Go: go-playground/validator
+
+```go
+type Config struct {
+    Port         int    `validate:"required,min=1,max=65535"`
+    LogLevel     string `validate:"required,oneof=debug info warn error"`
+    DatabaseURL  string `validate:"required,url"`
+    MaxPoolSize  int    `validate:"required,min=1,max=200"`
+    JWTSecret    string `validate:"required,min=32"`
+}
+
+func Load() (*Config, error) {
+    cfg := &Config{
+        Port:        envInt("PORT", 8080),
+        LogLevel:    envString("LOG_LEVEL", "info"),
+        DatabaseURL: os.Getenv("DATABASE_URL"),
+        MaxPoolSize: envInt("DB_MAX_POOL_SIZE", 10),
+        JWTSecret:   os.Getenv("JWT_SECRET"),
+    }
+
+    if err := validator.New().Struct(cfg); err != nil {
+        return nil, fmt.Errorf("invalid configuration: %w", err)
+    }
+    return cfg, nil
+}
+```
+
+Here `envInt` and `envString` are small helpers that read a variable and fall back to a default.
+
+In both languages, the rest of the application only ever uses the **validated, typed** config object — never raw environment strings.
+
+## Security and Validation Checklist
+
+- [ ] No secrets in the codebase or committed files
+- [ ] Production secrets live in a secret manager
+- [ ] Secrets are encrypted at rest and in transit
+- [ ] Access follows least privilege by role
+- [ ] Secrets are rotated on a schedule
+- [ ] Every config value is validated at startup, from every source
+- [ ] Required vs optional vs default is decided for each value
+- [ ] The app refuses to start with invalid configuration
+
+## The Whole Day in One View
+
+```text
+1. WHAT       Configuration is the DNA of the app — much more than secrets
+2. WHY        Distributed systems multiply settings; without a strategy → chaos
+3. TYPES      App settings · database · external services · feature flags ·
+              infra · security · performance · business rules
+4. STORAGE    Environment variables · files (YAML/TOML/JSON)
+5. CENTRAL    Key-value stores · secret managers · hybrid loading with priority
+6. ENVIRONMENTS  Dev · test · staging · production — same code, different config
+7. SECURE & VALIDATE  No hardcoding · secret managers · least privilege ·
+              rotation · validate everything at startup
+```
+
+## Checkpoint Questions
+
+### Why is a secret in code already a leaked secret?
+
+Because code is copied, shared, reviewed, and kept in Git history forever, so the secret spreads wherever the code goes.
+
+### What does a secret manager do for encryption?
+
+It encrypts values at rest in its storage and in transit when they are fetched, and they are decrypted only inside the trusted environment.
+
+### What is the principle of least privilege for configuration?
+
+Each person or role gets access only to the configuration they need for their job, and nothing more.
+
+### Why validate configuration at startup?
+
+Because missing or invalid values are hard to notice in production and cause breakage or strange behaviour. Validating at startup stops the app immediately with a clear message instead.
+
+## What I Learned in Part 7
+
+Secrets never belong in code, secret managers handle encryption and access for me, access should follow least privilege, and secrets should rotate. Above all: always validate configuration at startup, from every source. That single habit prevents a whole class of confusing production failures.

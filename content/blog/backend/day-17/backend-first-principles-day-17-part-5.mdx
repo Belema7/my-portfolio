@@ -1,0 +1,160 @@
+---
+title: "Centralized Configuration: Key-Value Stores, Secret Managers, and Hybrid Loading"
+description: Using key-value stores like Consul and etcd, dedicated secret managers like HashiCorp Vault and AWS Parameter Store, and hybrid strategies that load configuration from several sources by priority.
+slug: backend-first-principles-day-17-part-5
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 4 min read
+day: 17
+part: 5
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1705
+published: true
+tags: [Configuration Management, Secrets Management, Vault]
+keywords: [consul etcd configuration, hashicorp vault, aws parameter store, azure key vault, configuration precedence]
+---
+# Centralized Configuration: Key-Value Stores, Secret Managers, and Hybrid Loading
+
+> *“When your app runs in many places, its configuration should live in one.”*
+
+## Why Centralize?
+
+Environment variables and files work well for one application on one server. Modern deployments are different:
+
+```text
+- Kubernetes clusters with many pods
+- Autoscaling that creates new instances any time
+- Sometimes several cloud providers at once
+```
+
+Copying `.env` files to every instance does not scale. It is easier and safer to keep configuration in **one central place** that every instance reads from.
+
+## 3. Key-Value Stores
+
+Dedicated, cloud-native key-value stores such as **Consul** and **etcd** hold configuration as simple key-value pairs:
+
+```text
+shop/production/log_level        = info
+shop/production/max_pool_size    = 50
+shop/production/new_checkout     = true
+```
+
+Why teams use them:
+
+- **Lightweight and simple** compared to complex hierarchical systems
+- Behave much like environment variables, but **shared** across all instances
+- Some can **notify the application when a value changes**, so settings like feature flags can update without restarting
+
+## 4. Secret Managers
+
+For sensitive configuration, there are services built specifically for secrets:
+
+| Provider | Service |
+| --- | --- |
+| HashiCorp | **Vault** |
+| AWS | **Parameter Store** / Secrets Manager |
+| Azure | **Key Vault** |
+| Google Cloud | **Secret Manager** |
+
+These are what most companies use, because deployments are distributed: Kubernetes, autoscaling, multiple cloud providers. A tool like Vault is already built for all these environments, with dedicated integrations and documentation that make setup as easy as possible.
+
+What secret managers provide:
+
+```text
+✅ Encryption at rest and in transit
+✅ Access control (who can read which secret)
+✅ Audit logs (who read what, when)
+✅ Versioning and rotation
+```
+
+Using an external secret manager makes a lot of sense once an application handles serious production traffic. (Part 7 goes deeper into the security side.)
+
+## Hybrid Strategies
+
+In practice, most applications combine several sources.
+
+The usual design: one **configuration loader** runs at startup, reads from multiple sources, and builds a single **runtime settings object** that the rest of the application uses.
+
+```text
+          ┌─────────────────────┐
+          │  AWS Parameter Store │  priority 1
+          └──────────┬──────────┘
+          ┌──────────┴──────────┐
+          │    config.yaml      │  priority 2
+          └──────────┬──────────┘
+          ┌──────────┴──────────┐
+          │ Environment variables│ priority 3
+          └──────────┬──────────┘
+                     ▼
+            Config loader (startup)
+                     ▼
+           Runtime settings object
+                     ▼
+            Rest of the application
+```
+
+The team **decides in advance which source wins** when the same key appears in several places, and can load sources **conditionally per environment**:
+
+```text
+Local development → .env + config.yaml
+Production        → Parameter Store + config.yaml
+```
+
+A simple loader:
+
+```ts
+const fileConfig = loadYaml("config.yaml");
+const remoteConfig = env === "production" ? await loadFromParameterStore() : {};
+
+const settings = {
+  ...fileConfig,        // lowest priority
+  ...process.env,       // overrides file values
+  ...remoteConfig,      // highest priority
+};
+```
+
+The exact priority order is a team decision. What matters is that it is **explicit and documented**, so nobody has to guess where a value came from.
+
+### Why a Single Settings Object Helps
+
+```text
+❌ process.env.X scattered across 40 files
+✅ settings.database.maxPoolSize in one typed object
+```
+
+- All sources are merged in one place.
+- The rest of the code does not care where a value came from.
+- It is the perfect place to **validate** everything (Part 7).
+
+## Comparing All Storage Options
+
+| Storage | Best for | Weakness |
+| --- | --- | --- |
+| Environment variables | Simple values, secrets injected by platform | Flat, hard to structure |
+| Files (YAML/TOML/JSON) | Structured, non-secret settings | Secrets should not be committed |
+| Key-value stores | Shared settings across many instances | Another system to run |
+| Secret managers | Sensitive values in production | Cost and setup |
+| Hybrid | Real production systems | Needs clear priority rules |
+
+## Checkpoint Questions
+
+### Why do distributed deployments need centralized configuration?
+
+Because many instances are created and destroyed automatically, so configuration should come from one shared source instead of being copied to each machine.
+
+### What do secret managers provide beyond storing values?
+
+Encryption at rest and in transit, access control, audit logs, versioning, and rotation.
+
+### What is a hybrid configuration strategy?
+
+A loader that reads from several sources — such as a secret manager, a YAML file, and environment variables — and merges them by a predefined priority into one settings object.
+
+## What I Learned in Part 5
+
+As deployments grow, configuration moves to central places: key-value stores for shared settings and secret managers for sensitive ones. Real applications combine sources through a single loader with clear priority rules.
+
+Part 6 explains why configuration values differ between environments.
