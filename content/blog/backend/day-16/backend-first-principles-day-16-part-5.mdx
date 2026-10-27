@@ -1,0 +1,208 @@
+---
+title: "Errors at the Edges: Input Validation and Configuration"
+description: Why input validation errors are the easiest errors to handle, the main kinds of validation rules, and why configuration should be validated before the server ever starts.
+slug: backend-first-principles-day-16-part-5
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 16
+part: 5
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1605
+published: true
+tags: [Error Handling, Validation, Configuration]
+keywords: [input validation errors, 400 bad request, configuration errors, fail fast, environment variables]
+---
+# Errors at the Edges: Input Validation and Configuration
+
+> *“Crash at startup, not in front of a user.”*
+
+## Two Errors I Can Actually Control
+
+The last two parts covered errors that are hard to predict: logic bugs, database problems, and external services I do not own.
+
+This part covers two categories that live at the **edges** of the application, where I have much more control:
+
+```text
+Input validation errors → at the edge where requests enter
+Configuration errors    → at the edge where the app starts
+```
+
+Both can be caught early, before they cause real damage — if I set things up correctly.
+
+## Part A: Input Validation Errors
+
+Input validation errors happen when **users or clients send data that does not meet the system's rules**.
+
+The validation layer is the **first line of defense** against bad data and malicious input. It sits at the entry point of the backend and rejects anything that does not match the expected requirements — before that data reaches business logic or the database.
+
+### The Main Kinds of Validation Rules
+
+#### Format Validation
+
+Checks that a value looks the way it should:
+
+```text
+email        → "belema@example.com"   ✅   "belema@"      ❌
+phone        → "+251912345678"       ✅   "call me"      ❌
+date         → "2026-10-27"          ✅   "next Tuesday" ❌
+```
+
+Even for custom data, I need to be **clear about the exact format I expect** and accept only that format. Being strict here helps both security and fault tolerance: anything unexpected is stopped at the door.
+
+#### Range Validation
+
+Checks that values fall inside allowed limits:
+
+```text
+Numbers  → amount must be between 1 and 10,000
+Strings  → name must be 1–100 characters
+Arrays   → at least 3 items, at most 100 items
+```
+
+#### Required Field Validation
+
+Checks that every field required for an operation is present:
+
+```text
+Create book → "name" is required
+             "description" is optional
+```
+
+If a required field is missing, the request is rejected.
+
+### The Response: 400 Bad Request
+
+Validation failures usually return `400 Bad Request` with details about what to fix:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "The request contains invalid fields",
+    "fields": [
+      { "field": "email", "message": "Must be a valid email address" },
+      { "field": "name", "message": "Must be at most 100 characters" }
+    ]
+  }
+}
+```
+
+The client knows exactly which fields to correct.
+
+### Why Validation Errors Are the Easiest
+
+Compare validation errors with the other categories:
+
+| Category | Can I predict it? | Do I control it? |
+| --- | --- | --- |
+| Logic errors | Hard to detect | Yes, but they hide |
+| External services | No | No |
+| Database errors | Partly | Partly |
+| **Validation errors** | **Yes — I define the rules** | **Yes** |
+
+I already know the requirements for my data. I just enforce them at the entry point. If anything looks off, I reject it with a clear message.
+
+That is why, no matter what kind of backend I build, **a robust validation layer is non-negotiable**. It is the cheapest protection I can have.
+
+## Part B: Configuration Errors
+
+Configuration errors come from **missing or wrong settings** — environment variables, secrets, connection strings, feature settings.
+
+They can:
+
+- Prevent the app from starting (which, as I will explain, is good)
+- Make production behave unexpectedly (which is bad)
+
+They usually appear when moving between environments:
+
+```text
+Development → Staging → Production
+```
+
+### The Classic Scenario
+
+1. During development, I add a new environment variable, `OPENAI_API_KEY`, to my local `.env` file.
+2. I open a pull request. It gets reviewed and merged.
+3. I **forget** to add the variable to the production configuration — whether that is a manual setup or something like AWS Parameter Store.
+4. The deployment succeeds.
+
+Now one of two things happens, depending on how the app is built.
+
+### Scenario 1: The App Validates Config at Startup ✅
+
+The app checks that every required configuration value is present **before the server starts**. The key is missing, so the app refuses to start and prints a clear error:
+
+```text
+Error: Missing required environment variable OPENAI_API_KEY
+```
+
+This is the **best case**. Most deployment setups, such as **blue-green deployments**, keep the old version running until the new version starts successfully.
+
+```text
+Old version (blue)  → still serving users ✅
+New version (green) → fails to start ❌ → never receives traffic
+```
+
+The deployment fails, but users are not affected. I fix the config and deploy again.
+
+### Scenario 2: The App Does Not Validate Config ❌
+
+The app starts happily without the key. Everything looks fine — until a user calls the feature that uses OpenAI, for example to generate an image.
+
+```text
+User request → handler → OpenAI service → reads OPENAI_API_KEY → undefined
+            → request to OpenAI fails → user gets 500 Internal Server Error
+```
+
+This is the **worst case**. The error happens at runtime, in front of a real user, possibly hours after the deployment, when nobody is watching.
+
+### Fail Fast
+
+The lesson is simple:
+
+> Always prefer crashing the app at startup over failing while it serves real users.
+
+Validate every **required, non-optional** configuration value as the very first step — whether it comes from environment variables or a remote store. If anything is missing or invalid, stop immediately with a meaningful message.
+
+```ts
+const required = ["DATABASE_URL", "OPENAI_API_KEY", "JWT_SECRET"];
+
+for (const name of required) {
+  if (!process.env[name]) {
+    console.error(`Missing required environment variable: ${name}`);
+    process.exit(1);
+  }
+}
+
+startServer();
+```
+
+The same idea applies to values that are present but wrong, such as a port that is not a number or a URL that is not a valid URL.
+
+## Checkpoint Questions
+
+### What are the three main kinds of input validation?
+
+Format validation, range validation, and required field validation.
+
+### Why are validation errors the easiest category to handle?
+
+Because I define the data rules myself, so I can predict and enforce them at the entry point before the data goes anywhere else.
+
+### Why is it better for an app to crash at startup when config is missing?
+
+Because deployment setups like blue-green keep the old version running, so users are not affected. Failing later at runtime means real users hit `500` errors.
+
+### What does “fail fast” mean for configuration?
+
+Validate all required configuration before the server starts, and stop immediately with a clear message if anything is missing or invalid.
+
+## What I Learned in Part 5
+
+Validation errors and configuration errors both live at the edges of the application, and both are under my control. A strict validation layer stops bad input at the door. Validating configuration at startup turns hidden runtime failures into safe, visible deployment failures.
+
+Part 6 moves from types of errors to the most important strategy: finding errors before they spread.

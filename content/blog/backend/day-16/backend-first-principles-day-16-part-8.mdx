@@ -1,0 +1,211 @@
+---
+title: "Propagation Control and Error Boundaries"
+description: Why errors should travel up to where there is enough context, how to wrap low-level errors with meaning, throw versus return styles, and how boundaries stop one failure from spreading.
+slug: backend-first-principles-day-16-part-8
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 5 min read
+day: 16
+part: 8
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1608
+published: true
+tags: [Error Handling, Error Propagation, Architecture, Go]
+keywords: [error propagation, wrapping errors, exception hierarchy, error boundaries, message queues, timeouts]
+---
+# Propagation Control and Error Boundaries
+
+> *“Not every error should be handled where it happens.”*
+
+## Where Should an Error Be Handled?
+
+When something fails deep in the code, my first instinct is to handle it right there. Often, that is the wrong place.
+
+The code where an error happens usually has **the least context**:
+
+```text
+Repository: "the insert failed with a unique violation"
+            → but it does not know this was a sign-up, or what to tell the user
+
+Higher level: "the user tried to register with an email that already exists"
+            → now there is enough context to log properly and respond clearly
+```
+
+So errors often need to **propagate** — travel upward — to a level where there is more context to handle them well.
+
+## Controlled Propagation
+
+Propagation must be **intentional**. I should decide exactly how errors bubble up and where they stop.
+
+If propagation is not controlled, an error can:
+
+- Spread into other services
+- Crash the main process
+- Reach the user with confusing or unsafe details
+
+The goal:
+
+```text
+Low-level error → wrapped with context → passed up → handled at the right level
+```
+
+## Wrapping Errors With Context
+
+Most languages have exception handling, like `try/catch` in JavaScript or `try/except` in Python. Exception hierarchies give structure to propagation:
+
+1. **Catch** the low-level error.
+2. **Wrap** it with meaningful context.
+3. **Rethrow** it as a higher-level error.
+
+```ts
+class DuplicateEmailError extends Error {
+  constructor(email: string, options?: { cause?: unknown }) {
+    super(`A user with email ${email} already exists`, options);
+  }
+}
+
+async function insertUser(user: NewUser) {
+  try {
+    return await db.query("INSERT INTO users ...", [user.email, user.name]);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new DuplicateEmailError(user.email, { cause: error });
+    }
+    throw error;
+  }
+}
+```
+
+The original database error is kept as the `cause`, so nothing is lost for debugging. But the error now has **business meaning**.
+
+With that context, the higher level can:
+
+- **Log** the right information
+- **Send a meaningful error** to the frontend
+- **Trigger a recovery strategy** if needed
+
+Error messages often travel with a **stack trace** — the chain of function calls that led to the error — which helps when debugging.
+
+## Throw Style vs Return Style
+
+Languages handle propagation in two main styles.
+
+### Throw Style (JavaScript, Python, Java)
+
+Errors are **thrown** and travel up automatically until something catches them:
+
+```ts
+// repository throws → service does nothing → handler does nothing
+// → caught by the top-level error handler
+```
+
+Convenient, but it is easy to forget that a function can throw.
+
+### Return Style (Go)
+
+Errors are **returned as values**, and each layer explicitly passes them up:
+
+```go
+func (r *UserRepo) Insert(ctx context.Context, u User) error {
+    _, err := r.db.ExecContext(ctx, "INSERT INTO users ...", u.Email, u.Name)
+    if err != nil {
+        return fmt.Errorf("insert user %s: %w", u.Email, err)
+    }
+    return nil
+}
+
+func (s *UserService) Register(ctx context.Context, u User) error {
+    if err := s.repo.Insert(ctx, u); err != nil {
+        return fmt.Errorf("register user: %w", err)
+    }
+    return nil
+}
+```
+
+Each layer adds context with `%w`, which wraps the original error. Higher levels can still inspect it with `errors.Is` or `errors.As`.
+
+```text
+register user: insert user a@b.com: duplicate key value violates unique constraint
+```
+
+More verbose, but every error path is visible in the code.
+
+| | Throw style | Return style |
+| --- | --- | --- |
+| Languages | JavaScript, Python, Java | Go |
+| How errors move | Automatically, until caught | Explicitly returned by each layer |
+| Adding context | Catch, wrap, rethrow | Wrap when returning |
+| Risk | Forgetting a function can throw | Ignoring a returned error |
+
+Both styles lead to the same idea: errors travel upward, gaining context, until they reach a single place that handles them. That central place is the **global error handler**, covered in Part 9.
+
+## Error Boundaries
+
+Propagation decides how errors travel. **Error boundaries** decide where they **stop**.
+
+An error boundary is the last point an error is allowed to reach. In a system made of several services, boundaries **prevent an error in one service from affecting others**.
+
+```text
+Without boundaries:
+Email bug → crashes shared process → checkout down too ❌
+
+With boundaries:
+Email bug → contained in email worker → checkout unaffected ✅
+```
+
+### Ways to Build Boundaries
+
+#### Separate Processes
+
+Run different responsibilities in different processes. A crash in one process does not take the others with it.
+
+#### Timeouts
+
+Timeouts protect **service-level boundaries**. If a service I call is slow, my service gives up after a set time instead of waiting forever and freezing too.
+
+```text
+Order service → calls inventory service
+             → no answer in 2s → stop waiting, handle the failure
+```
+
+#### Message Queues
+
+Instead of services calling each other directly in the same process, they communicate **asynchronously** through a message queue such as **RabbitMQ**.
+
+```text
+Direct call:   Order service ──calls──► Email service (if email crashes, order fails)
+
+With a queue:  Order service ──message──► [ queue ] ──► Email service
+               (order finishes; email is processed whenever the email service is ready)
+```
+
+If the email service has a bug or goes down, messages wait safely in the queue. The order service keeps working. When the email service recovers, it processes the backlog.
+
+A bug in one service no longer causes the failure of another.
+
+## Checkpoint Questions
+
+### Why shouldn't every error be handled where it occurs?
+
+Because low-level code usually lacks the context to log meaningfully, respond to the user, or decide on recovery. Higher levels have that context.
+
+### What does wrapping an error mean?
+
+Catching a low-level error and creating a higher-level error that adds meaning, while keeping the original error as its cause.
+
+### How does Go propagate errors differently from JavaScript?
+
+Go returns errors as values that each layer explicitly passes up and wraps, while JavaScript throws errors that travel automatically until caught.
+
+### What is an error boundary?
+
+A point where errors are stopped from spreading further — for example separate processes, timeouts, or message queues between services.
+
+## What I Learned in Part 8
+
+Errors should travel upward on purpose, gaining context along the way, and stop at clear boundaries. Wrapping keeps both the meaning and the original cause, and boundaries like separate processes, timeouts, and queues keep one failure from becoming everyone's failure.
+
+Part 9 builds the place where all those errors finally arrive: the global error handler.

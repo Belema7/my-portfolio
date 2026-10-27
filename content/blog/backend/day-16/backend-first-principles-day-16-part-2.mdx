@@ -1,0 +1,169 @@
+---
+title: "Logic Errors: The Bugs That Never Crash"
+description: Why logic errors are the most dangerous kind of backend error, how they quietly cost money and corrupt data, and the common causes behind them.
+slug: backend-first-principles-day-16-part-2
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 5 min read
+day: 16
+part: 2
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1602
+published: true
+tags: [Error Handling, Logic Errors, Testing]
+keywords: [logic errors backend, silent bugs, business logic edge cases]
+---
+# Logic Errors: The Bugs That Never Crash
+
+> *“The most dangerous bug is the one that lets the application keep running.”*
+
+## The Sneaky Category
+
+Most errors announce themselves. A crash, a stack trace, a red `500` in the logs. Logic errors do not.
+
+A logic error means:
+
+```text
+✅ The code runs
+✅ No exception is thrown
+✅ The response is 200 OK
+❌ The result is wrong
+```
+
+The application does exactly what the code says. The problem is that the code says the wrong thing.
+
+That is why logic errors are, in many engineers' experience, the **most dangerous** type. They do not crash your application — they make it do the wrong thing, quietly.
+
+## A Real-World Example: The Double Discount
+
+Imagine I work as a backend engineer on an e-commerce platform.
+
+A bug causes a discount to be applied **twice** on certain orders. The second discount pushes part of the total below zero, so the customer ends up with **negative shipping costs**.
+
+```text
+Item price:        $50.00
+Discount (10%):   -$5.00
+Discount again:   -$5.00   ← bug
+Shipping:          $4.00 → effectively -$1.00 after the extra discount
+```
+
+What happens next:
+
+- The app does not crash.
+- Checkout succeeds.
+- Customers are happy.
+- The platform **loses money on every single affected order**.
+
+Nobody gets an alert. Error rates look normal. The dashboards are green.
+
+## Why They Go Unnoticed for So Long
+
+Logic errors can hide for **weeks or even months** because:
+
+- There is no error to log — technically, nothing failed.
+- Monitoring that only watches crashes and `5xx` responses sees nothing.
+- Users rarely report bugs that benefit them.
+- The damage accumulates slowly, a little on each request.
+
+```text
+Week 1:  small loss, nobody notices
+Week 4:  finance sees margins slipping
+Week 8:  someone finally traces it to the discount code
+```
+
+By then, the loss is real and some data is already wrong.
+
+## Where Logic Errors Come From
+
+### 1. Misunderstood Requirements
+
+A typical sprint starts with discussions with a client or product manager. Some points come across as confusing, and I write down a requirement that is **not what was intended**.
+
+I implement it exactly as I understood it. It passes my own checks — because my checks are based on the same misunderstanding. With weak testing, it goes to production and starts causing problems.
+
+```text
+Intended: "Free shipping on orders over $50 after discounts"
+Built:    "Free shipping on orders over $50 before discounts"
+```
+
+The code is correct. The understanding was wrong.
+
+### 2. Incorrectly Implemented Algorithms
+
+Some business logic is genuinely complicated. For example, issuing different discount codes depending on a user's behaviour and purchase history, with several discount workflows interacting.
+
+In complex algorithms, **one small miscalculation** can ripple into large losses:
+
+- An off-by-one in a date range
+- Rounding money with floating-point numbers
+- Applying rules in the wrong order
+- A condition that should be `>=` written as `>`
+
+### 3. Edge Cases Nobody Thought About
+
+Sometimes the logic is correct for every case I imagined — but users do something I did not imagine.
+
+```text
+- A user applies a coupon, removes the item, then adds it back
+- A payment is retried while the first attempt is still processing
+- An order has zero items after a partial refund
+- Two discounts are valid at the same time
+```
+
+Edge cases are where “it works on my machine” stops being true.
+
+## Why They Are Especially Dangerous in Critical Areas
+
+When logic errors touch **payments, money, or security**, the consequences grow:
+
+- **Data corruption** — wrong values get stored and spread to reports, invoices, and other systems.
+- **Wrong business results** — decisions get made on incorrect numbers.
+- **Security holes** — a permission check with flawed logic grants access it should not.
+
+And because nothing crashes, the bad data can build up over time without being detected.
+
+## How to Defend Against Logic Errors
+
+There is no single tool that catches logic errors, but several habits reduce them:
+
+| Defense | How it helps |
+| --- | --- |
+| Clarify requirements | Write down examples and confirm them before building |
+| Test business rules | Unit tests for calculations, especially money |
+| Test edge cases deliberately | Zero, negative, empty, duplicate, concurrent |
+| Code review | A second person questions the assumptions |
+| Invariants in code | Assert things that must always be true |
+| Business metrics monitoring | Notice when revenue or averages drift (Part 6) |
+
+An invariant check is cheap and catches impossible states early:
+
+```ts
+if (order.total < 0) {
+  throw new Error(`Order ${order.id} has a negative total`);
+}
+```
+
+It turns a silent logic error into a loud one — which is exactly what I want.
+
+## Checkpoint Questions
+
+### Why are logic errors more dangerous than crashes?
+
+A crash is visible and gets fixed fast. A logic error produces wrong results while everything looks healthy, so it can cause damage for a long time before anyone notices.
+
+### What are the three common causes of logic errors?
+
+Misunderstood requirements, incorrectly implemented algorithms, and edge cases that were not considered.
+
+### How can I make a silent logic error visible?
+
+Add invariant checks that throw when impossible states appear, and monitor business metrics so unusual trends are noticed even when error rates are normal.
+
+## What I Learned in Part 2
+
+Logic errors do not crash anything — that is exactly what makes them dangerous. The defense is clear requirements, deliberate edge-case testing, invariants that make impossible states loud, and monitoring that watches business results, not just errors.
+
+Part 3 moves to the errors that can bring an entire system down: database errors.

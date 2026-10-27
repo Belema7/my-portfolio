@@ -1,0 +1,199 @@
+---
+title: "External Service Errors: Depending on Systems You Do Not Control"
+description: Network failures, authentication provider errors, rate limiting with 429 and exponential backoff, and service outages with fallbacks — handling third-party dependencies safely.
+slug: backend-first-principles-day-16-part-4
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 16
+part: 4
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1604
+published: true
+tags: [Error Handling, External Services, Rate Limiting, Resilience]
+keywords: [external API errors, 429 too many requests, exponential backoff, jitter, service outage fallback]
+---
+# External Service Errors: Depending on Systems You Do Not Control
+
+> *“Every external dependency is a point of failure you cannot fix yourself.”*
+
+## Modern Backends Are Built on Other People's Systems
+
+Most modern applications, especially SaaS products, depend on many external services:
+
+```text
+💳 Payment processors     (Stripe, PayPal)
+📧 Email providers        (Resend, SendGrid)
+🗄️ Object storage          (S3)
+⚡ Caches                 (Redis)
+🔐 Authentication         (Auth0, Clerk)
+🤖 AI APIs                (OpenAI and others)
+```
+
+Each one is a **point of failure I have no control over**. If Stripe is down, I cannot restart Stripe.
+
+And I cannot simply avoid external services. Building payments, email delivery, or authentication from scratch would mean recreating complex systems that teams have spent years on. That is not practical.
+
+So the only realistic approach is:
+
+```text
+Expect every external service to fail sometimes.
+Decide in advance what my system will do when it does.
+```
+
+Here are the main ways they fail.
+
+## 1. Network Failures
+
+My backend talks to external services over HTTP, TCP, WebSockets, or other protocols. Underneath all of them is the **network** — and the internet is not perfect.
+
+Network problems I have to plan for:
+
+| Problem | What happens |
+| --- | --- |
+| **Connection timeout** | The service does not respond in time |
+| **DNS failure** | The service's domain name cannot be resolved |
+| **Network partition** | Part of the network cannot reach another part, often due to routing problems |
+| **Connection reset** | The connection drops mid-request |
+
+The most important defense is a **timeout on every external call**. Without one, a slow service can hold my request open forever, tie up resources, and slowly freeze my whole backend.
+
+```ts
+const response = await fetch("https://api.example.com/charge", {
+  signal: AbortSignal.timeout(5_000), // give up after 5 seconds
+});
+```
+
+## 2. Authentication Errors From External Providers
+
+When I use a provider like Auth0 or Clerk for authentication, it can reject requests because of:
+
+- Bad credentials (wrong email or password)
+- Expired tokens
+- Insufficient permissions
+
+I need to handle each of these properly instead of letting them become generic errors.
+
+There is also an important lesson here: **using an external auth provider does not make my backend secure by itself.** The provider is an integration, not a replacement for my backend. My own code can still create security problems — for example, by writing sensitive user information into logs. Part 10 comes back to this.
+
+## 3. Rate Limiting
+
+Almost every external service — email providers, AI APIs, payment APIs — has **rate limiting**.
+
+Rate limiting exists so that no single customer can abuse the service. It protects the provider from malicious users who send an abnormal number of requests in a short time. I am a business customer, but I am still subject to the same limits.
+
+I might hit the limit because:
+
+- A burst of real user activity in my platform
+- A **logic error** that calls the API in a loop
+- A retry storm after a previous failure
+
+When I exceed the limit, the provider starts rejecting requests with:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+```
+
+### Exponential Backoff
+
+The standard strategy for rate limits (and many temporary failures) is **exponential backoff**: wait, retry, and double the wait each time it fails.
+
+```text
+Attempt 1 → 429 → wait 1s
+Attempt 2 → 429 → wait 2s
+Attempt 3 → 429 → wait 4s
+Attempt 4 → 429 → wait 8s
+Attempt 5 → 200 ✅
+```
+
+It is called *exponential* because the waiting time grows exponentially. This gives the provider time to recover instead of hammering it.
+
+Three details make backoff work well in practice:
+
+1. **Respect `Retry-After`.** If the provider says when to retry, use that.
+2. **Add jitter.** Add a small random amount to each wait. Without it, many clients that failed together retry together, causing another spike.
+3. **Set a maximum.** Limit both the number of attempts and the maximum wait, then give up and report the failure.
+
+```ts
+async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 5): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt + 1 >= maxAttempts || !isRetryable(error)) throw error;
+      const base = 1000 * 2 ** attempt;           // 1s, 2s, 4s, 8s...
+      const jitter = Math.random() * 1000;        // spread retries out
+      await sleep(Math.min(base + jitter, 30_000));
+    }
+  }
+}
+```
+
+Only retry errors that are **temporary** — `429`, `503`, timeouts. Retrying a `400 Bad Request` will fail the same way forever.
+
+## 4. Service Outages
+
+The most inevitable failure is an external service **going down completely**.
+
+This happens every so often, even to the biggest providers. A major cloud provider has an incident, and suddenly many of its customers go down too, and social media fills up with people reporting that services are broken.
+
+Outages happen because of:
+
+- Unexpected incidents
+- Planned maintenance
+
+I have almost no control over them. What I control is **how my backend reacts**.
+
+### Fallbacks
+
+The goal is to handle outages gracefully, without affecting critical features like payments or order processing. That usually means having a **fallback**:
+
+| Service | Possible fallback |
+| --- | --- |
+| Redis cache | In-memory cache, a second Redis node, or read from the database directly |
+| Email provider | Queue the email and send it later, or use a secondary provider |
+| Recommendation API | Show popular items instead of personalized ones |
+| Payment provider | A secondary payment provider, or a clear “try again shortly” message |
+
+```text
+Redis down → fall back to in-memory cache → pages load a little slower, but they load
+```
+
+A fallback does not need to be perfect. It needs to keep the most important parts of the product working.
+
+## Summary Table
+
+| Failure | Defense |
+| --- | --- |
+| Timeouts, DNS failures, partitions | Timeouts on every call, retries for temporary errors |
+| Auth provider rejections | Handle each case clearly; keep my own backend secure |
+| Rate limiting (`429`) | Exponential backoff with jitter, respect `Retry-After` |
+| Outages | Fallbacks, queues, graceful degradation |
+
+## Checkpoint Questions
+
+### Why can't I just avoid external services to avoid their errors?
+
+Because rebuilding payments, email, authentication, and similar systems from scratch is not practical. The realistic approach is to expect failures and plan for them.
+
+### What does a `429` response mean?
+
+Too Many Requests — I exceeded the provider's rate limit. I should wait before retrying, ideally using exponential backoff and any `Retry-After` value.
+
+### Why add jitter to exponential backoff?
+
+So that many clients that failed at the same time do not all retry at the same time and create another spike.
+
+### What is a fallback?
+
+An alternative path the system uses when a dependency fails, such as an in-memory cache when Redis is down, so the most important features keep working.
+
+## What I Learned in Part 4
+
+External services will time out, rate-limit me, and go down. I cannot fix them, but I can put timeouts on every call, retry carefully with exponential backoff, and plan fallbacks so that their failures do not become my users' failures.
+
+Part 5 covers two kinds of errors that are much more in my control: input validation and configuration errors.

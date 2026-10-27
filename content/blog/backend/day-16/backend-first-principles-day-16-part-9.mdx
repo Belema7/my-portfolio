@@ -1,0 +1,308 @@
+---
+title: "Global Error Handling: The Final Safety Net"
+description: How a single global error handler turns validation, unique constraint, no rows, and foreign key errors into the right HTTP responses, and why centralizing error handling makes a backend more robust.
+slug: backend-first-principles-day-16-part-9
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 8 min read
+day: 16
+part: 9
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1609
+published: true
+tags: [Error Handling, Global Error Handler, Middleware, HTTP Status Codes]
+keywords: [global error handler, error middleware, map database errors to http status, 409 conflict, 404 not found]
+---
+# Global Error Handling: The Final Safety Net
+
+> *“Set it up once, and it pays off on every request after that.”*
+
+## The Most Valuable Error Handling Module
+
+Of everything in this day, the **global error handler** is the piece I want to get right in every backend I build.
+
+It takes real effort at the start, when the platform is being set up and I am learning which features and services it needs. After that, it only needs small tweaks — a new condition here, a new error type there.
+
+It is a **one-time effort that pays off immediately**, and it is the most important error handling strategy a backend can have.
+
+## The Request Path
+
+To see why, I need the typical path a request follows through a backend:
+
+```text
+Request
+  │
+  ▼
+Router        → decides which handler handles the request
+  │
+  ▼
+Handler       → extracts data, deserializes, validates, binds
+  │
+  ▼
+Service       → business logic; orchestrates one or more repository methods
+  │
+  ▼
+Repository    → one focused database operation, e.g. getUserById
+  │
+  ▼
+Database
+```
+
+- **Repository methods** are the leaf nodes. Each usually does one thing: run one database query.
+- **Service methods** orchestrate. For example, “get a user with all their posts” calls `getUserById` and then `getPostsByUserId`.
+
+Errors can start at **any** of these layers.
+
+## The Example: A Book Management Platform
+
+Imagine a book management platform. One endpoint creates a new book:
+
+```http
+POST /books
+Content-Type: application/json
+
+{
+  "name": "Clean Architecture",
+  "description": "Optional text"
+}
+```
+
+Rules:
+
+- `name` is **required** and at most **500 characters**.
+- `description` is **optional**.
+
+Several different errors can happen in this one endpoint, at different layers.
+
+## The Pattern
+
+The global error handling pattern is simple:
+
+```text
+No matter where an error happens, or what kind it is,
+bubble it up to one global error handler.
+```
+
+The global error handler usually lives in a **middleware layer**, because middleware has access to every incoming request and every outgoing response.
+
+```text
+Handler    → throws ValidationError
+Service    → throws business errors
+Repository → throws database errors
+                │
+                ▼
+     Global error handler middleware
+                │
+                ▼
+      The right HTTP response
+```
+
+- In throw-style languages (JavaScript, Python), errors are thrown and caught by the error handler middleware.
+- In return-style languages (Go), each layer returns the error upward until it reaches the error handling layer.
+
+Every language lets me create **custom error types**, so the handler can look at what kind of error arrived and respond appropriately.
+
+## Case 1: Validation Error → 400
+
+The user sends a book name that is **700 characters** long.
+
+```text
+Request → Handler → validation fails (name > 500 chars)
+        → ValidationError bubbles up
+        → global handler → 400 Bad Request
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "The request contains invalid fields",
+    "fields": [
+      { "field": "name", "message": "Must be at most 500 characters" }
+    ]
+  }
+}
+```
+
+A typical error response has a **status code**, a **message**, and often an **array of field-level errors** so the client can show each problem next to the right field.
+
+## Case 2: Unique Constraint Violation → 409
+
+The name passes validation. The request reaches the repository, which runs the insert in PostgreSQL. But a book with that name already exists, and the `name` column is unique.
+
+```sql
+INSERT INTO books (name, description) VALUES ($1, $2);
+-- ERROR: duplicate key value violates unique constraint "books_name_key"
+```
+
+The database error bubbles up. The global handler recognizes it as a **unique constraint violation**.
+
+The error was caused by data the user sent, so it is a client-side problem. The video uses `400 Bad Request` here. Many APIs use the more specific **`409 Conflict`**, because the request is well-formed but conflicts with the current state of the data. Either works as long as the API is consistent.
+
+```json
+{
+  "error": {
+    "code": "BOOK_ALREADY_EXISTS",
+    "message": "A book with this name already exists"
+  }
+}
+```
+
+## Case 3: No Rows → 404
+
+A different endpoint fetches one book. The frontend route `/books/123` calls the backend:
+
+```http
+GET /books/123
+```
+
+There is no body to validate, and `123` is a valid number, so the request passes the handler and service and reaches the repository:
+
+```sql
+SELECT * FROM books WHERE id = $1;  -- $1 = 123
+```
+
+But book `123` does not exist — maybe a broken link, or someone guessing IDs. Most relational database drivers report this as a **“no rows”** error (for example, `sql.ErrNoRows` in Go).
+
+The repository bubbles it up. The global handler sees a database error, sees it is a no-rows error (not a unique violation), and concludes that **the requested resource does not exist**.
+
+```http
+HTTP/1.1 404 Not Found
+
+{
+  "error": {
+    "code": "BOOK_NOT_FOUND",
+    "message": "Book with ID 123 does not exist"
+  }
+}
+```
+
+## Case 4: Foreign Key Violation → 404 or 422
+
+Another endpoint creates a book for an **existing author**:
+
+```json
+{
+  "name": "My Book",
+  "description": "Optional",
+  "authorId": 999
+}
+```
+
+The repository runs:
+
+```sql
+INSERT INTO books (name, description, author_id) VALUES ($1, $2, $3);
+-- ERROR: insert or update on table "books" violates foreign key constraint
+```
+
+`author_id` is a foreign key to the `authors` table, and author `999` does not exist.
+
+The frontend referenced something that is not in the database. The video returns **`404`** with a message that the author does not exist. Some APIs prefer **`422 Unprocessable Content`**, because the `/books` endpoint itself exists — it is a value inside the body that points nowhere. Again, pick one and stay consistent.
+
+## Case 5: Anything Unknown → 500
+
+If the handler checks every known error type and none match, the error is unexpected. The response is a generic `500`:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Something went wrong"
+  }
+}
+```
+
+The full details go into the logs, not to the user. Part 10 explains why.
+
+## The Mapping Table
+
+| Error | Where it starts | Response |
+| --- | --- | --- |
+| Validation failed | Handler | `400` + field errors |
+| Unique constraint violation | Repository | `409` (or `400`) “already exists” |
+| No rows found | Repository | `404` “not found” |
+| Foreign key violation | Repository | `404` or `422` “related resource does not exist” |
+| Unknown error | Anywhere | `500` “Something went wrong” |
+
+## A Sketch of the Handler
+
+```ts
+function globalErrorHandler(err, req, res, next) {
+  if (err instanceof ValidationError) {
+    return res.status(400).json({ error: { code: "VALIDATION_FAILED", message: err.message, fields: err.fields } });
+  }
+
+  if (isUniqueViolation(err)) {
+    return res.status(409).json({ error: { code: "ALREADY_EXISTS", message: "This resource already exists" } });
+  }
+
+  if (isNoRows(err)) {
+    return res.status(404).json({ error: { code: "NOT_FOUND", message: "Resource not found" } });
+  }
+
+  if (isForeignKeyViolation(err)) {
+    return res.status(422).json({ error: { code: "RELATED_RESOURCE_MISSING", message: "A referenced resource does not exist" } });
+  }
+
+  logger.error({ err, requestId: req.id }, "Unhandled error");
+  return res.status(500).json({ error: { code: "INTERNAL_SERVER_ERROR", message: "Something went wrong" } });
+}
+```
+
+All the rules for turning errors into responses live in **one place**.
+
+## Why a Global Handler Is Worth It
+
+### 1. More Robust and Secure
+
+Without a global handler, each layer is responsible for its own errors. The repository would have to turn its own unique violation into a `400` or `409` with the right message.
+
+Now imagine one repository method where I **forget** that check. The database error goes unhandled, and most backends turn unhandled errors into:
+
+```text
+500 Internal Server Error — "Something went wrong, try again later"
+```
+
+The user should have seen “This book already exists” but instead sees a vague failure.
+
+With a global handler, there is no way to forget: every error passes through the same final gateway, and every known error type is handled consistently.
+
+### 2. Less Redundancy
+
+Without a central place, every repository method that runs SQL would need the same checks:
+
+```text
+is it a unique violation? → handle it
+is it a foreign key violation? → handle it
+is it no rows? → handle it
+```
+
+Repeated in dozens of methods. That is a lot of duplicated code, and duplicated code is more prone to bugs. A global handler writes these rules **once**.
+
+## Checkpoint Questions
+
+### Why does the global error handler usually live in middleware?
+
+Because middleware has access to every incoming request and outgoing response, so it can catch errors from any layer and produce a consistent response.
+
+### How should a “no rows” error on `GET /books/123` be handled?
+
+The handler should recognize that the requested resource does not exist and return `404 Not Found` with a clear message.
+
+### What happens without a global handler if I forget to handle a unique violation?
+
+The error goes unhandled and becomes a generic `500`, so the user gets a vague error instead of a clear “already exists” message.
+
+### What are the two main advantages of a global error handler?
+
+It is more robust (no forgotten cases, consistent responses) and it reduces redundancy (error rules live in one place instead of every layer).
+
+## What I Learned in Part 9
+
+Errors can start in any layer, but they should all end in one place. A global error handler maps each kind of error to the right status and message, catches what individual layers forget, and keeps the error rules in a single, maintainable spot.
+
+Part 10 covers the security side of error handling and brings the whole day together.

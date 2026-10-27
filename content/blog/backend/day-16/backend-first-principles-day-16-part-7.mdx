@@ -1,0 +1,195 @@
+---
+title: "Responding to and Recovering From Errors"
+description: Handling recoverable errors with retries and backoff, containing non-recoverable errors with graceful degradation, and planning automatic, manual, and data recovery.
+slug: backend-first-principles-day-16-part-7
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 16
+part: 7
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1607
+published: true
+tags: [Error Handling, Resilience, Graceful Degradation, Recovery]
+keywords: [recoverable vs non-recoverable errors, graceful degradation, retry strategy, incident runbook, data recovery]
+---
+# Responding to and Recovering From Errors
+
+> *“Your immediate response decides whether an error stays a minor issue or becomes a major failure.”*
+
+## The First Few Seconds Matter
+
+When an error happens, the system's **immediate response** decides how bad it gets.
+
+```text
+Good response → a small glitch most users never notice
+Bad response  → a cascade that takes the whole platform down
+```
+
+The right response depends on two things:
+
+1. **The type of error** — can it fix itself, or not?
+2. **The context** — how critical is the feature that failed?
+
+This leads to the most useful split in error handling: **recoverable** versus **non-recoverable** errors.
+
+## Recoverable Errors
+
+A recoverable error is a temporary problem that is likely to go away on its own.
+
+Examples:
+
+- An email provider failed to send an email
+- A short network glitch
+- The database connection pool is temporarily exhausted
+- A rate limit was hit
+
+Take sending an email. It does not have to happen within milliseconds — the system can afford a delay. If the email provider fails, waiting and trying again later is perfectly fine.
+
+### Strategy: Retry With Exponential Backoff
+
+For recoverable errors, **retry mechanisms and exponential backoff** work well, especially for:
+
+- Network errors
+- Temporary resource shortages (like running out of pooled connections)
+
+```text
+Send email → fails → wait 1s → retry → fails → wait 2s → retry → succeeds ✅
+```
+
+### The Danger: Overwhelming a Stressed System
+
+Retries have a dark side. If a system is failing because it is **overloaded**, retries add even more load.
+
+```text
+Database overloaded
+→ 1,000 requests fail
+→ each retries 3 times immediately
+→ 3,000 extra requests
+→ database even more overloaded
+```
+
+So retry logic must be careful:
+
+- Use **backoff**, not immediate retries.
+- Limit the **number of attempts**.
+- Add **jitter** so retries are spread out.
+- Stop retrying when the dependency is clearly down.
+
+Error handling should never add more stress to a system that is already under stress.
+
+## Non-Recoverable Errors
+
+A non-recoverable error will not fix itself by retrying. A service is down, data is missing, or a dependency is broken for a long time.
+
+For these, the best strategy is **containment and graceful degradation**.
+
+### Containment
+
+Limit the **scope of the damage** so one failure does not spread to everything else.
+
+```text
+Recommendations service broken
+→ contain it: only the "recommended for you" section fails
+→ product pages, cart, and checkout keep working
+```
+
+### Graceful Degradation
+
+Keep the system running with **reduced functionality** instead of failing completely.
+
+| Technique | Example |
+| --- | --- |
+| **Switch to cached data** | Show yesterday's prices from cache when the pricing service is down |
+| **Disable non-essential features** | Turn off reviews or recommendations during an incident |
+| **Provide alternative functionality** | Show popular items instead of personalized ones |
+| **Use a fallback** | Use a secondary provider or a simpler path |
+
+The user gets a slightly worse experience, not a broken one.
+
+## Recovery Strategies
+
+Responding to an error stops the bleeding. **Recovery** brings the system back to normal. The right strategy depends on the nature of the error and how critical the feature is.
+
+### Automatic Recovery
+
+Many errors can be fixed **without a human**:
+
+- **Restart a failed service** — if a process stops responding, a supervisor or orchestrator restarts it. This works surprisingly often.
+- **Clean up corrupted state** — clear a corrupted cache so it gets rebuilt.
+- **Switch to a backup system** — fail over to a replica or secondary service.
+
+But these must be designed carefully, because sometimes they make things **worse**. A service that keeps restarting and crashing, or a failover that moves the load onto an already weak backup, can deepen the problem.
+
+The practical approach is trial and error **ahead of time**: push systems toward their failure points in testing and see which recovery strategies actually work for which services.
+
+### Manual Recovery
+
+Some failures need **human judgment** — deciding whether to roll back, which data to trust, or whether to take a feature offline.
+
+For these:
+
+1. **Document the process** in a runbook, so every team member and new hire knows what to do during an incident.
+2. **Test the process**, so I know it actually works when needed.
+3. Make it **quick to execute**, because incidents are stressful and fast decisions matter for users.
+
+```text
+Runbook: Payment provider outage
+1. Confirm outage on the provider's status page
+2. Enable "payments temporarily unavailable" banner
+3. Switch to secondary provider (command: ...)
+4. Notify support team
+5. After recovery, reconcile pending transactions
+```
+
+### Data Recovery
+
+The most important rule during any incident: **do not corrupt your data**.
+
+Code can be redeployed. Services can be restarted. But data — users, transactions, orders — is the only truly tangible thing a platform holds. Lost or corrupted data may be impossible to rebuild.
+
+Data integrity must be a top priority. Data recovery strategies include:
+
+- **Taking backups** at key moments (regularly, and before risky operations like migrations)
+- **Restoring from backups** when data is lost or damaged
+- **Replaying transaction logs** to rebuild state up to a specific point in time
+- **Using specialized recovery tools** provided by the database
+
+A backup that has never been tested is not really a backup. Restoring should be practiced, not just planned.
+
+## Decision Guide
+
+| Situation | Response |
+| --- | --- |
+| Temporary failure (network, rate limit, busy pool) | Retry with backoff, limited attempts |
+| Dependency down for a long time | Contain, degrade gracefully, use fallbacks |
+| Process stuck or crashed | Automatic restart |
+| Needs a judgment call | Follow a documented, tested runbook |
+| Data at risk | Stop, protect data, restore from backups or logs |
+
+## Checkpoint Questions
+
+### What is the difference between recoverable and non-recoverable errors?
+
+Recoverable errors are temporary and likely to succeed on retry. Non-recoverable errors will not fix themselves by retrying and need containment and fallbacks.
+
+### Why can retries be dangerous?
+
+If the system is failing because it is overloaded, retries add more load and can make the failure worse. Retries need backoff, limits, and jitter.
+
+### What is graceful degradation?
+
+Keeping the system working with reduced functionality — cached data, disabled non-essential features, alternative behaviour — instead of failing completely.
+
+### Why is data recovery the top priority?
+
+Because code and services can be restored easily, but lost or corrupted user and transaction data may be impossible to rebuild.
+
+## What I Learned in Part 7
+
+Recoverable errors deserve careful retries; non-recoverable errors need containment and graceful degradation. Recovery can be automatic or manual, but either way it should be tested in advance — and through all of it, protecting data comes first.
+
+Part 8 looks at how errors travel through a system and where they should be stopped.

@@ -1,0 +1,199 @@
+---
+title: "Database Errors: When the Source of Truth Says No"
+description: Connection and pool errors, unique and foreign key constraint violations, query errors, and deadlocks — the database errors that can stop an entire backend.
+slug: backend-first-principles-day-16-part-3
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 16
+part: 3
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1603
+published: true
+tags: [Error Handling, Databases, PostgreSQL]
+keywords: [database errors, connection pool exhausted, unique constraint violation, foreign key violation, deadlock]
+---
+# Database Errors: When the Source of Truth Says No
+
+> *“If the database cannot answer, the backend has nothing to say.”*
+
+## Why Database Errors Hit So Hard
+
+Most backend applications rely heavily on their database. Almost every request reads or writes data.
+
+```text
+Frontend → Backend → Database
+                ↑
+     if this fails, everything above it fails
+```
+
+When the database has problems, the backend cannot fetch what the frontend needs, so the frontend has nothing to show. Database errors range from simple connection problems to tricky issues like deadlocks.
+
+I group them into four kinds:
+
+```text
+1. Connection errors
+2. Constraint violations
+3. Query errors
+4. Deadlocks
+```
+
+## 1. Connection Errors
+
+A connection error means **the app cannot talk to the database at all**.
+
+The symptoms are obvious: the backend throws `500` errors, and the frontend shows empty screens everywhere.
+
+Common causes:
+
+- The network between the app and database is down.
+- The database server is overloaded and not accepting connections.
+- The **connection pool** has run out of connections.
+
+### What Is a Connection Pool?
+
+Opening a new database connection is expensive. It involves a TCP handshake, often TLS, and authentication — every single time.
+
+A **connection pool** is an optimization: the backend keeps a set of connections already open and reuses them.
+
+```text
+Without a pool:
+request → open connection → handshake → query → close   (every time)
+
+With a pool:
+request → borrow open connection → query → return it to the pool
+```
+
+But a pool has a fixed size. If every connection is busy — because of slow queries, a traffic spike, or code that forgets to release connections — new requests have to wait, and eventually they fail.
+
+```text
+Pool size: 10
+Busy:      10
+New request → waits → times out → error
+```
+
+When connection errors happen, the app basically cannot function, because it cannot reach its source of data.
+
+## 2. Constraint Violations
+
+A constraint violation means **the operation breaks a rule the database enforces**. These are less obvious than connection errors, because the database is working perfectly — it is refusing a bad operation.
+
+### Unique Constraint Violation
+
+The `users` table has a unique constraint on `email`. I try to create a user with an email that already exists:
+
+```sql
+INSERT INTO users (email, name) VALUES ('belema@example.com', 'Belema');
+-- ERROR: duplicate key value violates unique constraint "users_email_key"
+```
+
+If I do not handle this error properly and send a well-formatted message to the frontend, it bubbles up and becomes a generic `500 Internal Server Error`. The user sees “something went wrong” when the real answer was “this email is already registered.”
+
+### Foreign Key Violation
+
+Two tables: `customers` and `orders`. The `orders` table has a `customer_id` column that is a **foreign key** to `customers`, and it is not nullable.
+
+```text
+customers                 orders
+---------                 ------
+id  (PK)  ◄───────────── customer_id (FK, NOT NULL)
+name                      total
+```
+
+I insert an order with a `customer_id` that does not exist:
+
+```sql
+INSERT INTO orders (customer_id, total) VALUES (9999, 50.00);
+-- ERROR: insert or update on table "orders" violates foreign key constraint
+```
+
+The database cannot find a matching customer, so it rejects the insert.
+
+### Where Constraint Violations Come From
+
+Many constraint violations trace back to a **weak validation layer**. If edge cases are not handled on both the frontend and backend, bad data reaches the database.
+
+So a stronger validation layer helps. But some constraint violations **cannot be prevented by validation**:
+
+```text
+Is this email unique?  → only the database knows, at the moment of insert
+```
+
+Even if I check first, another request could insert the same email a millisecond later. For these cases, the focus shifts to **error formatting**: catch the violation and send a clear, user-friendly message, like “This email already exists, try a different one.”
+
+## 3. Query Errors
+
+Query errors happen when the SQL itself is wrong.
+
+The most common cause is a simple typo:
+
+```sql
+SELECT * FROM customers;   -- correct
+SELECT * FROM cutsomers;   -- typo
+-- ERROR: relation "cutsomers" does not exist
+```
+
+Other causes:
+
+- Referencing a column that was renamed or removed
+- Invalid SQL syntax
+- Queries that are too complex and **time out**
+- Type mismatches between parameters and columns
+
+Query errors are usually bugs in my code rather than bad user input, which is why they should be caught by tests before production.
+
+## 4. Deadlocks
+
+Deadlocks are particularly tricky. They occur when **multiple database operations are waiting for each other**, creating a circular dependency.
+
+```text
+Transaction A: locks row 1, then wants row 2
+Transaction B: locks row 2, then wants row 1
+
+A waits for B. B waits for A. Neither can continue.
+```
+
+Neither transaction can finish, so the database detects the cycle and kills one of them with an error. The killed transaction has to be retried.
+
+Deadlocks often appear only under real traffic, which makes them hard to reproduce. Common ways to reduce them:
+
+- Lock rows in a **consistent order** across the codebase.
+- Keep transactions **short**.
+- Retry transactions that fail with a deadlock error.
+
+## Summary Table
+
+| Error | Cause | Typical handling |
+| --- | --- | --- |
+| Connection error | Network, overloaded server, exhausted pool | Retry with backoff, alert, return `503` |
+| Unique violation | Duplicate value in a unique column | Clear message such as “email already exists” |
+| Foreign key violation | Reference to a row that does not exist | Clear message about the missing related resource |
+| Query error | Typo, bad syntax, missing table or column | Fix the code; generic `500` to the user |
+| Deadlock | Circular waiting between transactions | Retry the transaction, consistent lock order |
+
+## Checkpoint Questions
+
+### Why do database errors affect the whole system?
+
+Because almost every request depends on the database. If the backend cannot reach its data, it cannot respond meaningfully.
+
+### What is a connection pool, and how can it cause errors?
+
+A pool keeps database connections open for reuse to avoid connection setup costs. If all pooled connections are busy, new requests wait and eventually fail.
+
+### Why can't validation prevent every unique constraint violation?
+
+Because uniqueness depends on the current state of the database at the moment of insert. Only the database can guarantee it, so the error must be handled and formatted clearly.
+
+### What is a deadlock?
+
+Two or more transactions each hold a lock the other needs, so none can continue. The database breaks the cycle by aborting one transaction.
+
+## What I Learned in Part 3
+
+The database is the source of truth, so its errors carry weight. Connection problems stop everything, constraint violations need clear messages, query errors are bugs to catch early, and deadlocks need short transactions and retries.
+
+Part 4 looks at errors from the parts of the system I do not control at all: external services.

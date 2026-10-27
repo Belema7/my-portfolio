@@ -1,0 +1,142 @@
+---
+title: "Errors Are Not Exceptions to the Plan"
+description: Why errors are a normal part of every backend system, why the real question is how you respond to them, and the five categories of errors every backend engineer meets.
+slug: backend-first-principles-day-16-part-1
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 5 min read
+day: 16
+part: 1
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Error Handling and Fault-Tolerant Systems
+order: 1601
+published: true
+tags: [Error Handling, Fault Tolerance, Reliability]
+keywords: [backend error handling, fault tolerant mindset, types of backend errors]
+---
+# Errors Are Not Exceptions to the Plan
+
+> *“The question is not whether errors will happen, but how you will handle them when they do.”*
+
+## The Reality Check
+
+When I first started writing backend code, I treated errors as interruptions. The “real” code was the happy path, and error handling was the boring cleanup I added at the end.
+
+This lesson flipped that view. In backend development, errors are not unusual events. They are a **normal, permanent part of running software**.
+
+Here is what will happen to every backend, eventually:
+
+```text
+❌ Database queries will sometimes fail
+❌ External APIs will sometimes time out
+❌ Users will sometimes send bad data
+❌ Business logic will sometimes hit edge cases nobody imagined
+```
+
+None of these mean you are a bad engineer. They mean your software is running in the real world, on real networks, talking to real people and real services.
+
+## The Question That Actually Matters
+
+Since errors are guaranteed, the useful question changes:
+
+```text
+Wrong question:  How do I make sure errors never happen?
+Right question:  When an error happens, how do I detect it, contain it, and recover?
+```
+
+Being ready means three things:
+
+1. **Ready to detect** — you find out quickly, ideally before users do.
+2. **Ready to respond** — the system reacts in a controlled way instead of collapsing.
+3. **Ready to fix** — you have enough context to understand what went wrong.
+
+## This Is a Mindset, Not a Tool
+
+This day is not about a specific framework, library, or code pattern. It is about a way of thinking that I want to carry into every backend I build.
+
+A backend engineer is responsible for executing the core business logic: payments, orders, sign-ups, every single user action. When that much depends on your code, you need a **fault-tolerant mindset**:
+
+- Expect the worst.
+- Know how bad “the worst” can get.
+- Know what to keep an eye on.
+- Know how to detect problems early and prevent them from spreading.
+
+This mindset shows up everywhere — startups, large enterprises, open-source projects. The tools differ. The thinking does not.
+
+## What “Fault Tolerant” Means
+
+A **fault** is something going wrong inside the system: a timeout, a crash, a bad value.
+
+A **failure** is when the user experiences the system not doing its job.
+
+```text
+Fault  → a component misbehaves
+Failure → the user is affected
+```
+
+A fault-tolerant system is one where faults happen but **do not automatically turn into failures**. The email provider can be down while checkout still works. The cache can crash while pages still load, just slower.
+
+That gap between fault and failure is where error handling lives.
+
+## The Five Categories of Errors
+
+Before learning how to handle errors, I need to know what kinds exist. Each category has a different cause, a different level of danger, and a different way to handle it.
+
+| Category | What it looks like | Why it matters |
+| --- | --- | --- |
+| **Logic errors** | Code runs, results are wrong | Silent, can go unnoticed for months |
+| **Database errors** | Connections, constraints, queries, deadlocks | Most backends depend on the database for everything |
+| **External service errors** | Timeouts, rate limits, outages | Points of failure you do not control |
+| **Input validation errors** | Users send bad data | Easiest to predict and handle |
+| **Configuration errors** | Missing or wrong environment settings | Break apps when moving between environments |
+
+Parts 2 through 5 go through these one by one.
+
+## Then: Detection, Response, and the Safety Net
+
+Knowing the categories is only half the work. The rest of this day covers what to *do* about them:
+
+```text
+Part 6  → finding errors before they spread (health checks, monitoring)
+Part 7  → responding to and recovering from errors
+Part 8  → controlling how errors travel through the system
+Part 9  → global error handling, the final safety net
+Part 10 → error handling and security, plus the complete picture
+```
+
+## A Mental Model to Keep
+
+I like to think of error handling as layers of protection:
+
+```text
+1. Prevent      → validation, config checks, careful logic
+2. Detect       → health checks, monitoring, logs
+3. Contain      → boundaries, timeouts, graceful degradation
+4. Recover      → retries, restarts, backups
+5. Respond      → a clear, safe message to the user
+```
+
+No single layer is perfect. Together, they turn a fragile system into a resilient one.
+
+## Checkpoint Questions
+
+### Why is “prevent all errors” the wrong goal?
+
+Because many errors come from things outside your control — networks, external services, user input. The realistic goal is to detect, contain, and recover from errors gracefully.
+
+### What is the difference between a fault and a failure?
+
+A fault is a component misbehaving internally. A failure is when the user is affected. Fault tolerance is about stopping faults from becoming failures.
+
+### What are the five categories of errors?
+
+Logic errors, database errors, external service errors, input validation errors, and configuration errors.
+
+## What I Learned in Part 1
+
+Errors are normal. A good backend engineer does not hope they will not happen — they design the system so that when errors happen, they are detected quickly, contained, and handled safely.
+
+Part 2 starts with the sneakiest category: logic errors.

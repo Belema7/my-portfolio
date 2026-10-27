@@ -13,6 +13,7 @@ const DAY_TITLES: Record<number, string> = {
   7: "Handler, Service, and Repository Architecture",
   8: "Middleware and Request Context",
   9: "REST API Design",
+  16: "Error Handling and Fault-Tolerant Systems",
 };
 
 function readingMinutes(value: string) {

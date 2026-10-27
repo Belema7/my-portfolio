@@ -1,0 +1,254 @@
+---
+title: "Error Handling and Security: The Complete Picture"
+description: Keeping internal details out of error messages, preventing user enumeration on login, keeping sensitive data out of logs, and a complete checklist for building fault-tolerant backends.
+slug: backend-first-principles-day-16-part-10
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 7 min read
+day: 16
+part: 10
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1610
+published: true
+tags: [Error Handling, Security, Logging, Fault Tolerance]
+keywords: [secure error messages, user enumeration, invalid email or password, sensitive data in logs, correlation id, OWASP]
+---
+# Error Handling and Security: The Complete Picture
+
+> *“An error message is a message to the user — and to every attacker reading it.”*
+
+## Errors Are an Attack Surface
+
+Error handling is not only about reliability. It is also about **security**.
+
+Every error response leaves the backend and reaches whoever sent the request. Every log line is stored somewhere and may be read by more systems and people than I expect.
+
+So I have to be careful about two things:
+
+```text
+1. What my error messages reveal to users
+2. What my logs reveal if they are ever exposed
+```
+
+Compromising the platform is bad. Compromising **users** is just as bad — or worse — because it destroys their trust and the platform's reputation.
+
+## Rule 1: Do Not Leak Internal Details
+
+Database errors are full of internal information:
+
+```text
+duplicate key value violates unique constraint "users_email_key"
+DETAIL: Key (email)=(a@b.com) already exists.
+relation "public.user_credentials" ...
+```
+
+These messages reveal **table names, column names, index names, and constraints**.
+
+If the global error handler simply takes whatever message bubbled up from the repository and puts it into the response, I am giving attackers a map of my database. A malicious user can use those details to:
+
+- Plan more targeted attacks
+- Try more advanced forms of SQL injection
+- Make my platform a specific target and keep probing for weaknesses
+
+### Control Every Message
+
+The fix is to **control every message that leaves the backend**:
+
+1. Identify what kind of error was thrown and from which layer.
+2. Generate a message **written for a user**, not copied from the error.
+
+```text
+Internal error:  duplicate key value violates unique constraint "books_name_key"
+User message:    A book with this name already exists
+```
+
+### The Default Case Must Be Generic
+
+The default `500` branch is reached only after every known error type has been checked — validation, unique violation, business errors, and so on. If none matched, I do not really know what the error is.
+
+That kind of error is the **most likely to contain internal details**, so the response must be generic:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Something went wrong"
+  },
+  "requestId": "req_8f2a"
+}
+```
+
+The full error goes into the **logs**, linked by the request ID. The user gets nothing they could use to attack the system.
+
+## Rule 2: Do Not Help Attackers Guess Accounts
+
+Authentication is one of the **most targeted parts** of any application, so its error messages need extra care.
+
+A login endpoint usually works like this:
+
+```text
+1. Receive email + password
+2. Look up the user by email
+3. If no user → error
+4. If user exists → check password
+5. If password wrong → error
+```
+
+The natural instinct is to give helpful, specific messages:
+
+```text
+❌ "No user exists with this email"
+❌ "Your password is incorrect"
+```
+
+### How Attackers Use Specific Messages
+
+An attacker wants to break into real users' accounts. With specific messages, they can work step by step:
+
+```text
+Step 1: Try many emails with one password
+        a@x.com → "No user exists with this email"
+        b@x.com → "No user exists with this email"
+        c@x.com → "Your password is incorrect"   ← this account exists!
+
+Step 2: Focus on c@x.com
+        Try common passwords until one works
+```
+
+The error messages alone told the attacker **which accounts exist**. This is called **user enumeration**. Weak error handling made the attack much easier.
+
+### The Fix: One Generic Message
+
+For both cases, return the same message:
+
+```text
+✅ "Invalid email or password"
+```
+
+Now the attacker cannot tell whether the email exists or the password was wrong.
+
+For security guidance on authentication and many other workflows, the **OWASP Cheat Sheet Series** is a great resource. It lists what to do, what not to do, and how each mistake can compromise the platform or its users. I can follow whatever is relevant to my use case.
+
+## Rule 3: Do Not Put Sensitive Data in Logs
+
+It is tempting to think logs are safe because they stay on my own servers and infrastructure. That is not how it always works.
+
+Companies with real traffic generate **hundreds of gigabytes of logs every day**. To manage them, they use multiple services: storage, analysis, observability tools. Logs get copied to many places.
+
+In many major data breaches, **the logs themselves get leaked**. If those logs contain sensitive data, hundreds of malicious users can suddenly access it.
+
+Never log:
+
+```text
+❌ Passwords
+❌ Emails (when an ID is enough)
+❌ API keys and tokens
+❌ Credit card numbers
+❌ Other personal or secret data
+```
+
+### What to Log Instead
+
+When something fails — for example, an authentication error — log **identifiers**, not personal data:
+
+```json
+{
+  "level": "warn",
+  "message": "Login failed",
+  "userId": "user_123",
+  "correlationId": "req_8f2a",
+  "reason": "INVALID_CREDENTIALS"
+}
+```
+
+- **User ID** instead of email
+- **Correlation ID** (request ID) to connect related log lines across services
+
+This gives enough context to debug without exposing anything valuable if the logs leak.
+
+## The Complete Picture
+
+Here is everything from this day in one view:
+
+```text
+1. MINDSET      Errors are normal; plan for detection, containment, recovery
+2. KNOW TYPES   Logic · Database · External services · Validation · Configuration
+3. PREVENT      Strong validation · fail-fast config checks · careful logic
+4. DETECT       Health checks that prove things work · monitoring · business metrics · structured logs
+5. RESPOND      Retry recoverable errors carefully · contain & degrade for the rest
+6. RECOVER      Automatic restarts · tested runbooks · protect and restore data
+7. PROPAGATE    Wrap errors with context · bubble them up on purpose
+8. ISOLATE      Boundaries: separate processes · timeouts · message queues
+9. CENTRALIZE   One global error handler maps every error to the right response
+10. SECURE      Generic messages · no enumeration · no sensitive data in logs
+```
+
+## Fault-Tolerance Checklist
+
+### Errors and Prevention
+
+- [ ] Business rules have tests, including edge cases and money calculations
+- [ ] Impossible states are checked with invariants
+- [ ] Every request is validated at the entry point (format, range, required)
+- [ ] Required configuration is validated before the server starts
+
+### Dependencies
+
+- [ ] Every external call has a timeout
+- [ ] Temporary failures are retried with exponential backoff, jitter, and a limit
+- [ ] `429` and `Retry-After` are respected
+- [ ] Critical dependencies have fallbacks
+
+### Detection
+
+- [ ] Health checks verify the database, external services, and core functionality
+- [ ] Monitoring covers HTTP, database, external, and business logic errors
+- [ ] Performance and business metrics are tracked, not just error rates
+- [ ] Logs are structured (JSON) and aggregated
+
+### Response and Recovery
+
+- [ ] Recoverable and non-recoverable errors are handled differently
+- [ ] Non-essential features can be disabled during incidents
+- [ ] Manual recovery runbooks exist and have been tested
+- [ ] Backups exist and restores have been practiced
+
+### Architecture
+
+- [ ] Errors are wrapped with context as they move up
+- [ ] Failures in one service cannot crash others
+- [ ] One global error handler maps every error type to a response
+
+### Security
+
+- [ ] No internal details (tables, constraints, stack traces) in responses
+- [ ] The default error response is generic
+- [ ] Login uses “Invalid email or password” for every failure
+- [ ] Logs contain IDs and correlation IDs, never passwords, keys, or card numbers
+
+## Checkpoint Questions
+
+### Why shouldn't raw database error messages be sent to users?
+
+They reveal table names, constraints, and other internals that attackers can use to plan targeted attacks such as SQL injection.
+
+### What is user enumeration, and how do I prevent it?
+
+It is when error messages reveal which accounts exist. Prevent it by returning the same generic message, like “Invalid email or password,” for every login failure.
+
+### Why is logging sensitive data dangerous even if logs are internal?
+
+Logs are copied to many storage and analysis services and are often exposed in data breaches. Anything sensitive in them can end up in attackers' hands.
+
+### What should I log instead of an email address?
+
+The user's ID and a correlation ID, which give enough context to debug without exposing personal data.
+
+## What I Learned in Part 10
+
+Error handling is part of security. Messages should be written for users and never reveal internals, login errors should not reveal which accounts exist, and logs should hold IDs rather than secrets.
+
+Across all ten parts, the main lesson is a mindset: errors will happen, so I build systems that notice them early, contain them, recover from them, and respond to them safely.

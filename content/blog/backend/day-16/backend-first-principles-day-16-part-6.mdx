@@ -1,0 +1,227 @@
+---
+title: "Finding Errors Before They Spread"
+description: Proactive error detection with health checks for servers, databases, external services, and core functionality, plus monitoring of errors, performance, business metrics, and structured logs.
+slug: backend-first-principles-day-16-part-6
+date: '2026-10-27'
+category: Learning Journey
+readingTime: 6 min read
+day: 16
+part: 6
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1606
+published: true
+tags: [Error Handling, Health Checks, Monitoring, Observability]
+keywords: [proactive error detection, health check endpoint, database health check, business metrics monitoring, structured logging]
+---
+# Finding Errors Before They Spread
+
+> *“The best error handling starts before the error happens.”*
+
+## The Key Idea of This Day
+
+After looking at all the kinds of errors, the natural question is: what can I actually do?
+
+The best strategy — in backend, frontend, or infrastructure — is to **find errors the moment they happen, before they cause real damage**.
+
+```text
+Error happens → detected in seconds → fixed before most users notice   ✅
+Error happens → detected by angry users days later                    ❌
+```
+
+This is called **proactive error detection**. It has two main tools:
+
+```text
+1. Health checks             → actively asking “are you working?”
+2. Monitoring & observability → continuously watching what the system does
+```
+
+## Health Checks
+
+Health checks **continuously monitor the system** so problems are found quickly.
+
+### Level 1: Is the Server Running?
+
+For an HTTP server, the standard approach is to expose an endpoint such as `/health` or `/status`:
+
+```http
+GET /health
+
+HTTP/1.1 200 OK
+{ "status": "ok" }
+```
+
+The important part is **the status code, not the body**:
+
+```text
+200        → the service is up
+4xx / 5xx  → something is wrong
+no answer  → the service is down
+```
+
+External tools — load balancers, uptime monitors, container orchestrators — keep calling this endpoint to confirm the service is alive.
+
+### Running Is Not the Same as Working
+
+A basic health check only proves the process is running and can answer HTTP. That is not enough.
+
+```text
+Server running ✅
+Database unreachable ❌
+→ /health still returns 200, but every real request fails
+```
+
+I should verify that services are **actually doing their job**, not just that they are on.
+
+### Level 2: Database Health Checks
+
+The database is the first thing to check, because the backend depends on it most. A database health check tests:
+
+- **Connectivity** — can I connect at all?
+- **Query performance** — if a query that usually takes 500 ms suddenly takes 4–5 seconds, something is wrong.
+- **Data integrity** — does representative data look the way it should?
+
+A simple ping is not enough. Running a **representative query** and measuring how long it takes, compared to the usual average, gives much better information.
+
+### Level 3: External Service Health Checks
+
+External services need checks too — not just “can I connect,” but “does it work the way it should?”
+
+| Service | Health check idea |
+| --- | --- |
+| Payment processor | Run small **test transactions** regularly |
+| Email provider | Send **test emails** to an internal address and confirm delivery |
+| Auth provider | Generate **test tokens** and validate them against the provider's validation endpoint |
+
+If the last test transaction five minutes ago succeeded, I can be reasonably confident real user transactions will work too. If it failed, I know before users do.
+
+### Level 4: Core Functionality Checks
+
+These checks confirm that the application's own internals are ready for production traffic:
+
+- **Configuration is loaded** — all required values are present, otherwise the app stops with a meaningful message so an operator can fix it.
+- **Essential caches are populated** — caches that production workloads rely on are warmed up.
+- **Internal data structures are consistent** — loaded configuration and service state are valid.
+
+### Putting the Levels Together
+
+```text
+/health
+ ├── process running?            ✅
+ ├── database reachable & fast?  ✅
+ ├── payment provider OK?        ✅
+ ├── email provider OK?          ⚠️  degraded
+ └── config & caches ready?      ✅
+```
+
+All of these combined are **proactive error detection**: preparing for worst-case scenarios ahead of time and having a way to notice them early.
+
+## Monitoring and Observability
+
+Health checks ask the system questions on a schedule. **Monitoring** watches everything the system does, all the time.
+
+Monitoring has two jobs:
+
+1. **Detect errors quickly**, while they are happening.
+2. **Provide enough context to debug** them.
+
+Logging, monitoring, and observability are big topics on their own. Here I only need the core ideas related to errors.
+
+### Do Not Only Track Error Rates
+
+One of the most valuable lessons: **monitor performance, not just errors**.
+
+Performance degradation is often an **early warning sign** that a system is about to break.
+
+```text
+Response time: 120 ms → 300 ms → 900 ms → 3 s → timeouts → errors
+               ↑ the warning was here, long before the errors
+```
+
+By watching performance, I can often fix a problem before it becomes a failure.
+
+### Cover Every Source of Errors
+
+Monitoring should track errors across all parts of the application:
+
+```text
+- HTTP errors (4xx, 5xx by route)
+- Database errors
+- External service failures
+- Business logic errors
+```
+
+The goal is to cover as many sources of errors as possible.
+
+### Performance Metrics
+
+| Metric | What it tells me |
+| --- | --- |
+| **Response time** | How fast requests are handled (look at averages *and* slowest requests) |
+| **Resource usage** | CPU, memory, connections — is something running out? |
+| **Throughput** | How many requests per second the system handles |
+
+### Business Metrics
+
+Technical metrics can look perfectly normal while something is badly wrong. That is why I also monitor **business metrics**:
+
+```text
+- Successful transactions per minute
+- Successful logins
+- Orders completed
+- Sign-ups
+```
+
+Example: on an e-commerce backend, the rate of **successful transactions suddenly drops** while error rates stay normal. That still points to a technical problem — maybe a payment provider is silently rejecting cards, or a logic error is blocking checkout.
+
+This is also how logic errors (the silent ones) often get caught.
+
+### Logging Good Practices
+
+Logs give me the information I need to understand and debug errors.
+
+**Structured logging** — writing logs as JSON instead of plain text — makes logs easy to parse, filter, and extend with metadata:
+
+```json
+{
+  "level": "error",
+  "message": "Payment provider timeout",
+  "requestId": "req_8f2a",
+  "userId": "user_123",
+  "provider": "stripe",
+  "durationMs": 5003,
+  "timestamp": "2026-10-27T10:15:22Z"
+}
+```
+
+Log aggregation tools such as **Grafana** and **Loki** collect these logs, parse them, store them, and let me search them and view error rates on dashboards.
+
+```text
+App → JSON logs → Loki (collect & store) → Grafana (search & visualize)
+```
+
+## Checkpoint Questions
+
+### Why is a basic `/health` endpoint not enough?
+
+It only proves the server is running. The database or external services could be failing while the endpoint still returns `200`.
+
+### What should a database health check test?
+
+Connectivity, query performance compared to normal, and data integrity — ideally by running a representative query.
+
+### Why monitor performance and not only error rates?
+
+Because performance usually degrades before a system fails, so it is an early warning that lets me act before errors appear.
+
+### Why monitor business metrics?
+
+Because problems can affect results — like successful transactions — while technical error rates still look normal.
+
+## What I Learned in Part 6
+
+The best error handling starts before the error happens. Health checks should prove that services actually work, not just that they are running. Monitoring should cover errors, performance, and business results, and structured logs give me the context to debug.
+
+Part 7 covers what to do once an error actually happens: responding and recovering.
