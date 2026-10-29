@@ -1,0 +1,127 @@
+---
+title: "Observability Is a Team Practice"
+description: Why logging, monitoring, and observability are a shared effort between developers and DevOps, how to grow along the spectrum, and a complete checklist for production systems.
+slug: backend-first-principles-day-18-part-7
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 4 min read
+day: 18
+part: 7
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1807
+published: true
+tags: [Observability, Logging, Monitoring, DevOps]
+keywords: [observability checklist, observability best practices, developers and devops observability]
+---
+# Observability Is a Team Practice
+
+> *“Developers produce the signals. Infrastructure collects them. Together, the system becomes understandable.”*
+
+## A Shared Effort
+
+Logging, monitoring, and observability are not something one person switches on. They are a **collective effort**:
+
+| Who | Responsibility |
+| --- | --- |
+| **Developers** | Write good logs, emit metrics, instrument code with spans and attributes, pass context through every layer |
+| **DevOps / infrastructure** | Deploy and run collectors, storage, dashboards, and alerting; keep the pipeline reliable |
+
+A perfect Grafana setup shows nothing useful if the code never logs or creates spans. Perfect instrumentation is wasted if nothing collects the data. Both halves are needed.
+
+## There Is No Single Skill to Learn
+
+This topic is not one tool or one technique. It is a set of practices that every production system needs in some form. What matters is understanding the ideas well enough to apply them with whatever tools a team uses.
+
+## Growing Along the Spectrum
+
+Since these practices are implemented on a spectrum, a natural progression looks like this:
+
+```text
+Level 1  Logs with levels; console locally, JSON in production
+Level 2  Request IDs on every log; basic metrics (requests, errors, latency)
+Level 3  Dashboards and alerts on key metrics
+Level 4  Business metrics (sign-ups, orders, to-dos created)
+Level 5  Tracing with context propagation through every layer
+Level 6  Logs, metrics, and traces linked by IDs; alert → metrics → logs → traces
+```
+
+Each step is useful on its own. No team needs to start at Level 6.
+
+## The Complete Picture
+
+```text
+WHY         Distributed systems need a way to see what is happening everywhere
+
+LOGGING     Record important events with metadata
+            Levels: debug · info · warn · error · fatal
+            Console for humans in dev, JSON for tools in prod
+
+MONITORING  Near real-time health and performance over time
+            CPU · memory · requests/sec · DB connections · error rate
+
+OBSERVABILITY
+            Understand internal state from external outputs
+            Pillars: logs (what) · metrics (patterns) · traces (interactions)
+
+WORKFLOW    Alert → metrics → logs → traces → fix
+
+CODE        Middleware starts a trace → context carries it →
+            each layer adds spans, attributes, logs, errors
+
+STANDARD    OpenTelemetry: instrument once, export anywhere
+
+TOOLS       Open source: Prometheus · Grafana · Loki · Jaeger · ELK
+            Proprietary: New Relic · Datadog
+```
+
+## Production Checklist
+
+### Logging
+
+- [ ] Every log has a level, and the minimum level is configurable per environment
+- [ ] Logs are human-readable locally and JSON in production
+- [ ] Logs include timestamp, service, environment, request ID, and trace ID
+- [ ] Logs never include passwords, tokens, API keys, or card numbers
+- [ ] Important business events are logged at `info`
+
+### Metrics and Monitoring
+
+- [ ] Request count, error rate, and latency are tracked per route
+- [ ] CPU, memory, and database connections are monitored
+- [ ] Business metrics are tracked alongside technical ones
+- [ ] Alerts fire on meaningful thresholds and reach the team (for example, Slack)
+
+### Tracing and Observability
+
+- [ ] A middleware starts a trace for every request
+- [ ] The request context is passed through every layer
+- [ ] Services and repositories create spans with useful attributes
+- [ ] Errors are recorded on spans as well as in logs
+- [ ] Logs, metrics, and traces are linked through shared IDs
+
+### Team
+
+- [ ] Developers know how to add logs, metrics, and spans
+- [ ] Infrastructure collects, stores, and retains the data reliably
+- [ ] Dashboards exist for each important service
+
+## Checkpoint Questions
+
+### Why is observability a collective effort?
+
+Developers must produce logs, metrics, and traces in code, and infrastructure teams must collect, store, and display them. Neither half works alone.
+
+### What is a sensible first step toward observability?
+
+Leveled logs that are readable locally and JSON in production, with a request ID on every log.
+
+### What links the three pillars together?
+
+Shared identifiers such as request IDs and trace IDs attached to logs, metrics, and spans.
+
+## What I Learned in Part 7
+
+Logging, monitoring, and observability are practices, not a single skill — and they only work when developers and infrastructure teams both do their part. Start small, move along the spectrum, and every step makes production easier to understand and faster to fix.

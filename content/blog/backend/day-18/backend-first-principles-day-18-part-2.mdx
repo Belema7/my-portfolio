@@ -1,0 +1,144 @@
+---
+title: "The Three Pillars: Logs, Metrics, and Traces"
+description: What logs, metrics, and traces each reveal, why traditional monitoring only tells you that something is wrong, and how observability tells you what is wrong.
+slug: backend-first-principles-day-18-part-2
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 4 min read
+day: 18
+part: 2
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1802
+published: true
+tags: [Observability, Metrics, Tracing]
+keywords: [three pillars of observability, logs metrics traces, monitoring vs observability, distributed tracing]
+---
+# The Three Pillars: Logs, Metrics, and Traces
+
+> *“Monitoring tells you something is wrong. Observability tells you what.”*
+
+## The Three Pillars
+
+Observability is built on three kinds of data. Each one answers a different question.
+
+| Pillar | Answers | Connected to |
+| --- | --- | --- |
+| **Logs** | What exactly happened? | Logging |
+| **Metrics** | What are the patterns and trends? | Monitoring |
+| **Traces** | How did the components interact? | Observability |
+
+## Pillar 1: Logs
+
+Logs are records of important events across the request life cycle and the application life cycle — startup, requests, shutdown.
+
+```text
+2026-10-29T10:15:22Z ERROR failed to create todo user_id=user_123 request_id=req_8f2a
+```
+
+A log tells me **exactly what happened** at one moment, with its context.
+
+## Pillar 2: Metrics
+
+Metrics are **numbers measured over time**. They can be real-time (the last 30 minutes, the last hour) or historical.
+
+Examples:
+
+```text
+- Total requests processed
+- Failed requests
+- Average response time
+- Throughput (requests per minute)
+- To-dos created, to-dos that failed to be created
+```
+
+What counts as a “failed” request is a decision I make. A common choice is any response with a `5xx` status (server failures), sometimes also `4xx` (client errors), tracked separately.
+
+Metrics can be **technical** (latency, error rate) or **business** (to-dos created, orders completed). Which metrics matter is **decided in advance** — both in the code that emits them and in the tool that collects them.
+
+Metrics show **patterns and trends**: is the error rate rising, is latency creeping up, did sign-ups drop?
+
+## Pillar 3: Traces
+
+A **trace** follows a single request through every component it touches.
+
+I can think of a trace as a **transaction**: it starts where the request enters the system — a frontend, a load balancer, or the backend itself — and records every step along the way:
+
+```text
+Trace: POST /todos   (total 182 ms)
+├── middleware                 2 ms
+├── handler                    3 ms
+├── validation                 1 ms
+├── service: CreateTodo      170 ms
+│   └── repository: Insert   165 ms
+│       └── database query   163 ms   ← most of the time is here
+└── response                   1 ms
+```
+
+Each step in a trace is called a **span**. Together, the spans show **how components interacted**, how long each took, and exactly where a request failed.
+
+## Traditional Monitoring vs Observability
+
+Observability is a fairly **modern** practice — it has only been widespread for a few years.
+
+About a decade ago, catching errors at the infrastructure level depended mostly on **monitoring**. Teams set up dashboards and alerts (for example, with Grafana) and got notified when something crossed a threshold.
+
+The problem:
+
+```text
+Monitoring: "Your API error rate is high."
+Me:         "OK… but why? Where? Which requests?"
+Monitoring: (nothing more to say)
+```
+
+Monitoring tells me **that** there is a problem. It does not tell me **what** the problem is.
+
+Observability, with all three pillars in place, goes further:
+
+```text
+Observability: "Error rate is high (metric).
+                These are the failing requests (logs).
+                They fail in the database call inside CreateTodo (trace)."
+```
+
+| | Traditional monitoring | Observability |
+| --- | --- | --- |
+| Question it answers | Is something wrong? | What is wrong, and where? |
+| Data | Mostly metrics and alerts | Logs + metrics + traces, linked |
+| Debugging | Start guessing | Follow the evidence |
+
+That is the one-line difference: **monitoring informs, observability explains** — as long as logs, metrics, and traces are all implemented.
+
+## How the Pillars Connect
+
+The real power comes from linking them. A good setup lets me move between them using shared identifiers:
+
+```text
+Metric spike → filter logs for that time window → open a log → jump to its trace
+                                   ↑                    ↑
+                              request ID           trace / span ID
+```
+
+That is why logs should always carry identifiers like a **request ID** and **trace ID**. Part 3 walks through this workflow step by step.
+
+## Checkpoint Questions
+
+### What does each pillar tell me?
+
+Logs: what exactly happened. Metrics: patterns and trends. Traces: how components interacted for a single request.
+
+### What is a span?
+
+One step inside a trace — such as a handler, a service call, or a database query — with its own timing and details.
+
+### Why is monitoring alone not enough?
+
+Because it tells me that something is wrong but not what or where. Observability links metrics, logs, and traces so I can find the cause.
+
+## What I Learned in Part 2
+
+Logs, metrics, and traces each answer a different question. Monitoring alone only raises the alarm; observability connects all three pillars so I can follow the evidence straight to the cause.
+
+Part 3 shows how this works during a real incident.

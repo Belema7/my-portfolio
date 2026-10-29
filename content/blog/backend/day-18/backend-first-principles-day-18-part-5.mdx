@@ -1,0 +1,221 @@
+---
+title: "Instrumentation: Building Traces Into the Code"
+description: What instrumentation and OpenTelemetry are, how a tracing middleware starts a transaction and stores it in the request context, and how a service adds attributes, logs, and errors to the same trace.
+slug: backend-first-principles-day-18-part-5
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 5 min read
+day: 18
+part: 5
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1805
+published: true
+tags: [Observability, Tracing, OpenTelemetry, Go]
+keywords: [instrumentation, opentelemetry, distributed tracing go, new relic go agent, trace context middleware, spans and attributes]
+---
+# Instrumentation: Building Traces Into the Code
+
+> *“Traces do not appear by magic. Someone has to instrument the code.”*
+
+## Two Terms You Will Hear Constantly
+
+### Instrumentation
+
+**Instrumentation** is the practice of adding code that **measures** what the application does: when a function starts and ends, what it was called with, whether it failed.
+
+Instrumentation is what makes a system observable. Without it, there are no traces and very few useful metrics.
+
+### OpenTelemetry
+
+**OpenTelemetry** (often shortened to OTel) is an **open standard** for instrumentation. It provides a whole ecosystem:
+
+```text
+- APIs and SDKs for all major languages (Go, Node.js, Python, Java, ...)
+- Automatic instrumentation for common libraries
+- The OpenTelemetry Collector to receive, process, and export data
+- Best practices and documentation
+```
+
+Because it is a standard, I can instrument my code once and send the data to almost any tool — open source like Jaeger and Prometheus, or proprietary like New Relic and Datadog. Even when using a proprietary tool, adding an OpenTelemetry collector gives more control over how requests and components are instrumented.
+
+## The Example Application
+
+To make this concrete, picture a **to-do application** with a Go backend, instrumented with **New Relic**.
+
+The request flow:
+
+```text
+Request
+  → New Relic middleware     (wraps the whole app, instruments every request)
+  → Tracing middleware       (starts the transaction, adds request attributes)
+  → Handler
+  → Validation
+  → Service: CreateTodo      (adds business attributes, logs, records errors)
+  → Repository → Database
+```
+
+Everything from the first middleware to the database becomes **one trace**.
+
+## Step 1: The Middleware Starts the Transaction
+
+The tracing middleware is the **first point of contact** for every request. It:
+
+1. Creates a new **transaction** (New Relic's name for a trace).
+2. Adds attributes useful for every log and trace.
+3. Stores the transaction in the **request context**, so later layers can use it.
+
+```go
+func EnhancedTracing(app *newrelic.Application, cfg Config) echo.MiddlewareFunc {
+    return func(next echo.HandlerFunc) echo.HandlerFunc {
+        return func(c echo.Context) error {
+            req := c.Request()
+            txn := app.StartTransaction(req.Method + " " + c.Path())
+            defer txn.End()
+
+            txn.AddAttribute("service.name", cfg.ServiceName)
+            txn.AddAttribute("environment", cfg.Env)
+            txn.AddAttribute("client.ip", c.RealIP())
+            txn.AddAttribute("user_agent", req.UserAgent())
+            txn.AddAttribute("request_id", c.Response().Header().Get(echo.HeaderXRequestID))
+
+            if user, ok := UserFromContext(c); ok {
+                txn.AddAttribute("user.id", user.ID)
+                txn.AddAttribute("tenant.id", user.TenantID)
+            }
+
+            ctx := newrelic.NewContext(req.Context(), txn)
+            c.SetRequest(req.WithContext(ctx))
+            return next(c)
+        }
+    }
+}
+```
+
+The key line is `newrelic.NewContext`: the transaction now travels with the request through every layer.
+
+## Step 2: The Service Uses the Same Transaction
+
+When the request reaches the `CreateTodo` service, the transaction is already in the context:
+
+```go
+func (s *TodoService) CreateTodo(ctx context.Context, userID string, in CreateTodoInput) (*Todo, error) {
+    txn := newrelic.FromContext(ctx)
+    defer txn.StartSegment("TodoService.CreateTodo").End()
+
+    txn.AddAttribute("user.id", userID)
+    txn.AddAttribute("todo.title", in.Title)
+
+    log := s.logger.With().
+        Str("operation", "create_todo").
+        Str("title", in.Title).
+        Logger()
+
+    if in.Priority != nil {
+        txn.AddAttribute("todo.priority", *in.Priority)
+        log = log.With().Str("priority", *in.Priority).Logger()
+    }
+
+    log.Info().Msg("creating new todo")
+
+    // ... validate parent/child relationships ...
+
+    todo, err := s.repo.Create(ctx, userID, in)
+    if err != nil {
+        log.Error().Err(err).Msg("failed to create todo")
+        txn.NoticeError(err)
+        txn.AddAttribute("todo.operation", "create")
+        return nil, err
+    }
+
+    txn.AddAttribute("todo.operation", "create")
+    txn.AddAttribute("todo.id", todo.ID)
+    log.Debug().Str("todo_id", todo.ID).Msg("todo created successfully")
+
+    log.Info().
+        Str("event", "todo_created").
+        Str("todo_id", todo.ID).
+        Str("category_id", todo.CategoryID).
+        Msg("business event")
+
+    return todo, nil
+}
+```
+
+Reading it step by step:
+
+| Line | Purpose |
+| --- | --- |
+| `newrelic.FromContext(ctx)` | Get the transaction the middleware created |
+| `StartSegment(...).End()` | Record this service call as its own span in the trace |
+| `AddAttribute(...)` | Attach searchable details (user, title, priority) to the trace |
+| `log.Info()` | Record the start of an important operation |
+| `log.Error()` + `NoticeError` | Record the failure in **both** the logs and the trace |
+| `log.Debug()` | Extra detail, visible locally but filtered out in production |
+| Business event log | A clean, structured record that a to-do was created |
+
+The result: one request produces **one trace** containing the middleware, validation, and service segments, with attributes and errors attached — plus **logs** that point back to it.
+
+## The Same Idea With OpenTelemetry
+
+The vendor-neutral version looks almost identical:
+
+```go
+func (s *TodoService) CreateTodo(ctx context.Context, userID string, in CreateTodoInput) (*Todo, error) {
+    ctx, span := tracer.Start(ctx, "TodoService.CreateTodo")
+    defer span.End()
+
+    span.SetAttributes(
+        attribute.String("user.id", userID),
+        attribute.String("todo.title", in.Title),
+    )
+
+    todo, err := s.repo.Create(ctx, userID, in)
+    if err != nil {
+        span.RecordError(err)
+        span.SetStatus(codes.Error, "create todo failed")
+        return nil, err
+    }
+
+    span.SetAttributes(attribute.String("todo.id", todo.ID))
+    return todo, nil
+}
+```
+
+Start a span, add attributes, record errors, end the span. The concepts are the same whichever tool receives the data.
+
+## Why Context Propagation Matters
+
+Everything depends on passing `ctx` through every layer:
+
+```text
+middleware (creates trace) → handler(ctx) → service(ctx) → repository(ctx) → db(ctx)
+```
+
+If one layer drops the context and starts a fresh one, the trace breaks into disconnected pieces. Always pass the request context down.
+
+## Checkpoint Questions
+
+### What is instrumentation?
+
+Adding code that measures what the application does — timings, attributes, and errors — so the system becomes observable.
+
+### What is OpenTelemetry?
+
+An open standard with APIs, SDKs, and a collector for instrumenting applications in any major language and sending the data to any compatible tool.
+
+### Why does the middleware store the transaction in the context?
+
+So every later layer can add segments, attributes, and errors to the same trace instead of creating unconnected ones.
+
+### Why record an error in both the log and the trace?
+
+The log captures the detailed event, and the trace shows exactly where in the request flow it happened. Together they make debugging fast.
+
+## What I Learned in Part 5
+
+Traces come from instrumentation: a middleware starts a transaction, stores it in the context, and every layer adds its own span, attributes, logs, and errors. OpenTelemetry makes the same pattern work with any tool.
+
+Part 6 looks at what all this data looks like in a dashboard, and at the tools available.

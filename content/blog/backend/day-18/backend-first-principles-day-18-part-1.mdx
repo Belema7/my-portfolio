@@ -1,0 +1,131 @@
+---
+title: "Seeing Inside a Running System"
+description: Why distributed backends need logging, monitoring, and observability, what each of the three practices means, and why they are implemented on a spectrum rather than all at once.
+slug: backend-first-principles-day-18-part-1
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 4 min read
+day: 18
+part: 1
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+dayTitle: Logging, Monitoring, and Observability
+order: 1801
+published: true
+tags: [Observability, Logging, Monitoring]
+keywords: [logging vs monitoring vs observability, why observability, backend observability basics]
+---
+# Seeing Inside a Running System
+
+> *“You cannot fix what you cannot see.”*
+
+## A Huge Topic, Kept Practical
+
+Logging, monitoring, and observability are each big enough to deserve their own deep dive. This day keeps them practical: what they are, why they exist, how they work together, and what they look like in real code.
+
+This topic is also different from most backend topics because it is **closely tied to code**. Concepts like log levels or traces only really make sense when I see them implemented, so later parts include real examples.
+
+## Why We Need This
+
+Modern backend and full-stack applications run in **distributed environments**:
+
+```text
+- Many servers
+- Many regions
+- Many services
+- Users spread across the whole world
+```
+
+When something goes wrong, I cannot SSH into one machine and read one file. I need **practices, tools, and methodologies** to keep track of what is happening across every service and every piece of infrastructure.
+
+There are many things I could track, but they boil down to three practices.
+
+## Logging: Recording What Happened
+
+**Logging** means recording the important events that happen in the application:
+
+```text
+- Important events       → a user logged in, an order was created
+- Suspicious events      → many failed login attempts
+- Security events        → permission denied, token rejected
+- Errors                 → a database query failed
+```
+
+Each event is recorded with **metadata** — the context needed to understand it later:
+
+```text
+user ID that triggered the request
+request latency
+which method / function ran
+timestamp
+request ID
+```
+
+Logs cover the whole life cycle: application startup, every request, and shutdown.
+
+I think of logs as the **diary the backend keeps**, so that later I can find out *what* happened, *when*, and *why*.
+
+(These practices apply to frontend applications too, but this day focuses on backends.)
+
+## Monitoring: Watching the Current State
+
+**Monitoring** is exactly what it sounds like: continuously keeping track of the **health and performance** of the system and its components.
+
+```text
+- Server CPU usage
+- Server memory usage
+- Requests per second right now
+- Open database connections in the pool
+```
+
+Monitoring gives **near real-time** data. Not millisecond-perfect: most setups collect data every **10–15 seconds** so the monitoring system is not overwhelmed by a constant stream. Specialized tools can go faster, but some delay is normal.
+
+Monitoring also tracks **patterns over time**, giving aggregated views of how the system behaved in the past and how it is behaving now.
+
+## Observability: Understanding Why
+
+**Observability** is the newest and broadest of the three.
+
+A system is **observable** if I can determine its **internal state** just by looking at its **external outputs**.
+
+In theory, observability rests on **three pillars**:
+
+```text
+1. Logs
+2. Metrics
+3. Traces
+```
+
+A system can only be called observable when all three are in place. Part 2 explains each pillar.
+
+## A Spectrum, Not a Checkbox
+
+An important mindset before going further:
+
+> No company can honestly say it follows *every* good logging, monitoring, and observability practice.
+
+There are no fixed rules here. These are **practices**, and every company — startups, individuals, large enterprises — implements them **on a spectrum**. Some do a little, some do a lot, nobody does everything.
+
+Knowing this up front helps me not feel intimidated by the huge number of keywords, products, and tools in this space. I can start small and improve over time.
+
+## Checkpoint Questions
+
+### Why do modern backends need these practices?
+
+Because they run across many servers, regions, and services, so there is no single place to look when something goes wrong.
+
+### What is the difference between logging and monitoring?
+
+Logging records individual events with context. Monitoring continuously tracks the health and performance of the system over time.
+
+### When is a system called observable?
+
+When its internal state can be understood from its external outputs, which requires logs, metrics, and traces.
+
+## What I Learned in Part 1
+
+Logging records what happened, monitoring watches the current state, and observability lets me understand why. All three are practices on a spectrum, not a checklist that is ever fully done.
+
+Part 2 goes deeper into the three pillars and how observability differs from traditional monitoring.

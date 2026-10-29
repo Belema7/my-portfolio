@@ -1,0 +1,150 @@
+---
+title: "From Alert to Root Cause: The Debugging Workflow"
+description: How alerts, metrics, logs, and traces work together during a real incident, following one investigation from a Slack alert to the exact failing function.
+slug: backend-first-principles-day-18-part-3
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 4 min read
+day: 18
+part: 3
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1803
+published: true
+tags: [Observability, Alerting, Debugging]
+keywords: [observability debugging workflow, alert to root cause, error rate alert, slack alert webhook]
+---
+# From Alert to Root Cause: The Debugging Workflow
+
+> *“Alert → metrics → logs → traces → fix.”*
+
+## The Workflow in One Line
+
+In a production system with proper logging, monitoring, and observability, an investigation usually follows the same path:
+
+```text
+1. Alert   → something crossed a threshold
+2. Metrics → how big is it, since when, which endpoints?
+3. Logs    → which requests failed, and with what errors?
+4. Traces  → where exactly in the code did it fail?
+5. Fix
+```
+
+Each step narrows the search.
+
+## Step 1: The Alert
+
+Alerts are rules set up in advance. For example:
+
+```text
+IF error rate of api-service > threshold FOR 5 minutes
+THEN send a message to the #alerts Slack channel
+```
+
+The alerting tool sends the message through a **webhook**:
+
+```text
+🚨 [api-service] Error rate is 80% (threshold: 5%)
+```
+
+The threshold depends on the service. An 80% error rate is a dramatic example — in practice, alerts usually fire at much lower values so the team hears about problems early.
+
+The alert says **something is wrong with the API service**. Nothing more yet.
+
+## Step 2: Metrics
+
+From the alert, I open the metrics dashboard. Metrics are the real-time and historical numbers about the system:
+
+```text
+Requests processed:     12,400 (last 30 min)
+Failed requests:         9,920
+Error rate:              80%
+Average response time:   340 ms
+Started:                 10:12
+Endpoints affected:      GET /todos, POST /todos
+```
+
+Now I know the **size** of the problem, **when** it started, and **which endpoints** are affected.
+
+## Step 3: Logs
+
+From the metric, I jump straight into the related logs — all the failed requests in that time window.
+
+Tools like Grafana (open source) or New Relic (proprietary) let me go from a metric chart directly to the logs behind it:
+
+```json
+{
+  "level": "error",
+  "message": "failed to fetch todos",
+  "status": 500,
+  "method": "GET",
+  "route": "/todos",
+  "request_id": "req_8f2a",
+  "trace_id": "4bf92f3577b34da6",
+  "error": "connection pool exhausted"
+}
+```
+
+Now I know **what** happened: the requests fail because the database connection pool is exhausted.
+
+## Step 4: Traces
+
+From one log line, I click through to its **trace**, using the trace ID attached to the log:
+
+```text
+GET /todos  (5,002 ms, ERROR)
+├── middleware           1 ms
+├── auth                 2 ms
+├── handler              1 ms
+└── service: ListTodos   4,998 ms
+    └── repository: FindAll
+        └── acquire DB connection   4,995 ms  ❌ timeout
+```
+
+The trace shows the request **started** in the middleware, **travelled** through auth and the handler, and **failed** while waiting for a database connection inside `FindAll`.
+
+## Step 5: Fix
+
+With that path, the cause is clear quickly — maybe a slow query holding connections, maybe the pool is too small for current traffic. I can fix it and watch the metrics return to normal.
+
+```text
+Without observability: hours of guessing and adding print statements
+With observability:    minutes from alert to the exact failing function
+```
+
+That speed is the whole benefit of implementing logging, monitoring, and observability.
+
+## What Makes This Workflow Possible
+
+The workflow only works if the pieces are **connected**:
+
+| Link | How |
+| --- | --- |
+| Alert → metrics | Alerts are defined on top of metrics |
+| Metrics → logs | Logs carry service name, route, status, timestamp |
+| Logs → traces | Logs carry the trace ID / span ID |
+| Traces → code | Spans are named after functions and layers |
+
+Every link depends on something I do in code: emitting the right metrics, adding the right fields to logs, and creating spans in the right places. Parts 4 and 5 cover that code.
+
+## Checkpoint Questions
+
+### What are the steps from alert to root cause?
+
+Alert, then metrics to measure the problem, then logs to see failing requests, then traces to find where in the code they failed.
+
+### How does an alert reach the team?
+
+An alerting rule on a metric fires and sends a message, often through a webhook into a channel like Slack.
+
+### How do I jump from a log to its trace?
+
+Through a shared trace ID that is attached to each log line.
+
+## What I Learned in Part 3
+
+Observability turns debugging into a guided path: an alert points to metrics, metrics point to logs, and logs point to traces that show the exact failing step. Each jump only works if the code attaches the right identifiers.
+
+Part 4 starts on the code side with logging: levels and structured logs.

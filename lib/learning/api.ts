@@ -15,6 +15,7 @@ const DAY_TITLES: Record<number, string> = {
   9: "REST API Design",
   16: "Error Handling and Fault-Tolerant Systems",
   17: "Production-Grade Configuration Management",
+  18: "Logging, Monitoring, and Observability",
 };
 
 function readingMinutes(value: string) {

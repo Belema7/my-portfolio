@@ -1,0 +1,153 @@
+---
+title: "Reading the Dashboard and Choosing Tools"
+description: Walking through metrics, errors, logs, traces, transactions, and runtime data in an observability dashboard, and comparing the open-source Grafana stack with proprietary tools like New Relic and Datadog.
+slug: backend-first-principles-day-18-part-6
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 4 min read
+day: 18
+part: 6
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1806
+published: true
+tags: [Observability, Monitoring, Tools]
+keywords: [new relic dashboard, grafana prometheus loki jaeger, datadog, open source vs proprietary observability]
+---
+# Reading the Dashboard and Choosing Tools
+
+> *“The code produces the data. The dashboard turns it into answers.”*
+
+## From Code to Dashboard
+
+With the to-do application instrumented (Part 5), it is switched to production-style settings so its data reaches the observability tool:
+
+```text
+LOG_FORMAT=json
+APP_ENV=production
+```
+
+Then some traffic is generated — for example, calling `GET /todos` several times from the OpenAPI testing page **without an auth token**. Every call returns `401 Unauthorized`. That is a perfect small experiment: will those errors show up in the dashboard?
+
+## 1. Summary: The Metrics
+
+The application summary page shows the **metrics** — actual numbers that quantify the state of the system:
+
+```text
+Average transaction time:   12 ms
+Throughput:                 24 requests/min
+Error rate:                 ~80%
+```
+
+If there had been no traffic in the last 30 minutes, these charts would simply be empty. Metrics only exist when the system is doing something.
+
+## 2. Errors: From Metric to Logs
+
+Under **Errors → HTTP errors**, the `401 Unauthorized` responses appear, grouped together. Next to them are the **related logs** — exactly the jump from metrics to logs described in Part 3.
+
+## 3. A Single Log
+
+Opening one of those logs shows every field that was attached in code:
+
+```text
+app name      todo-api
+environment   production
+error code    UNAUTHORIZED
+hostname      todo-api-7c9f…
+IP            203.0.113.12
+level         error
+message       unauthorized
+method        GET
+route         /todos
+span ID       a3f1…
+timestamp     2026-10-29T10:42:05Z
+```
+
+This is the payoff of structured JSON logs: every field is searchable and filterable.
+
+## 4. From Log to Trace
+
+The log includes a **span ID**, so it is connected to its **trace**. One click opens the full trace and shows the path that request took through the application.
+
+```text
+Metrics → Errors → Logs → Trace
+```
+
+All three pillars, linked together.
+
+## 5. Transactions per Route
+
+The **Transactions** view lists every endpoint, such as `/todos`. Opening one shows its own error rate, response times, and history — built from the transaction and attributes created in the code.
+
+## 6. Runtime Data
+
+The **Go runtime** view shows information about the process itself:
+
+```text
+Garbage collection time
+Memory usage (about 3 MB in this small app)
+Goroutines
+Throughput and average response time
+```
+
+This is classic **monitoring** data about the system the backend runs on.
+
+## Choosing Tools
+
+There are two broad routes.
+
+### The Open-Source Route
+
+The most common enterprise setup is often called the **Grafana stack**:
+
+| Tool | Role |
+| --- | --- |
+| **Prometheus** | Collects and stores metrics |
+| **Grafana** | Dashboards and alerts (the frontend) |
+| **Loki** | Stores and searches logs |
+| **Promtail / Grafana Alloy** | Ships logs into Loki |
+| **Jaeger** (or Grafana Tempo) | Stores and displays traces |
+| **OpenTelemetry Collector** | Receives instrumentation data and routes it |
+
+Another classic for logs is the **ELK stack**: Elasticsearch, Logstash, and Kibana.
+
+Strengths: free, flexible, no vendor lock-in.
+Cost: someone has to **deploy, configure, and maintain** all of it.
+
+### The Proprietary Route
+
+All-in-one platforms such as **New Relic** and **Datadog** handle logs, metrics, traces, dashboards, and alerts in one product.
+
+Strengths: much simpler setup, everything already linked.
+Cost: subscription pricing that grows with data volume.
+
+### Which One?
+
+```text
+Small team, limited time or experience → proprietary (New Relic, Datadog)
+Large team, need control, cost at scale → open source (Grafana stack)
+```
+
+Configuring logging, monitoring, and observability is genuinely complicated. If a team lacks the size, experience, or time to maintain many open-source tools, a proprietary solution makes more sense. Instrumenting with **OpenTelemetry** keeps the option to switch later.
+
+## Checkpoint Questions
+
+### What can a dashboard show for a single log?
+
+All its structured fields — app, environment, level, message, method, route, status, host, IP, span ID, timestamp — plus a link to its trace.
+
+### What does each part of the Grafana stack do?
+
+Prometheus collects metrics, Loki stores logs, Promtail or Alloy ships logs, Jaeger or Tempo stores traces, and Grafana displays everything and handles alerts.
+
+### When does a proprietary tool make more sense?
+
+When the team does not have the size, experience, or time to deploy and maintain several open-source tools.
+
+## What I Learned in Part 6
+
+A dashboard turns instrumented code into answers: metrics summarize, errors lead to logs, logs lead to traces, and runtime views show the process itself. The tool choice is a trade-off between the control of open source and the simplicity of proprietary platforms.
+
+Part 7 brings the whole day together.

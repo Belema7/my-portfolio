@@ -1,0 +1,207 @@
+---
+title: "Logging in Practice: Levels and Structured Logs"
+description: The five common log levels and when to use each, the difference between human-readable console logs and structured JSON logs, and how a Go logger switches between them per environment.
+slug: backend-first-principles-day-18-part-4
+date: '2026-10-29'
+category: Learning Journey
+readingTime: 5 min read
+day: 18
+part: 4
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1804
+published: true
+tags: [Logging, Observability, Go]
+keywords: [log levels debug info warn error fatal, structured logging, json logs, zerolog, console vs json logging]
+---
+# Logging in Practice: Levels and Structured Logs
+
+> *“Readable for humans in development, parseable for machines in production.”*
+
+## Two Things to Get Right
+
+When writing logs in a real backend, two decisions matter most:
+
+```text
+1. Log levels       → how important is this event?
+2. Log format       → who is going to read it: a human or a machine?
+```
+
+## Log Levels
+
+Most logging libraries let me assign a **level** to every log. The most common levels, from least to most severe:
+
+```text
+debug → info → warn → error → fatal
+```
+
+### `debug`
+
+Used during **development** when troubleshooting. I want as much detail about the system's behaviour as possible.
+
+```text
+DEBUG todo created successfully id=todo_456
+```
+
+Debug logs are noisy and can be overwhelming, so they are usually **disabled in production**.
+
+### `info`
+
+General application operations and **successful business events**.
+
+```text
+INFO todo created id=todo_456 user_id=user_123
+INFO server started port=8080
+```
+
+If something worked and it matters, it is usually `info`.
+
+### `warn`
+
+Events between success and error: **not a success, but not serious enough to be an error**.
+
+Example: a user types the wrong password. Authentication failed, but that is not a bug in my system — it is not my fault. It is worth recording (many of these could indicate an attack), but it is a warning.
+
+```text
+WARN authentication failed reason=invalid_password user_id=user_123
+```
+
+### `error`
+
+Any real error: a database query fails, an external call fails, an unexpected condition happens. This is the most common reason we log at all.
+
+```text
+ERROR failed to insert todo error="connection refused"
+```
+
+### `fatal`
+
+A very serious problem. After logging at `fatal`, the application **stops**. Depending on the infrastructure, it is then restarted automatically.
+
+```text
+FATAL cannot connect to database, shutting down
+```
+
+### Choosing the Minimum Level per Environment
+
+The logger is configured with a **minimum level**. Anything below it is dropped:
+
+| Environment | Minimum level | What appears |
+| --- | --- | --- |
+| Development | `debug` | Everything |
+| Production | `info` | `info`, `warn`, `error`, `fatal` |
+
+## Structured vs Unstructured Logs
+
+### Unstructured (Console) Logs for Development
+
+When running the backend locally, logs go to the terminal. Here they should be **human-readable**: plain text, nicely formatted, with colours.
+
+```text
+10:15:20 INF connecting to database
+10:15:20 INF started background job server
+10:15:21 INF starting server port=8080
+```
+
+It is easy to scan, easy to spot problems, and easy to fix them.
+
+### Structured (JSON) Logs for Production
+
+**Structured logging** means each log is a data record, and **JSON** is the most popular format:
+
+```json
+{"level":"info","time":"2026-10-29T10:15:20Z","message":"connecting to database"}
+{"level":"info","time":"2026-10-29T10:15:20Z","message":"started background job server"}
+{"level":"info","time":"2026-10-29T10:15:21Z","port":8080,"message":"starting server"}
+```
+
+In development this is hard to read, and it is easy to miss issues. But in production, logs are not read line by line by humans. They are collected and parsed by **log management tools**:
+
+```text
+- ELK stack (Elasticsearch, Logstash, Kibana)
+- Grafana stack (Loki for storage, Promtail or Grafana Alloy for shipping, Grafana for viewing)
+- Proprietary platforms (New Relic, Datadog)
+```
+
+If logs are plain text, these tools have to guess how to extract values like `user_id` or `request_id` from a sentence. That is slow and error-prone. JSON logs are **already structured**, so every field can be parsed, filtered, and searched reliably.
+
+| | Console (unstructured) | JSON (structured) |
+| --- | --- | --- |
+| Reader | Humans | Machines and tools |
+| Environment | Development | Production |
+| Strength | Easy to scan | Easy to parse, search, aggregate |
+
+## In Code: A Logger That Switches by Environment
+
+Here is how a Go backend can create its logger at startup using **zerolog**, choosing level and format from configuration:
+
+```go
+func getLogLevel(env string) zerolog.Level {
+    if env == "development" {
+        return zerolog.DebugLevel
+    }
+    return zerolog.InfoLevel
+}
+
+func NewLogger(cfg Config) zerolog.Logger {
+    var out io.Writer = os.Stdout
+
+    if cfg.LogFormat == "console" {
+        out = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.Kitchen}
+    }
+
+    return zerolog.New(out).
+        Level(getLogLevel(cfg.Env)).
+        With().
+        Timestamp().
+        Str("service", cfg.ServiceName).
+        Str("environment", cfg.Env).
+        Logger()
+}
+```
+
+- `getLogLevel` returns `debug` in development and `info` everywhere else.
+- `LogFormat` is `console` locally (pretty, coloured text) and `json` in production.
+- Every log automatically includes the timestamp, service name, and environment.
+
+Switching from development to production is just a configuration change:
+
+```text
+APP_ENV=development  LOG_FORMAT=console   → readable logs, debug level
+APP_ENV=production   LOG_FORMAT=json      → structured logs, info level
+```
+
+## What to Put in Every Log
+
+Useful fields to include consistently:
+
+```text
+timestamp, level, message
+service, environment
+request_id, trace_id, span_id
+user_id (never email, password, or tokens)
+method, route, status, duration
+error (for error logs)
+```
+
+## Checkpoint Questions
+
+### When should I use `warn` instead of `error`?
+
+When something did not succeed but is not a fault in my system, such as a user entering the wrong password.
+
+### Why disable `debug` logs in production?
+
+They are very noisy, which costs money and buries the important logs.
+
+### Why use JSON logs in production?
+
+Because log management tools can parse every field reliably, which makes searching, filtering, and linking logs to traces easy.
+
+## What I Learned in Part 4
+
+Log levels express how important an event is, and the minimum level changes per environment. Logs are pretty text for humans in development and structured JSON for tools in production, and a good logger switches between them through configuration alone.
+
+Part 5 covers instrumentation: how traces and spans are created in code.
