@@ -1,0 +1,123 @@
+---
+title: "Resource Cleanup and Reverse Order"
+description: What resources a backend acquires while running — file handles, network and database connections, transactions, caches — why they must be released on shutdown, and why cleanup happens in reverse order of acquisition.
+slug: backend-first-principles-day-19-part-5
+date: '2026-11-02'
+category: Learning Journey
+readingTime: 3 min read
+day: 19
+part: 5
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1905
+published: true
+tags: [Graceful Shutdown, Resource Management, Databases]
+keywords: [resource cleanup, file descriptors, too many open files, close database connections, rollback transactions on shutdown, cleanup reverse order]
+---
+# Resource Cleanup and Reverse Order
+
+> *“Before leaving the desk, put the cup in the sink.”*
+
+## What Are Resources?
+
+Before leaving a desk at the end of the day, most people tidy up: put the coffee cup in the sink, tidy the cables. A backend has its own desk to clear.
+
+**Resources** are everything the application acquired while running:
+
+```text
+- File handles
+- Network connections
+- Database connections and open transactions
+- Cache and Redis connections
+- Temporary files
+- Background workers and message consumers
+- Any other system resource
+```
+
+Cleanup means **letting go** of all of them before exiting.
+
+## File Handles
+
+When a backend accesses a file, it asks the operating system, which gives back a **handle** (a file descriptor) to that file.
+
+Handles must be released. The operating system limits how many file descriptors one process can have open at once. If handles keep piling up, the process eventually hits that limit and fails with errors like `too many open files`, and leaked handles also waste memory.
+
+## Network Connections
+
+Every request reaches the application through the operating system:
+
+```text
+Internet → network card → operating system → application
+```
+
+The operating system knows about every network connection a process holds, and it limits those too (network sockets are also file descriptors). Connections that are never closed lead to resource exhaustion and performance problems.
+
+On shutdown, open connections should be closed properly so the other side knows the conversation is over instead of waiting on a dead connection.
+
+## Database Connections and Transactions
+
+A backend talks to its database over **TCP connections**. With **connection pooling**, it keeps several of these connections open and borrows one for each query.
+
+```text
+Backend ══ TCP ══╗
+         ══ TCP ══╬══ Database
+         ══ TCP ══╝
+     (connection pool)
+```
+
+Cleaning up the database means:
+
+```text
+1. Stop sending new queries through the pool
+2. Let current queries and transactions finish
+3. Commit or roll back every open transaction explicitly
+4. Close the pooled connections one by one
+```
+
+Transactions left in an unknown state can hold locks, cause **deadlocks**, or leave data **inconsistent**. Every transaction must end with a commit or a rollback before the process exits.
+
+## Clean Up in Reverse Order
+
+Resources should be released in the **reverse order** of how they were acquired:
+
+```text
+Startup                     Shutdown
+1. Connect to database      3. Close database
+2. Connect to Redis         2. Close Redis
+3. Start HTTP server        1. Stop HTTP server
+```
+
+Why? Later resources usually **depend** on earlier ones. The HTTP server's handlers use the database. If the database closed first, requests still in progress would suddenly fail.
+
+```text
+Wrong:  close DB → in-flight requests still running → "database is closed" errors
+Right:  stop HTTP server (drain) → close Redis → close DB
+```
+
+Reverse order guarantees nothing is torn down while something else still relies on it.
+
+## Checkpoint Questions
+
+### What counts as a resource in a backend?
+
+File handles, network connections, database connections and transactions, cache connections, temporary files, workers — anything acquired while running.
+
+### What happens if file handles or connections are never released?
+
+The process hits operating system limits (for example, `too many open files`), wastes memory, and eventually fails or slows down.
+
+### What must happen to open database transactions before shutdown?
+
+Each must be explicitly committed or rolled back, so locks are released and data stays consistent.
+
+### Why clean up in reverse order of acquisition?
+
+Because later components depend on earlier ones. Shutting down dependents first means nothing loses a resource it still needs.
+
+## What I Learned in Part 5
+
+Graceful shutdown is not finished when requests stop. Every handle, connection, and transaction must be released, and doing it in reverse order of acquisition keeps dependencies intact until the very end.
+
+Part 6 puts it all together in code.

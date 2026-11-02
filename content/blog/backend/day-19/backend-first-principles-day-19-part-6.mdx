@@ -1,0 +1,199 @@
+---
+title: "Graceful Shutdown in Code"
+description: A Go backend that listens for SIGINT and SIGTERM, drains its HTTP server with a timeout, stops background workers, closes the database, and logs every step — plus a complete graceful shutdown checklist.
+slug: backend-first-principles-day-19-part-6
+date: '2026-11-02'
+category: Learning Journey
+readingTime: 5 min read
+day: 19
+part: 6
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1906
+published: true
+tags: [Graceful Shutdown, Go, Reliability]
+keywords: [graceful shutdown go, signal.NotifyContext, http server shutdown, asynq shutdown, graceful shutdown checklist]
+---
+# Graceful Shutdown in Code
+
+> *“Most frameworks already provide the shutdown method. The job is to call it, in the right order, at the right time.”*
+
+## The Flow
+
+```text
+Startup:  connect DB → start background jobs → start HTTP server
+Running:  wait for SIGINT or SIGTERM
+Shutdown: stop HTTP server (drain) → stop background jobs → close DB → exit
+```
+
+## Step 1: Wait for the Signal
+
+The application registers a handler for the interrupt and terminate signals, then blocks until one arrives:
+
+```go
+func main() {
+    cfg := LoadConfig()
+    log := NewLogger(cfg)
+
+    db := mustConnectDB(cfg, log)                 // 1. database
+    jobs := mustStartJobServer(cfg, db, log)      // 2. background jobs (Redis)
+    srv := &http.Server{Addr: ":" + cfg.Port, Handler: NewRouter(db, jobs)}
+
+    go func() {                                   // 3. HTTP server
+        log.Info().Str("port", cfg.Port).Msg("starting server")
+        if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+            log.Fatal().Err(err).Msg("server failed")
+        }
+    }()
+
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+    <-ctx.Done()
+    log.Info().Msg("shutdown signal received")
+
+    gracefulShutdown(srv, jobs, db, log)
+}
+```
+
+- `signal.NotifyContext` is the signal handler: the context is cancelled when SIGINT (`os.Interrupt`) or SIGTERM arrives.
+- `ListenAndServe` returns `http.ErrServerClosed` during a normal shutdown, so that error is not treated as a failure.
+
+## Step 2: Shut Down in Reverse Order
+
+```go
+func gracefulShutdown(srv *http.Server, jobs *asynq.Server, db *sql.DB, log zerolog.Logger) {
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    // 1. Stop accepting new HTTP requests and wait for in-flight ones
+    log.Info().Msg("shutting down HTTP server")
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Error().Err(err).Msg("HTTP server did not shut down cleanly")
+    }
+
+    // 2. Stop background workers and close their Redis connection
+    log.Info().Msg("stopping background job server")
+    jobs.Shutdown()
+
+    // 3. Close the database connection pool
+    log.Info().Msg("closing database connection")
+    if err := db.Close(); err != nil {
+        log.Error().Err(err).Msg("failed to close database")
+    }
+
+    log.Info().Msg("server exited properly")
+}
+```
+
+| Call | What it does internally |
+| --- | --- |
+| `srv.Shutdown(ctx)` | Closes listeners (no new connections), waits for active requests to finish, gives up when the 30s context expires |
+| `jobs.Shutdown()` | Stops pulling new jobs, waits for running workers to finish, closes its Redis connection |
+| `db.Close()` | Closes the pooled TCP connections to the database |
+
+The order is the reverse of startup. The HTTP handlers and the workers both use the database, so it closes last.
+
+## What It Looks Like When It Runs
+
+Starting the server and then pressing Ctrl+C:
+
+```text
+INF connected to database
+INF started background job server
+INF starting server port=8080
+^C
+INF shutdown signal received signal=interrupt
+INF shutting down HTTP server
+INF stopping background job server
+INF Starting graceful shutdown
+INF Waiting for all workers to finish...
+INF All workers have finished
+INF Exiting
+INF closing database connection
+INF server exited properly
+```
+
+With no in-flight requests on a local machine, the whole thing takes about a second. The middle lines come from **Asynq**, the Redis-based background job library, which logs its own graceful shutdown when its shutdown method is called.
+
+## I Do Not Have to Write This From Scratch
+
+Nearly every framework and language provides the pieces:
+
+| Ecosystem | Built-in shutdown |
+| --- | --- |
+| **Go** | `http.Server.Shutdown(ctx)` |
+| **Node.js** | `server.close()` plus `process.on("SIGTERM", ...)` |
+| **Python** | Uvicorn/Gunicorn handle SIGTERM and drain workers |
+| **Rust** | Axum `with_graceful_shutdown`, Tokio signal handling |
+
+What matters is understanding **what** happens and **why**, so the pieces are called in the right order with a sensible timeout.
+
+## The Complete Picture
+
+```text
+WHY        Deployments always end with an old server stopping mid-work
+
+LIFECYCLE  Start → run → stop; graceful shutdown controls the stop
+
+SIGNALS    SIGTERM  polite, from programs (K8s, systemd, PM2, Docker)
+           SIGINT   polite, from Ctrl+C
+           SIGKILL  cannot be caught; arrives after the grace period
+
+DRAINING   Stop new requests → finish in-flight → close connections
+           Within a timeout (commonly 30s), shorter than the platform's
+
+CLEANUP    Files, connections, transactions, caches, workers
+           Commit or roll back; release in reverse order
+
+CODE       Signal handler → server.Shutdown(timeout) → workers → DB → exit
+```
+
+## Graceful Shutdown Checklist
+
+### Signals
+
+- [ ] SIGTERM and SIGINT are both caught and trigger the same shutdown
+- [ ] The shutdown starts immediately when a signal arrives
+- [ ] Shutdown finishes before the platform's grace period, so SIGKILL never arrives
+
+### Draining
+
+- [ ] The server stops accepting new requests first
+- [ ] In-flight requests are allowed to finish
+- [ ] A shutdown timeout is set based on typical request duration
+- [ ] Health checks report not-ready so load balancers stop sending traffic
+- [ ] WebSocket clients are notified before their sockets close
+- [ ] Background workers stop taking new jobs and finish or requeue current ones
+
+### Cleanup
+
+- [ ] Open transactions are committed or rolled back
+- [ ] Database, Redis, and other connections are closed
+- [ ] File handles and temporary files are released
+- [ ] Resources are released in reverse order of acquisition
+
+### Visibility
+
+- [ ] Each shutdown step is logged
+- [ ] Errors during shutdown are logged instead of silently ignored
+
+## Checkpoint Questions
+
+### What does `srv.Shutdown(ctx)` do?
+
+It stops accepting new connections, waits for active requests to complete, and returns early if the context's timeout expires.
+
+### Why is the database closed last?
+
+Because the HTTP handlers and background workers depend on it, so it has to stay available until they have finished.
+
+### Do I need to implement draining myself?
+
+Usually not. Frameworks provide shutdown methods. The job is to catch the signals, call those methods in the right order, and set a timeout.
+
+## What I Learned in Part 6
+
+Graceful shutdown in code is short: catch SIGINT and SIGTERM, drain the HTTP server with a timeout, stop workers, close the database, and log each step. The real value is knowing why each step exists and why the order matters.

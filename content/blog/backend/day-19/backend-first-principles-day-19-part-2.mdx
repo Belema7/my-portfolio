@@ -1,0 +1,103 @@
+---
+title: "Process Lifecycle and Signals"
+description: How every backend runs as an operating system process with a lifecycle, and how Unix signals let the operating system ask a process to stop through handlers the application registers.
+slug: backend-first-principles-day-19-part-2
+date: '2026-11-02'
+category: Learning Journey
+readingTime: 3 min read
+day: 19
+part: 2
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1902
+published: true
+tags: [Graceful Shutdown, Operating Systems, Signals]
+keywords: [process lifecycle, unix signals, inter-process communication, signal handler, linux server process]
+---
+# Process Lifecycle and Signals
+
+> *“The operating system does not just pull the plug. It sends a message first.”*
+
+## Every Application Is a Process
+
+A backend is an application, and every application on an operating system runs inside a **process**. Whatever runs on the machine — the web server, the database, a background worker — is a process.
+
+## The Process Lifecycle
+
+Like living things, processes have a lifecycle:
+
+```text
+Born   → the process starts       (load config, connect to DB, start server)
+Lives  → the process runs         (handle requests, run jobs)
+Dies   → the process terminates   (stop, clean up, exit)
+```
+
+Graceful shutdown is all about the last phase: **how** the process dies.
+
+## Servers Run on Unix-Like Systems
+
+Almost every backend in production runs on **Linux**. Cloud providers deploy applications on Linux nearly all of the time, with Windows Server only in specialised cases.
+
+Linux distributions (Ubuntu, Arch, Debian, and so on) and macOS all come from the **Unix** family, and they share a key concept: **signals**.
+
+## Signals: How the OS Talks to a Process
+
+When the operating system (or another program) wants an application to stop, it does not just kill it immediately. It follows an established protocol — something like a conversation:
+
+```text
+OS:          "It's time for you to stop."
+Application: "Give me a few seconds to finish, then I'll exit."
+```
+
+Programs do not exchange text, of course. This conversation happens through **signals**.
+
+A signal is a small, predefined message delivered to a process. Signals are one form of **IPC (inter-process communication)** — a way for processes, including the operating system, to communicate using an established protocol.
+
+## Signal Handlers
+
+For an application to react to a signal, it registers a **signal handler**:
+
+```text
+Application starts
+  → registers a handler: "When you want me to stop, send me SIGTERM or SIGINT"
+  → runs normally
+  → signal arrives
+  → handler runs the shutdown steps
+  → process exits
+```
+
+A handler is code that waits in the background for a specific signal. When that signal arrives, the handler runs whatever shutdown logic the application defined.
+
+Without a handler, most stop signals use their **default action**: terminate immediately, with no chance to clean up. Registering a handler is what turns an abrupt stop into a graceful one.
+
+## Who Sends the Signals?
+
+| Sender | Example |
+| --- | --- |
+| A developer | Pressing Ctrl+C in the terminal |
+| A process manager | systemd, PM2 |
+| An orchestration platform | Kubernetes stopping a pod |
+| A container runtime | `docker stop` |
+| A command | `kill <pid>` |
+
+## Checkpoint Questions
+
+### What is a process?
+
+The running instance of a program on the operating system. Every application, including a backend server, runs inside one.
+
+### What are signals?
+
+Small predefined messages from the operating system or other processes, used to tell a process something such as "stop now".
+
+### What is a signal handler?
+
+Code the application registers to run when a specific signal arrives, for example to start a graceful shutdown.
+
+## What I Learned in Part 2
+
+A backend is a process with a lifecycle, and its ending is controlled through Unix signals. By registering signal handlers, the application gets a chance to finish its work before exiting.
+
+Part 3 covers the specific signals: SIGTERM, SIGINT, and SIGKILL.

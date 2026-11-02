@@ -1,0 +1,135 @@
+---
+title: "Connection Draining: Finishing In-Flight Requests"
+description: How a backend stops accepting new work and lets in-flight requests complete, how draining differs for HTTP servers, databases, and WebSockets, and how to choose a shutdown timeout.
+slug: backend-first-principles-day-19-part-4
+date: '2026-11-02'
+category: Learning Journey
+readingTime: 4 min read
+day: 19
+part: 4
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1904
+published: true
+tags: [Graceful Shutdown, Connection Draining, Load Balancing]
+keywords: [connection draining, in-flight requests, shutdown timeout, graceful shutdown load balancer, readiness probe]
+---
+# Connection Draining: Finishing In-Flight Requests
+
+> *“Close the front door first. Then let everyone inside finish their meal.”*
+
+## What Are In-Flight Requests?
+
+An HTTP server handles many requests **concurrently**. When the shutdown signal arrives, some requests are already being processed — 10, 100, or thousands, depending on scale.
+
+These are **in-flight** (or on-the-fly) requests: work that has started but not finished.
+
+## The Restaurant Analogy
+
+It is closing time at a restaurant. The owners cannot just switch off the lights and throw everyone out. Instead:
+
+```text
+1. The person at the door stops letting new customers in
+2. Staff tell current customers: "We're closing — you have 20 minutes"
+3. Customers finish their meals, pay, and leave
+4. The restaurant closes
+```
+
+## Connection Draining
+
+The backend version of this is called **connection draining**. After receiving SIGTERM or SIGINT:
+
+```text
+1. Stop accepting new connections and requests
+2. Let in-flight requests finish
+3. Close the connections
+```
+
+Stopping new work first is essential. If new requests keep arriving, the server never gets to a point where everything is finished.
+
+## Draining Looks Different per Application
+
+The idea is always the same, but the technical steps depend on the type of application:
+
+| Application | Draining means |
+| --- | --- |
+| **HTTP server** | Stop accepting new HTTP requests, let in-flight ones complete |
+| **Database** | Stop accepting new queries/transactions, finish current ones, then close connections |
+| **WebSocket server** | Notify connected clients that the server is closing, then close the sockets |
+| **Background worker** | Stop picking up new jobs, finish (or requeue) jobs in progress |
+
+A database is also a kind of backend — not an HTTP backend, but an application that serves clients and must drain in its own way.
+
+## The Timeout: A Hard Limit
+
+Draining needs a limit. Some requests may be stuck on a slow or blocking operation, and the server cannot wait forever.
+
+So production systems set a **shutdown timeout**, commonly **30 seconds**:
+
+```text
+SIGTERM received
+  → stop accepting new requests
+  → wait for in-flight requests (up to 30s)
+  → all done?        → clean up and exit
+  → timeout reached? → force-close remaining work, clean up, exit
+```
+
+Since no new requests are being accepted, 30 seconds is usually more than enough for a normal backend.
+
+### Choosing the Timeout
+
+| Too short | Too long |
+| --- | --- |
+| Interrupts legitimate operations | Shutdowns become sluggish |
+| Users still see errors | Deployments slow down |
+| | The platform may send SIGKILL first |
+
+There is no universal number. It depends on:
+
+```text
+- The typical request duration of the application
+- Long-lived connections (WebSockets, streaming, file uploads)
+- Operational requirements (how fast deployments must be)
+```
+
+The application's own timeout must also be **shorter** than the platform's grace period (for example, Kubernetes' 30 seconds), otherwise SIGKILL arrives before cleanup is done.
+
+## Coordinating With Load Balancers
+
+Draining also needs to work with the infrastructure around the server:
+
+```text
+- Health checks:     report "not ready" so the load balancer stops sending traffic
+- Load balancer:     remove the instance from the pool before it stops
+- Service discovery: deregister the instance so other services stop calling it
+```
+
+**Service discovery** is how deployed services — backend, database, search engine, and others — find and connect to each other. A shutting-down instance must be removed from it so nothing new is routed there.
+
+In Kubernetes, removing a pod from the load balancer and sending SIGTERM happen at roughly the same time. A common approach is to fail the readiness check and wait a few seconds before closing the server, so traffic stops arriving first.
+
+## Checkpoint Questions
+
+### What is connection draining?
+
+Stopping new connections and requests, letting in-flight requests finish, and then closing connections.
+
+### Why stop accepting new requests first?
+
+Otherwise new work keeps arriving and the server never reaches a state where all requests are finished.
+
+### Why is a shutdown timeout needed?
+
+Some requests may hang, and the server cannot wait forever. The timeout is a hard limit after which remaining work is forced to stop.
+
+### How should the shutdown timeout relate to the platform's grace period?
+
+It should be shorter, so cleanup finishes before the platform sends SIGKILL.
+
+## What I Learned in Part 4
+
+Connection draining is the restaurant at closing time: close the door to new customers, let current ones finish, then close. A timeout keeps shutdown from hanging, and the load balancer and service discovery must stop sending traffic to the instance.
+
+Part 5 covers the second job: cleaning up resources.

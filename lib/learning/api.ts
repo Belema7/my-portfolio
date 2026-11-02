@@ -16,6 +16,7 @@ const DAY_TITLES: Record<number, string> = {
   16: "Error Handling and Fault-Tolerant Systems",
   17: "Production-Grade Configuration Management",
   18: "Logging, Monitoring, and Observability",
+  19: "Graceful Shutdown",
 };
 
 function readingMinutes(value: string) {

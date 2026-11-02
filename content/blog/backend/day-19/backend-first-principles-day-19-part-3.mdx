@@ -1,0 +1,144 @@
+---
+title: "SIGTERM, SIGINT, and SIGKILL"
+description: The three signals that matter for shutting down a backend — the polite SIGTERM from process managers, the user-initiated SIGINT from Ctrl+C, and the uncatchable SIGKILL.
+slug: backend-first-principles-day-19-part-3
+date: '2026-11-02'
+category: Learning Journey
+readingTime: 4 min read
+day: 19
+part: 3
+series: Learning Backend from First Principles
+contentType: learning-note
+seriesSlug: backend-first-principles
+seriesTitle: Backend from First Principles
+order: 1903
+published: true
+tags: [Graceful Shutdown, Signals, Linux]
+keywords: [sigterm vs sigkill, sigint ctrl c, sigterm kubernetes, sigkill cannot be caught, termination grace period]
+---
+# SIGTERM, SIGINT, and SIGKILL
+
+> *“Two polite requests, and one pulled plug.”*
+
+## The Three Signals
+
+```text
+SIGTERM  → terminate  (polite request)
+SIGINT   → interrupt  (polite request, from a user)
+SIGKILL  → kill       (no request, just stop)
+```
+
+The `SIG` prefix simply means **signal**. The rest is the command.
+
+## SIGTERM: The Polite Request
+
+**SIGTERM** (signal terminate) is the operating system's polite way of asking an application to shut down. It is a gentle tap on the shoulder:
+
+> “Excuse me, could you please finish up and leave?”
+
+Because it is only a request, the application gets a window — usually a few seconds — to:
+
+```text
+1. Finish existing requests
+2. Clean up resources
+3. Exit
+```
+
+At any moment, a backend may be processing 10 requests, or 500. SIGTERM gives it the chance to finish them.
+
+### Who Sends SIGTERM?
+
+SIGTERM is mostly sent by **programs**:
+
+| Tool | When |
+| --- | --- |
+| **Kubernetes** | Stopping a pod during a deployment or scale-down |
+| **systemd** | `systemctl stop` or `restart` |
+| **PM2** | Restarting or stopping a Node.js app |
+| **Docker** | `docker stop` |
+| `kill <pid>` | Sends SIGTERM by default |
+
+## SIGINT: The User-Initiated Interrupt
+
+**SIGINT** (signal interrupt) is the signal sent when a developer presses **Ctrl+C** in a terminal.
+
+Running a Go backend locally and pressing Ctrl+C prints something like:
+
+```text
+INF server started port=8080
+^C
+INF signal received signal=interrupt
+INF shutting down gracefully...
+```
+
+SIGINT needs a key press, so it is a **user-initiated shutdown** and is mostly seen during development. Programs talking to programs use SIGTERM instead.
+
+### Handle Both the Same Way
+
+Whether a human presses Ctrl+C locally or PM2 stops the app on an EC2 instance, the intention is identical: **shut down**. So in almost every backend, SIGINT and SIGTERM trigger the same graceful shutdown logic.
+
+```text
+SIGINT  (developer, Ctrl+C)  ─┐
+                              ├─→ same graceful shutdown
+SIGTERM (program, PM2/K8s)   ─┘
+```
+
+## SIGKILL: The Nuclear Option
+
+**SIGKILL** (signal kill) does exactly what it says: it kills the process **immediately**.
+
+The important property: SIGKILL **cannot be caught or ignored**.
+
+```text
+- No handler can be registered for it
+- The application is never told it arrived
+- No cleanup code runs
+- The process just stops
+```
+
+It is the equivalent of pulling the power plug instead of clicking Shut down.
+
+| | SIGTERM / SIGINT | SIGKILL |
+| --- | --- | --- |
+| Can be caught | Yes | No |
+| Can be ignored | Yes (but should not be) | No |
+| Cleanup possible | Yes | No |
+| Typical sender | Process managers, developers | The system, after a timeout |
+
+## Why SIGKILL Makes Graceful Shutdown Important
+
+Process managers do not wait forever. The usual pattern is:
+
+```text
+1. Send SIGTERM
+2. Wait for a grace period
+3. Still running? Send SIGKILL
+```
+
+For example, Kubernetes sends SIGTERM to a container, waits for `terminationGracePeriodSeconds` (30 seconds by default), and then sends SIGKILL. `docker stop` does the same with a 10-second default.
+
+So if an application does not respect the polite signals — by ignoring them or by taking too long — it eventually gets SIGKILL and loses the chance to clean up at all. Handling SIGTERM well, and finishing within the grace period, is the whole point.
+
+## Checkpoint Questions
+
+### What is the difference between SIGTERM and SIGKILL?
+
+SIGTERM is a request that the application can catch and respond to by cleaning up. SIGKILL cannot be caught or ignored and stops the process immediately.
+
+### When is SIGINT sent?
+
+When a user presses Ctrl+C in the terminal, usually during development.
+
+### Why should SIGINT and SIGTERM be handled the same way?
+
+Both mean the same thing — please shut down — whether a person or a program asked.
+
+### What happens if an application ignores SIGTERM?
+
+After the grace period, the process manager sends SIGKILL and the process is stopped with no cleanup.
+
+## What I Learned in Part 3
+
+SIGTERM and SIGINT are polite requests that give an application time to finish and clean up. SIGKILL is the unstoppable fallback that comes after a timeout, which is why a backend must handle the polite signals quickly and properly.
+
+Part 4 covers the first job after receiving a shutdown signal: draining connections.
